@@ -38,6 +38,31 @@ describe('MutationService', () => {
     await expect(svc(run).install('pub.ext', 'Work')).rejects.toThrow(/nope/);
   });
 
+  it('queue survives a rejected call on the same instance', async () => {
+    const calls: string[][] = [];
+    let first = true;
+    const run = async (_cli: string, args: string[]) => {
+      calls.push(args);
+      if (first) {
+        first = false;
+        return { code: 1, stdout: '', stderr: 'first fails' };
+      }
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    const s = svc(run);
+    await expect(s.install('pub.bad', 'Work')).rejects.toThrowError(MutationError);
+    await expect(s.install('pub.good', 'Work')).resolves.toBeUndefined();
+    expect(calls[1]).toEqual([
+      '--user-data-dir', '/ud', '--extensions-dir', '/ed',
+      '--profile', 'Work', '--install-extension', 'pub.good',
+    ]);
+  });
+
+  it('falls back to stdout in MutationError when stderr is empty', async () => {
+    const run = async () => ({ code: 1, stdout: 'boom-out', stderr: '' });
+    await expect(svc(run).install('pub.ext', 'Work')).rejects.toThrow(/boom-out/);
+  });
+
   it('serializes concurrent calls (FIFO, one at a time)', async () => {
     const order: string[] = [];
     let inFlight = 0;
