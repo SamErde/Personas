@@ -174,3 +174,67 @@ Schema is platform-independent (confirmed above); only paths need re-checking. C
 - [ ] `.obsolete` format (flat JSON object, folder name to `true`) is unchanged.
 - [ ] `code --profile "<name>" --install-extension` / `--uninstall-extension` remain scoped to the named profile only (re-run the Step 2 sequence against a disposable profile — do not reuse a profile with real user data on a shared macOS/Linux test machine).
 - [ ] Folder naming convention `<publisher.name>-<version>[-<platform>]` — confirm the `-<platform>` suffix pattern (e.g. `-darwin-arm64`, `-linux-x64`) matches what Task 6's folder-name parser expects.
+
+---
+
+# Spike B — apply-to-all-profiles toggle invocability findings
+
+**Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), downloaded fresh into `.vscode-test/` for this spike — not the machine's real install, and never touched it.
+**Method:** Interactive F5 debugging is unavailable in this environment, so the brief's Steps 1-2 were replaced with an automated sandbox probe using `@vscode/test-electron`'s `runTests`. Harness lived entirely under `.superpowers/spike-b/` (gitignored, throwaway, not committed): `run.mjs` (launcher: downloads/resolves VS Code stable, creates fresh temp `--user-data-dir`/`--extensions-dir` via `mkdtempSync`, installs `ms-vscode.hexeditor` into that sandbox via the VS Code CLI, then launches the Task 1 stub extension as `extensionDevelopmentPath` with a probe suite as `extensionTestsPath`) and `suite/index.js` (runs inside the sandboxed Extension Development Host: enumerates commands, tries toggle candidates, reads the sandbox's own `extensions.json` after each attempt).
+**Date:** 2026-07-03. Two full runs (run 2 added a fourth argument shape for extra rigor); raw evidence preserved at `.superpowers/spike-b/results-run1.json` and `.superpowers/spike-b/results.json` (both gitignored).
+
+## Environment gotcha worth carrying into Task 12 (CI integration tests)
+
+This machine has `ELECTRON_RUN_AS_NODE=1` set globally. That variable forces any Electron binary — including VS Code's `Code.exe` — to run as a bare Node process instead of launching the real Chromium/Electron GUI, which is exactly how VS Code's own `bin/code.cmd` CLI wrapper works internally (it sets that same variable before invoking `Code.exe <path-to-cli.js>`). With it set process-wide, `@vscode/test-electron`'s `runTests()` (which spawns `Code.exe` directly with workbench flags, not through the CLI wrapper) fails immediately: every flag is misparsed as a Node CLI flag (`Code.exe: bad option: --user-data-dir=...`) and `Code.exe --version` prints a bare Node version string instead of VS Code's version banner. Deleting `ELECTRON_RUN_AS_NODE` from `process.env` before calling `runTests()` (done in `run.mjs`) fixed it. Task 12's CI runner should check for this if integration tests mysteriously fail with "bad option" errors.
+
+## Step 1-2: command enumeration
+
+`vscode.commands.getCommands(true)` filtered for `/profile/i` **and** `/extension/i` returned exactly 6 commands (both runs, consistent):
+
+```text
+workbench.action.extensionHostProfiler.stop
+workbench.extensions.action.extensionHostProfile
+workbench.extensions.action.openExtensionHostProfile
+workbench.extensions.action.saveExtensionHostProfile
+workbench.extensions.action.stopExtensionHostProfile
+workbench.extensions.action.toggleApplyToAllProfiles
+```
+
+Five of these are the unrelated extension-host **performance profiler** feature (they match the regex because "extensionHostProfile" contains both "extension" and "Profile"). Only the sixth, `workbench.extensions.action.toggleApplyToAllProfiles`, is the real feature. A second, wider filter (`/extension/i` and `/(apply|scope|allprofiles|application)/i`) was run as a cross-check against missing an oddly-named command — it converged on that exact same single command, no others. Total registered commands at enumeration time: 3046 (run 1) / 3042 (run 2) — small run-to-run variance from extension activation timing, not relevant here.
+
+Of the brief's two hypothesized ids, only the "action"-suffixed one actually exists:
+
+- `workbench.extensions.command.toggleApplyToAllProfiles` — **does not exist**. Every attempt (both runs, all argument shapes) failed identically: `Error: command 'workbench.extensions.command.toggleApplyToAllProfiles' not found`.
+- `workbench.extensions.action.toggleApplyToAllProfiles` — **exists and is invocable** (no "not found" error) — see below.
+
+## Step 3: argument-shape attempts against the real command
+
+`workbench.extensions.action.toggleApplyToAllProfiles` was tried with four argument shapes against `ms-vscode.hexeditor` (installed fresh into the sandbox for this purpose). All four failed with the identical error, byte-for-byte across both runs:
+
+| Arg shape | Value | Result |
+| --- | --- | --- |
+| string | `"ms-vscode.hexeditor"` | Threw `TypeError: Cannot read properties of undefined (reading 'location')` |
+| object | `{ id: "ms-vscode.hexeditor" }` | Same `TypeError` |
+| array | `["ms-vscode.hexeditor"]` | Same `TypeError` |
+| public API object | `vscode.extensions.getExtension("ms-vscode.hexeditor")` (the real `vscode.Extension` handle — the most legitimate non-string thing a well-behaved extension could pass) | Same `TypeError` |
+
+Stack trace (identical every time) bottoms out in the command's own handler, not in argument validation:
+
+```text
+TypeError: Cannot read properties of undefined (reading 'location')
+    at Object.run (...workbench.desktop.main.js:3672:2910)
+    at K.run (...workbench.desktop.main.js:3672:7968)
+    at handler (...workbench.desktop.main.js:441:38449)
+    ...
+    at Zrt.executeCommand (...workbench.desktop.main.js:1893:4376)
+```
+
+This shape (crash inside the handler body, on every plausible argument including the genuine public `vscode.Extension` object, always on the same `.location` property read) indicates the command's real parameter is VS Code's **internal** `IExtension` workbench view-model (the object the Extensions view UI passes to its own context-menu actions — it carries `.local`/`.server` fields with a nested `.location`), not a string id, a plain object, or the public extension API's `vscode.Extension`. That internal type is not constructible or obtainable through any public `vscode` namespace API. Reverse-engineering its private shape to satisfy the crash was deliberately not attempted: doing so would mean shipping Visex against an unversioned internal VS Code implementation detail with no compatibility guarantee — precisely the situation this spike exists to detect and avoid.
+
+Confirmation the flag never moved: `ms-vscode.hexeditor`'s `metadata.isApplicationScoped` was read from the sandbox's on-disk `extensions.json` after every single attempt (21 attempts in run 1, 28 in run 2, one per candidate-command × arg-shape pair, including the 5 unrelated profiler commands, all included for completeness) and after all of them combined, both runs — it never appeared as `true`. It started and ended `undefined` (absent from `metadata`, the normal state for a freshly-installed extension), matching the launcher's own before/after check via the VS Code CLI-installed manifest.
+
+## Verdict
+
+**`TOGGLE_SUPPORTED: no — fallback UI required`**
+
+The command exists (`workbench.extensions.action.toggleApplyToAllProfiles`), but it is not invocable by a third-party extension with any argument shape available through the public API — string, `{id}`, array, and the genuine `vscode.Extension` object all crash identically inside the handler before reaching any state mutation. No enumerated command (out of 3046/3042 total, cross-checked with two independent regex filters) ever flipped `isApplicationScoped` for the target extension. Per the task's own gating rule, this is not a borderline case requiring judgment — it's a clean, doubly-corroborated "no." Task 10 should ship the guided fallback: open the Extensions view search pinned to the extension so the user can right-click → "Apply Extension to all Profiles" themselves.
