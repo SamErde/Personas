@@ -1,0 +1,9 @@
+{
+  "telemetry.sqmId": "ignore-me",
+  "userDataProfiles": [
+    { "location": "4328b3eb", "name": "Blog", "icon": "book", "useDefaultFlags": { "keybindings": true, "settings": true } },
+    { "location": "7cdc4d19", "name": "Work", "icon": "briefcase", "useDefaultFlags": { "settings": true } },
+    { "location": "builtin/agents", "name": "Agents", "useDefaultFlags": { "settings": true, "extensions": true } }
+  ],
+  "somethingElse": { "nested": true }
+}
