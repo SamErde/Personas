@@ -1,0 +1,11 @@
+.github/
+docs/
+test/
+src/
+node_modules/
+esbuild.mjs
+vitest.config.ts
+tsconfig*.json
+out-test/
+*.vsix
+.gitignore
