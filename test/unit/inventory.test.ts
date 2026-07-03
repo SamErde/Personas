@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { composeInventory } from '../../src/core/inventory';
+import { composeInventory, InventoryService, type InventoryIo } from '../../src/core/inventory';
+import type { ResolvedPaths } from '../../src/core/paths';
 import type { ManifestEntry, RawProfile } from '../../src/core/parsers';
 
 const entry = (id: string, version: string, appScoped = false): ManifestEntry => ({
@@ -85,5 +86,113 @@ describe('composeInventory', () => {
     const inv = composeInventory(baseInput());
     const names = inv.extensions.map((e) => e.displayName.toLowerCase());
     expect(names).toEqual([...names].sort());
+  });
+
+  it('suppresses disk-only records too when a profile manifest fails', () => {
+    // Disk-only ids are indistinguishable from the failed profile's extensions,
+    // so orphan reporting is withheld rather than guessed.
+    const input = baseInput();
+    input.profileManifests.set('aaa', new Error('boom'));
+    const inv = composeInventory(input);
+    expect(inv.extensions.find((e) => e.id === 'pub.orphan')).toBeUndefined();
+    expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+});
+
+describe('InventoryService', () => {
+  const PATHS: ResolvedPaths = {
+    userDataDir: '/data',
+    userDir: '/data/User',
+    storageJson: '/data/User/globalStorage/storage.json',
+    profilesDir: '/data/User/profiles',
+    extensionsDir: '/ext',
+    globalExtensionsJson: '/ext/extensions.json',
+    obsoleteFile: '/ext/.obsolete',
+  };
+
+  const makeIo = (
+    files: Record<string, string>,
+    dirs: string[] = [],
+    displayNames: Record<string, string> = {},
+  ): InventoryIo => ({
+    readFile: (p) => Promise.resolve(files[p]),
+    listDirs: () => Promise.resolve(dirs),
+    readDisplayName: (p) => Promise.resolve(displayNames[p]),
+  });
+
+  const storageJson = JSON.stringify({ userDataProfiles: [{ location: 'aaa', name: 'Work' }] });
+  const defaultManifest = JSON.stringify([
+    { identifier: { id: 'pub.alpha' }, version: '1.0.0', relativeLocation: 'pub.alpha-1.0.0' },
+  ]);
+  const profileManifest = JSON.stringify([
+    { identifier: { id: 'pub.beta' }, version: '2.0.0', relativeLocation: 'pub.beta-2.0.0' },
+  ]);
+
+  it('wires profiles, manifests, disk folders and display names end-to-end', async () => {
+    const io = makeIo(
+      {
+        [PATHS.storageJson]: storageJson,
+        [PATHS.globalExtensionsJson]: defaultManifest,
+        '/data/User/profiles/aaa/extensions.json': profileManifest,
+      },
+      ['pub.alpha-1.0.0', 'pub.beta-2.0.0'],
+      { '/ext/pub.alpha-1.0.0': 'Alpha!' },
+    );
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    expect(inv.warnings).toEqual([]);
+    expect(inv.profiles.map((p) => p.id)).toEqual(['default', 'aaa']);
+    const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
+    expect(alpha?.displayName).toBe('Alpha!');
+    expect(alpha?.installedIn).toEqual(['default']);
+    expect(alpha?.versions).toEqual([
+      { version: '1.0.0', folderName: 'pub.alpha-1.0.0', fsPath: '/ext/pub.alpha-1.0.0' },
+    ]);
+    const beta = inv.extensions.find((e) => e.id === 'pub.beta');
+    expect(beta?.installedIn).toEqual(['aaa']);
+    expect(beta?.displayName).toBe('pub.beta');
+    expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+
+  it('degrades a corrupt storage.json into a registry-wide warning without rejecting', async () => {
+    const io = makeIo({ [PATHS.storageJson]: '{{{' });
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    expect(inv.profiles.map((p) => p.id)).toEqual(['default']);
+    expect(inv.warnings).toHaveLength(1);
+    expect(inv.warnings[0]?.file).toBe('globalStorage/storage.json');
+    expect(inv.warnings[0]?.affectedProfileIds).toEqual(['default']);
+  });
+
+  it('degrades a corrupt .obsolete into a warning and suppresses disk-only orphans', async () => {
+    const io = makeIo(
+      {
+        [PATHS.storageJson]: storageJson,
+        [PATHS.globalExtensionsJson]: defaultManifest,
+        '/data/User/profiles/aaa/extensions.json': profileManifest,
+        [PATHS.obsoleteFile]: '{{{',
+      },
+      ['pub.alpha-1.0.0', 'pub.stale-0.0.1'],
+    );
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    const warning = inv.warnings.find((w) => w.file === 'extensions/.obsolete');
+    expect(warning).toBeDefined();
+    expect(warning?.affectedProfileIds).toEqual([]);
+    // Without a readable .obsolete we cannot tell stale folders from orphans — suppress, don't guess.
+    expect(inv.extensions.find((e) => e.id === 'pub.stale')).toBeUndefined();
+    expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.orphaned).toBe(false);
+  });
+
+  it('does not report app-scoped-on-disk extensions as orphans when the default manifest is corrupt', async () => {
+    // pub.appscoped's isApplicationScoped flag lives in the unreadable default manifest;
+    // flagging it orphaned would be a guess, so it is suppressed instead.
+    const io = makeIo(
+      { [PATHS.storageJson]: storageJson, [PATHS.globalExtensionsJson]: '{{{' },
+      ['pub.appscoped-1.0.0'],
+    );
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    const warning = inv.warnings.find((w) => w.file === 'extensions.json (default profile)');
+    expect(warning).toBeDefined();
+    expect(warning?.affectedProfileIds).toEqual(['default']);
+    expect(inv.extensions.find((e) => e.id === 'pub.appscoped')).toBeUndefined();
+    expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
   });
 });

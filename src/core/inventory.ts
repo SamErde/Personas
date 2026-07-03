@@ -19,6 +19,11 @@ export interface ComposeInput {
   obsoleteFolderNames: string[];
   displayNames: Map<string, string>;
   extensionsDir: string;
+  /**
+   * Set when orphan knowledge is unreliable for reasons compose cannot see itself
+   * (e.g. a corrupt .obsolete file). Suppresses disk-only records instead of guessing orphans.
+   */
+  orphanKnowledgeUnreliable?: boolean;
 }
 
 export function composeInventory(input: ComposeInput): Inventory {
@@ -95,15 +100,19 @@ export function composeInventory(input: ComposeInput): Inventory {
     });
   }
 
-  // If any profile's manifest failed, exclude extensions that aren't in successful manifests
-  // (we can't trust disk extensions when we don't know the full picture)
-  const hasFailedManifests = input.rawProfiles.some(
-    (p) => input.profileManifests.get(p.location) instanceof Error,
-  );
+  // When any manifest is unreadable (default or per-profile), or the caller flagged orphan
+  // knowledge as unreliable (e.g. a corrupt .obsolete file), disk-only ids are indistinguishable
+  // from extensions belonging to the unreadable data — a corrupt default manifest also hides
+  // isApplicationScoped flags, so an app-scoped extension could surface as a false orphan.
+  // Suppress ALL disk-only records registry-wide rather than guess.
+  const orphanKnowledgeUnreliable =
+    input.orphanKnowledgeUnreliable === true ||
+    input.defaultManifest instanceof Error ||
+    input.rawProfiles.some((p) => input.profileManifests.get(p.location) instanceof Error);
 
   const allIds = new Set([...membership.keys(), ...versionsById.keys()]);
   const extensions: ExtensionRecord[] = [...allIds]
-    .filter((id) => !hasFailedManifests || membership.has(id))
+    .filter((id) => !orphanKnowledgeUnreliable || membership.has(id))
     .map((id) => {
       const installedIn = profiles.map((p) => p.id).filter((pid) => membership.get(id)?.has(pid));
       const isAppScoped = appScoped.has(id);
@@ -182,7 +191,15 @@ export class InventoryService {
 
     const diskFolders = await this.io.listDirs(this.paths.extensionsDir);
     const obsoleteText = await this.io.readFile(this.paths.obsoleteFile);
-    const obsoleteFolderNames = obsoleteText === undefined ? [] : parseObsolete(obsoleteText);
+    let obsoleteFolderNames: string[] = [];
+    let obsoleteError: Error | undefined;
+    if (obsoleteText !== undefined) {
+      try {
+        obsoleteFolderNames = parseObsolete(obsoleteText);
+      } catch (e) {
+        obsoleteError = e instanceof Error ? e : new Error(String(e));
+      }
+    }
 
     const displayNames = new Map<string, string>();
     for (const folderName of diskFolders) {
@@ -200,7 +217,16 @@ export class InventoryService {
       obsoleteFolderNames,
       displayNames,
       extensionsDir: this.paths.extensionsDir,
+      // Without .obsolete we cannot tell stale folders from orphans — suppress rather than guess.
+      orphanKnowledgeUnreliable: obsoleteError !== undefined,
     });
+    if (obsoleteError) {
+      inventory.warnings.push({
+        file: 'extensions/.obsolete',
+        message: obsoleteError.message,
+        affectedProfileIds: [],
+      });
+    }
     if (registryError) {
       inventory.warnings.unshift({
         file: 'globalStorage/storage.json',
