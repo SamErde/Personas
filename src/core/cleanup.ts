@@ -30,6 +30,7 @@ export async function buildOrphanInfos(
 export class CleanupService {
   constructor(private readonly trash: (fsPath: string) => Promise<void>) {}
 
+  /** Deletes exactly the folders passed in; callers must pre-filter to orphan folders — this method performs no orphan verification. */
   async deleteFolders(
     folders: { folderName: string; fsPath: string }[],
   ): Promise<{ folderName: string; ok: boolean; error?: string }[]> {

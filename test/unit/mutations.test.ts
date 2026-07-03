@@ -38,6 +38,12 @@ describe('MutationService', () => {
     await expect(svc(run).install('pub.ext', 'Work')).rejects.toThrow(/nope/);
   });
 
+  it('rejects with MutationError for a profile name containing a double quote, without invoking the runner', async () => {
+    const { calls, run } = okRunner();
+    await expect(svc(run).install('pub.x', 'Bad"Name')).rejects.toThrowError(MutationError);
+    expect(calls).toHaveLength(0);
+  });
+
   it('queue survives a rejected call on the same instance', async () => {
     const calls: string[][] = [];
     let first = true;

@@ -23,7 +23,7 @@ export class MutationService {
   ) {}
 
   install(extId: string, profileName?: string): Promise<void> {
-    return this.enqueue('install failed', [
+    return this.enqueue('install failed', profileName, [
       ...this.profileArgs(profileName),
       '--install-extension',
       extId,
@@ -31,7 +31,7 @@ export class MutationService {
   }
 
   uninstall(extId: string, profileName?: string): Promise<void> {
-    return this.enqueue('uninstall failed', [
+    return this.enqueue('uninstall failed', profileName, [
       ...this.profileArgs(profileName),
       '--uninstall-extension',
       extId,
@@ -42,8 +42,14 @@ export class MutationService {
     return profileName === undefined ? [] : ['--profile', profileName];
   }
 
-  private enqueue(errorLabel: string, args: string[]): Promise<void> {
+  private enqueue(errorLabel: string, profileName: string | undefined, args: string[]): Promise<void> {
     const task = this.queue.then(async () => {
+      // Windows quoting in createNodeCliRunner escapes embedded quotes via CSV-style
+      // doubling, which is unproven against CommandLineToArgvW's backslash-escaping rules.
+      // Reject up front rather than risk silently targeting the wrong (or a malformed) profile.
+      if (profileName?.includes('"')) {
+        throw new MutationError('unsupported profile name (contains ")', '');
+      }
       const full = [...this.opts.extraArgs, ...args];
       const result = await this.opts.run(this.opts.cliPath, full);
       if (result.code !== 0) throw new MutationError(errorLabel, result.stderr || result.stdout);
