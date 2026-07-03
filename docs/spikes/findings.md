@@ -238,3 +238,137 @@ Confirmation the flag never moved: `ms-vscode.hexeditor`'s `metadata.isApplicati
 **`TOGGLE_SUPPORTED: no — fallback UI required`**
 
 The command exists (`workbench.extensions.action.toggleApplyToAllProfiles`), but it is not invocable by a third-party extension with any argument shape available through the public API — string, `{id}`, array, and the genuine `vscode.Extension` object all crash identically inside the handler before reaching any state mutation. No enumerated command (out of 3046/3042 total, cross-checked with two independent regex filters) ever flipped `isApplicationScoped` for the target extension. Per the task's own gating rule, this is not a borderline case requiring judgment — it's a clean, doubly-corroborated "no." Task 10 should ship the guided fallback: open the Extensions view search pinned to the extension so the user can right-click → "Apply Extension to all Profiles" themselves.
+
+---
+
+# Spike C — portable mode / custom `--user-data-dir` CLI behavior findings
+
+**Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), running during the spike — same machine/version as Spikes A and B; the real install was otherwise idle throughout.
+**Method:** Per controller adjustment, the brief's manual "create a profile via the Profiles UI, install an extension via the Extensions view" step was replaced with a fully scripted, automated sandbox: two fresh temp dirs (`%TEMP%\visex-spikec-data`, `%TEMP%\visex-spikec-ext`) plus a throwaway workspace folder (`%TEMP%\visex-spikec-workspace`), driven entirely via the `code` CLI and PowerShell process management — no interactive UI clicking. Full raw command transcript (every command, full output, process lists) is in `.superpowers/sdd/task-4-report.md` (gitignored, not committed); this section summarizes the evidence and verdicts.
+**Date:** 2026-07-03.
+**Scope note:** This exercises explicit `--user-data-dir`/`--extensions-dir` CLI flags, not literal VS Code "Portable Mode" (a `data\` folder dropped next to `Code.exe`). Per the original brief's own reasoning, this still covers true portable-mode installs: Visex always derives both paths from its own runtime context (`globalStorageUri`, etc.) and passes them explicitly to the CLI (Task 8's `CliRunner`), so a portable install and an explicit-flag invocation are indistinguishable from the CLI's point of view — same two flags, same code path either way.
+
+## Verdicts at a glance
+
+- **(a) Same schemas under custom dirs?** Yes — confirmed, no differences from Spike A Facts 1-6.
+- **(b) Does the CLI require both explicit args, with no fallback warning?** Yes — confirmed; omitting either arg silently targets the real default install with no error.
+- **Headless (no-window) named-profile creation possible?** No — a profile is only created as a side effect of opening a real workbench window scoped to that name; every pure data-operation flag refuses a not-yet-created name outright.
+
+## Step 1: sandbox launch
+
+```
+$dataDir = "$env:TEMP\visex-spikec-data"; $extDir = "$env:TEMP\visex-spikec-ext"; $wsDir = "$env:TEMP\visex-spikec-workspace"
+code --user-data-dir "$dataDir" --extensions-dir "$extDir" --new-window "$wsDir"
+```
+
+`<dataDir>\User\globalStorage\storage.json` (plus `state.vscdb`, `vscode.git`) existed on the very first poll (0s wait) — VS Code's first-run user-data layout write-out is effectively synchronous from the CLI dispatcher's point of view, no meaningful startup race to guard against. `Get-CimInstance Win32_Process -Filter "Name='Code.exe'"` filtered on `CommandLine -like "*visex-spikec-data*"` showed 8 processes (main + crashpad-handler + gpu-process + renderer + 4 utility/node-service helpers — the normal multi-process Electron model), all correctly scoped to the sandbox path, none overlapping the real install's 19 pre-existing `Code.exe` processes recorded as a baseline beforehand.
+
+## Step 2 / fact (a): schema verification under custom dirs
+
+Ran `node scripts/spike-formats.mjs "<dataDir>" "<extDir>"` twice: immediately after launch (no named profile yet) and again after Step 3 created `SpikeTest` and installed `ms-vscode.hexeditor` into it.
+
+Immediately after launch — only the implicit default profile exists, exactly like a freshly installed real VS Code:
+```
+--- userDataProfiles ---
+[]
+```
+
+After Step 3:
+```
+--- userDataProfiles ---
+[
+  {
+    "location": "384de42c",
+    "name": "SpikeTest"
+  }
+]
+--- global manifest: 0 entries; 1 folders on disk ---
+appScoped: []
+profile "SpikeTest" (384de42c) inheritsExtensions=false own=1
+.obsolete: (absent)
+```
+
+Every shape matches Spike A's Facts 1-6 exactly; only the root paths differ (sandbox dirs instead of `%APPDATA%\Code` / `~/.vscode/extensions`):
+
+- **Fact 1** (`userDataProfiles` schema): the vivified entry is `{location, name}` — a subset of the real install's richer entries (which also carry `icon`/`useDefaultFlags` when created via the full "New Profile" dialog with options). Consistent with Spike A's own note that `icon` is optional and can be absent (there: the built-in "Agents" profile); this is simply another instance of that same optionality, not a schema difference.
+- **Fact 2** (`useDefaultFlags.extensions` inheritance signal): `SpikeTest` has no `useDefaultFlags` at all (implicit non-inheriting default) and its own `extensions.json` with 1 entry — `own=1`, the same three-state model (own-N / own-0 / own-none via inherits) Spike A documented.
+- **Fact 3** (per-profile `extensions.json` entry schema) — raw content of `<dataDir>\User\profiles\384de42c\extensions.json`:
+  ```json
+  [{
+    "identifier": { "id": "ms-vscode.hexeditor" },
+    "version": "1.11.1",
+    "location": {
+      "$mid": 1,
+      "fsPath": "c:\\Users\\SamErde\\AppData\\Local\\Temp\\visex-spikec-ext\\ms-vscode.hexeditor-1.11.1",
+      "path": "/c:/Users/SamErde/AppData/Local/Temp/visex-spikec-ext/ms-vscode.hexeditor-1.11.1",
+      "scheme": "file"
+    },
+    "relativeLocation": "ms-vscode.hexeditor-1.11.1",
+    "metadata": { "installedTimestamp": 1783096827011, "source": "gallery", "publisherDisplayName": "Microsoft", "isPreReleaseVersion": false }
+  }]
+  ```
+  Field-for-field identical to Spike A Fact 3's real-install example (`identifier.id`, `version`, `location.$mid/path/scheme`, `relativeLocation`, `metadata.installedTimestamp`/`source`) — only the path *values* point under the sandbox extensions dir instead of `~/.vscode/extensions`.
+- **Fact 4/5** (global manifest = default profile's list; app-scoped flag): global manifest at `<extDir>\extensions.json` is `[]` — correct array shape, empty because nothing was installed into the sandbox's own default profile (everything went into the named `SpikeTest` profile instead). Shape is what's being confirmed; an empty array is a valid instance of the same schema, not a different one.
+- **Fact 6** (extension pool + `.obsolete`): `ms-vscode.hexeditor-1.11.1` folder present directly under `<extDir>`, matching the `<publisher.name>-<version>` convention exactly. `.obsolete` is absent (no uninstall happened this spike) — consistent with Spike A's documented "absent is a valid state."
+
+**Verdict (a): CONFIRMED.** Every state-file schema documented in Spike A (Facts 1-6) reproduces identically under custom `--user-data-dir`/`--extensions-dir`. No new fields, no missing required fields, no different empty/absent representations — only the filesystem roots move. Task 6's parsers need zero special-casing for custom-dir installs.
+
+## Step 3: headless named-profile creation attempt (Task 12 question)
+
+Per the controller adjustment, tried the brief's exact command against a profile name that did not exist yet (no prior UI/window step for it):
+
+```
+$ code --user-data-dir "<dataDir>" --extensions-dir "<extDir>" --profile "SpikeTest" --install-extension ms-vscode.hexeditor
+Profile 'SpikeTest' not found.
+exit=1
+```
+
+Same refusal on the read path, to rule out this being install-specific:
+```
+$ code --user-data-dir "<dataDir>" --extensions-dir "<extDir>" --profile "SpikeTest" --list-extensions
+Profile 'SpikeTest' not found.
+exit=1
+```
+
+Neither call created a profile entry, a profile folder, or installed anything — `scripts/spike-formats.mjs` still showed `userDataProfiles: []` after both attempts. The CLI's data-operation flags never auto-create a named profile.
+
+Surprise, not anticipated by either brief: opening an actual **window** against the same not-yet-existing name does create it:
+```
+$ code --user-data-dir "<dataDir>" --extensions-dir "<extDir>" --profile "SpikeTest" --new-window
+```
+After this, `storage.json`'s `userDataProfiles` gained `{"location":"384de42c","name":"SpikeTest"}` — the profile now exists. Retrying the original install command against the now-real profile succeeds cleanly:
+```
+$ code --user-data-dir "<dataDir>" --extensions-dir "<extDir>" --profile "SpikeTest" --install-extension ms-vscode.hexeditor
+Installing extensions...
+Installing extension 'ms-vscode.hexeditor'...
+Extension 'ms-vscode.hexeditor' v1.11.1 was successfully installed.
+exit=0
+```
+
+**Verdict (headless creation, for Task 12): NO — there is no headless/no-window profile-creation path.** A named profile is only vivified as a side effect of opening a real workbench **window** scoped to that profile name (either through the Profiles UI, as the original brief assumed, or equivalently — and just as non-headless — via `--profile <newName> --new-window`, which still opens a real GUI window; there is no dedicated profile-creation CLI verb). Pure data-operation flags (`--install-extension`, `--list-extensions`, and by the same logic `--uninstall-extension`) refuse outright with `Profile '<name>' not found.` (exit 1) against a name that hasn't been window-vivified yet, with no auto-create fallback. This confirms Task 12's existing assumption — CI/headless test fixtures must stick to the default profile — and sharpens it: even a one-shot CLI trick can't manufacture a named-profile fixture without flashing a real window, so that door is fully closed for headless CI, not merely impractical.
+
+## Step 4 / fact (b): CLI targeting — explicit args vs. silent fallback
+
+Three-way comparison, run back to back:
+
+| Call | Dir args | `--profile` | Result | Interpretation |
+| --- | --- | --- | --- | --- |
+| `code --user-data-dir <d> --extensions-dir <e> --profile "SpikeTest" --list-extensions` | both | SpikeTest | `ms-vscode.hexeditor` (1 entry) | targets sandbox's named profile |
+| `code --user-data-dir <d> --extensions-dir <e> --list-extensions` | both | none | *(empty)* | targets sandbox's own default profile |
+| `code --list-extensions` | **none** | none | 42 entries (`anthropic.claude-code`, `davidanson.vscode-markdownlint`, … full real list) | targets the **real** default install |
+
+Row 3's output is byte-identical (`diff`, zero output) to a `code --list-extensions` capture taken *before* the sandbox was ever launched. `node scripts/spike-formats.mjs` (no args → platform defaults) run before, during, and after the entire spike produced three byte-identical outputs (profile list, global manifest, `.obsolete`, all unchanged). No warning, no error, no degraded/partial mode when the dir args are omitted — the CLI simply falls back to its normal platform-default paths and operates on the real install as if the sandbox never existed.
+
+**Verdict (b), stated concretely for Task 8: CONFIRMED.** `code`'s targeting is entirely determined by whether `--user-data-dir`/`--extensions-dir` are present on that specific invocation — there is no session/env-var affinity to a previously-launched sandbox window, and no error signal if they're dropped. Task 8's `CliRunner` **must** pass both flags on every single CLI invocation it makes (list/install/uninstall/anything else), sourced from Visex's own runtime paths (its `globalStorageUri`-derived userData root and the sibling extensions root) — never omit either one "just this once," because the failure mode isn't a crash, it's silently mutating or reading the user's real, possibly-production default profile. `extraArgs` should be treated as mandatory on every call site, not optional.
+
+## Cleanup and isolation confirmation
+
+- All `Code.exe` processes were enumerated via `Get-CimInstance Win32_Process -Filter "Name='Code.exe'"` and filtered to `CommandLine -like "*visex-spikec-data*"` before any kill — 11 matched (two windows' worth of main+helper processes by that point), 0 overlap with the 19 real-install PIDs recorded as a pre-spike baseline. All 11 were stopped (`Stop-Process -Force`, matched by PID from that same filtered list only); a post-kill re-scan found 0 sandbox-tagged processes remaining, and all 19 original real PIDs (plus one unrelated new one — normal churn in a long-running IDE, confirmed to not reference the sandbox path) still running untouched.
+- Both temp dirs and the throwaway workspace folder were deleted (`Remove-Item -Recurse -Force`) and confirmed absent afterward.
+- Real install untouched, confirmed three ways, byte-for-byte (`diff`, zero output each time): (1) `node scripts/spike-formats.mjs` (platform defaults) captured before the spike vs. during vs. after — identical profile list, global manifest, and `.obsolete` all three times; (2) `code --list-extensions` (42 entries) captured before vs. during the spike — identical; (3) no sandbox-tagged process ever appeared outside the temp-dir-matched filter and no real PID was ever targeted by a kill command.
+
+## Surprises / notes for later tasks
+
+- The window-open-vivifies-but-data-ops-refuse asymmetry (Step 3) was not anticipated by either brief and should be folded into Task 12's design notes verbatim — it upgrades "we didn't try headless profile creation" to "we tried the exact headless op, it explicitly refuses every time, and the only thing that works requires a real window."
+- `storage.json`/`state.vscdb` appeared before the first poll fired (effectively immediate on this machine) — nothing for Task 12 to guard against there.
+- A cosmetic Node `DEP0169` deprecation warning (`url.parse()`) appeared on stderr during the second `--install-extension` call — harmless noise from the CLI's bundled Node runtime, unrelated to Visex, not worth guarding against.
