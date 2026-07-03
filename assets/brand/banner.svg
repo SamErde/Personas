@@ -1,0 +1,16 @@
+<svg width="1280" height="320" viewBox="0 0 1280 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="BCellGradient" x1="0" y1="0" x2="154" y2="214" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#38BDF8"/><stop offset="1" stop-color="#2563EB"/></linearGradient>
+    <linearGradient id="BgGradient" x1="0" y1="0" x2="1280" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#131C34"/><stop offset="1" stop-color="#1A2747"/>
+    </linearGradient>
+    <pattern id="GridPattern" width="54" height="54" patternUnits="userSpaceOnUse">
+      <rect x="4" y="4" width="46" height="46" rx="11" fill="none" stroke="#38BDF8" stroke-opacity="0.06" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="320" fill="url(#BgGradient)"/>
+  <rect width="1280" height="320" fill="url(#GridPattern)"/>
+  <g transform="translate(120,32) scale(1.2)"><circle cx="23"  cy="23" r="21.5" fill="none" stroke="#38BDF8" stroke-opacity="0.4" stroke-width="3"/><circle cx="77"  cy="23" r="23" fill="#F5A623"/><circle cx="131" cy="23" r="21.5" fill="none" stroke="#38BDF8" stroke-opacity="0.4" stroke-width="3"/><rect x="0" y="60" width="46" height="46" rx="11" fill="url(#BCellGradient)"/><rect x="54" y="60" width="46" height="46" rx="11" fill="url(#BCellGradient)"/><rect x="108" y="60" width="46" height="46" rx="11" fill="url(#BCellGradient)"/><rect x="1.5" y="115.5" width="43" height="43" rx="9.5" fill="none" stroke="#38BDF8" stroke-opacity="0.4" stroke-width="3"/><rect x="54" y="114" width="46" height="46" rx="11" fill="url(#BCellGradient)"/><rect x="108" y="114" width="46" height="46" rx="11" fill="url(#BCellGradient)"/><rect x="1.5" y="169.5" width="43" height="43" rx="9.5" fill="none" stroke="#38BDF8" stroke-opacity="0.4" stroke-width="3"/><rect x="54" y="168" width="46" height="46" rx="11" fill="url(#BCellGradient)"/><rect x="109.5" y="169.5" width="43" height="43" rx="9.5" fill="none" stroke="#38BDF8" stroke-opacity="0.4" stroke-width="3"/></g>
+  <text x="392" y="152" font-family="Inter, 'Segoe UI', sans-serif" font-size="60" font-weight="700" fill="#E8EDF5" letter-spacing="-1.5">Profile Extension Manager</text>
+  <text x="394" y="204" font-family="Inter, 'Segoe UI', sans-serif" font-size="26" font-weight="400" fill="#9FB3D1">See, install, and clean up extensions across every VS Code profile.</text>
+</svg>
