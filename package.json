@@ -2,15 +2,27 @@
   "name": "profile-extension-manager",
   "displayName": "Profile Extension Manager",
   "description": "See and manage which extensions are installed in each VS Code profile.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "SamErde",
   "license": "MIT",
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Other"],
-  "extensionKind": ["ui"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
   "icon": "media/icon-256.png",
-  "galleryBanner": { "color": "#16213E", "theme": "dark" },
-  "repository": { "type": "git", "url": "https://github.com/SamErde/ProfileExtensionManager" },
+  "galleryBanner": {
+    "color": "#16213E",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamErde/ProfileExtensionManager"
+  },
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {
@@ -24,12 +36,20 @@
     ],
     "viewsContainers": {
       "activitybar": [
-        { "id": "profileExtensionManager", "title": "Profile Extension Manager", "icon": "media/activity-icon.svg" }
+        {
+          "id": "profileExtensionManager",
+          "title": "Profile Extension Manager",
+          "icon": "media/activity-icon.svg"
+        }
       ]
     },
     "views": {
       "profileExtensionManager": [
-        { "id": "profileExtensionManager.welcome", "name": "Profiles", "type": "webview" }
+        {
+          "id": "profileExtensionManager.welcome",
+          "name": "Profiles",
+          "type": "webview"
+        }
       ]
     },
     "configuration": {
