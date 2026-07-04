@@ -88,21 +88,23 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   return { inventory, mutations, cleanup, watched: inventory.watchedFiles() };
 }
 
-let watchersInstalled = false;
+const watchedDirs = new Set<string>();
+let watchTimer: NodeJS.Timeout | undefined;
+function scheduleRefresh(): void {
+  clearTimeout(watchTimer);
+  watchTimer = setTimeout(() => void MatrixPanel.current?.refresh(), 300);
+}
+
 function watchForChanges(context: vscode.ExtensionContext, watched: string[]): void {
-  if (watchersInstalled) return;
-  watchersInstalled = true;
-  let timer: NodeJS.Timeout | undefined;
-  const refresh = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => void MatrixPanel.current?.refresh(), 300);
-  };
   for (const p of watched) {
-    const pattern = new vscode.RelativePattern(vscode.Uri.file(p).with({ path: dirOf(p) }), '**');
+    const dir = dirOf(p);
+    if (watchedDirs.has(dir)) continue;
+    watchedDirs.add(dir);
+    const pattern = new vscode.RelativePattern(vscode.Uri.file(p).with({ path: dir }), '**');
     const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-    watcher.onDidChange(refresh);
-    watcher.onDidCreate(refresh);
-    watcher.onDidDelete(refresh);
+    watcher.onDidChange(scheduleRefresh);
+    watcher.onDidCreate(scheduleRefresh);
+    watcher.onDidDelete(scheduleRefresh);
     context.subscriptions.push(watcher);
   }
 }

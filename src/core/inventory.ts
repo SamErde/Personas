@@ -134,6 +134,16 @@ function sep(referencePath: string): string {
   return referencePath.includes('\\') ? '\\' : '/';
 }
 
+/** Profile ids where the extension is directly installed (excludes profiles that only inherit it). */
+export function directInstallProfileIds(inventory: Inventory, extId: string): string[] {
+  const ext = inventory.extensions.find((e) => e.id === extId);
+  if (!ext) return [];
+  const nonInheriting = new Set(
+    inventory.profiles.filter((p) => !p.inheritsDefaultExtensions).map((p) => p.id),
+  );
+  return ext.installedIn.filter((pid) => nonInheriting.has(pid));
+}
+
 // ---------- IO wrapper ----------
 
 export interface InventoryIo {

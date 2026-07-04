@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeInventory, InventoryService, type InventoryIo } from '../../src/core/inventory';
+import { composeInventory, directInstallProfileIds, InventoryService, type InventoryIo } from '../../src/core/inventory';
 import type { ResolvedPaths } from '../../src/core/paths';
 import type { ManifestEntry, RawProfile } from '../../src/core/parsers';
 
@@ -208,5 +208,37 @@ describe('InventoryService', () => {
     expect(warning?.affectedProfileIds).toEqual(['default']);
     expect(inv.extensions.find((e) => e.id === 'pub.appscoped')).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+});
+
+describe('directInstallProfileIds', () => {
+  it('excludes profiles that only inherit the extension from the default profile', () => {
+    const inv = composeInventory(baseInput());
+    // pub.default-only is installed in 'default' and inherited by 'builtin/agents' (inheriting).
+    expect(directInstallProfileIds(inv, 'pub.default-only')).toEqual(['default']);
+  });
+
+  it('includes every non-inheriting profile the extension is directly installed in', () => {
+    const inv = composeInventory({
+      rawProfiles: [
+        { location: 'p1', name: 'P1', inheritsDefaultExtensions: false },
+        { location: 'p2', name: 'P2', inheritsDefaultExtensions: false },
+      ] as RawProfile[],
+      defaultManifest: [] as ManifestEntry[] | Error,
+      profileManifests: new Map<string, ManifestEntry[] | Error>([
+        ['p1', [entry('pub.shared', '1.0.0')]],
+        ['p2', [entry('pub.shared', '1.0.0')]],
+      ]),
+      diskFolders: ['pub.shared-1.0.0'],
+      obsoleteFolderNames: [] as string[],
+      displayNames: new Map<string, string>(),
+      extensionsDir: '/x',
+    });
+    expect(directInstallProfileIds(inv, 'pub.shared')).toEqual(['p1', 'p2']);
+  });
+
+  it('returns an empty array for an unknown extension id', () => {
+    const inv = composeInventory(baseInput());
+    expect(directInstallProfileIds(inv, 'pub.does-not-exist')).toEqual([]);
   });
 });

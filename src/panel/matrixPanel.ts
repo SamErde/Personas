@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { buildOrphanInfos, CleanupService } from '../core/cleanup';
-import type { InventoryService } from '../core/inventory';
+import { directInstallProfileIds, type InventoryService } from '../core/inventory';
 import { MutationError, type MutationService } from '../core/mutations';
 import type { HostToWebview, Inventory, WebviewToHost } from '../core/types';
 
@@ -104,15 +104,35 @@ export class MatrixPanel {
     const ext = inv.extensions.find((x) => x.id === extId);
     if (!profile || !ext || profile.inheritsDefaultExtensions) return;
 
-    if (!install && ext.installedIn.length === 1) {
-      const pick = await vscode.window.showWarningMessage(
-        `"${ext.displayName}" is installed only in the "${profile.name}" profile. Uninstall it from your last profile?`,
-        { modal: true },
-        'Uninstall',
-      );
-      if (pick !== 'Uninstall') {
-        await this.refresh(); // revert the pending cell
+    if (!install) {
+      // Stale click: the cell no longer reflects reality (e.g. a watcher-driven refresh
+      // already removed it from this profile). Re-sync instead of acting on stale state.
+      if (!ext.installedIn.includes(profileId)) {
+        await this.refresh();
         return;
+      }
+
+      // installedIn includes profiles that merely inherit the default profile's extensions, so
+      // it overcounts "how many profiles would lose this extension if uninstalled here" — use
+      // direct installs only to detect the true last-profile case.
+      const direct = directInstallProfileIds(inv, extId);
+      if (direct.length === 1 && direct[0] === profileId) {
+        const inheritingProfiles = profile.isDefault
+          ? inv.profiles.filter((p) => p.inheritsDefaultExtensions)
+          : [];
+        const inheritWarning =
+          inheritingProfiles.length > 0
+            ? ` Profiles that inherit the Default profile's extensions (${inheritingProfiles.map((p) => p.name).join(', ')}) will also lose it.`
+            : '';
+        const pick = await vscode.window.showWarningMessage(
+          `"${ext.displayName}" is installed only in the "${profile.name}" profile. Uninstall it from your last profile?${inheritWarning}`,
+          { modal: true },
+          'Uninstall',
+        );
+        if (pick !== 'Uninstall') {
+          await this.refresh(); // revert the pending cell
+          return;
+        }
       }
     }
 
@@ -150,7 +170,10 @@ export class MatrixPanel {
       { modal: true },
       'Move to Trash',
     );
-    if (pick !== 'Move to Trash') return;
+    if (pick !== 'Move to Trash') {
+      await this.refresh(); // revert any pending UI state
+      return;
+    }
     const results = await this.services.cleanup.deleteFolders(targets);
     this.post({ type: 'cleanupResult', results });
     await this.refresh();
@@ -183,14 +206,33 @@ async function statFolder(fsPath: string): Promise<{ sizeBytes: number; lastModi
   const path = await import('node:path');
   let total = 0;
   let newest = 0;
+
+  // One unreadable directory must not abort the whole orphan listing — skip it and keep walking.
+  async function tryReaddir(dir: string) {
+    try {
+      return await readdir(dir, { withFileTypes: true });
+    } catch {
+      return undefined;
+    }
+  }
+
   async function walk(dir: string): Promise<void> {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const entries = await tryReaddir(dir);
+    if (!entries) return;
+    for (const entry of entries) {
       const p = path.join(dir, entry.name);
-      if (entry.isDirectory()) await walk(p);
-      else {
-        const s = await stat(p);
-        total += s.size;
-        if (s.mtimeMs > newest) newest = s.mtimeMs;
+      if (entry.isDirectory()) {
+        await walk(p);
+      } else {
+        // One unreadable/removed file (e.g. a race with deletion) must not abort the walk —
+        // skip it and keep totals best-effort.
+        try {
+          const s = await stat(p);
+          total += s.size;
+          if (s.mtimeMs > newest) newest = s.mtimeMs;
+        } catch {
+          // skip
+        }
       }
     }
   }
