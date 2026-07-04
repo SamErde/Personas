@@ -16,6 +16,13 @@ updates:
     groups:
       npm-dev-dependencies:
         dependency-type: "development"
+    ignore:
+      # @types/node tracks the VS Code extension-host runtime (Node 22 for the
+      # supported engine range), NOT the newest Node. Newer types would let
+      # code typecheck against APIs the host doesn't have. Bump the major here
+      # deliberately when raising the minimum VS Code engine version.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
