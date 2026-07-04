@@ -182,11 +182,21 @@ export class MatrixPanel {
   }
 
   private async toggleCell(services: Services, extId: string, profileId: string, install: boolean): Promise<void> {
+    // The webview marks the clicked cell as locally pending the moment the user acts, and only a
+    // fresh 'inventory' push clears that state — so every exit path from a mutation handler,
+    // including these stale/no-op bails, must refresh rather than silently return (same pattern
+    // as the stale-click re-sync below).
     const inv = this.lastInventory;
-    if (!inv) return;
+    if (!inv) {
+      await this.refresh();
+      return;
+    }
     const profile = inv.profiles.find((p) => p.id === profileId);
     const ext = inv.extensions.find((x) => x.id === extId);
-    if (!profile || !ext || profile.inheritsDefaultExtensions) return;
+    if (!profile || !ext || profile.inheritsDefaultExtensions) {
+      await this.refresh();
+      return;
+    }
 
     if (!install) {
       // Stale click: the cell no longer reflects reality (e.g. a watcher-driven refresh
@@ -238,7 +248,12 @@ export class MatrixPanel {
   private async installEverywhere(services: Services, extId: string): Promise<void> {
     const inv = this.lastInventory;
     const ext = inv?.extensions.find((x) => x.id === extId);
-    if (!inv || !ext) return;
+    if (!inv || !ext) {
+      // Stale/unknown id: the webview's bulk button is already locally pending — push a fresh
+      // inventory so that state clears instead of spinning forever.
+      await this.refresh();
+      return;
+    }
 
     const targets = installEverywhereTargets(inv, extId);
     if (targets.length === 0) {
@@ -271,7 +286,12 @@ export class MatrixPanel {
   private async removeEverywhere(services: Services, extId: string): Promise<void> {
     const inv = this.lastInventory;
     const ext = inv?.extensions.find((x) => x.id === extId);
-    if (!inv || !ext) return;
+    if (!inv || !ext) {
+      // Same stale-id handling as installEverywhere: refresh so the webview's local pending
+      // state (set on click) is cleared by the resulting 'inventory' push.
+      await this.refresh();
+      return;
+    }
 
     const targets = removeEverywhereTargets(inv, extId);
     if (targets.length === 0) {
