@@ -2,6 +2,13 @@
 
 All notable changes to the Profile Extension Manager extension are documented in this file.
 
+## [0.7.1](https://github.com/SamErde/ProfileExtensionManager/compare/v0.7.0...v0.7.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* attach vsix to draft release before publishing (immutable releases) ([db1fb79](https://github.com/SamErde/ProfileExtensionManager/commit/db1fb79b7f72edc57f21bfda04bee8e7a12f69aa))
+
 ## [0.7.0](https://github.com/SamErde/ProfileExtensionManager/compare/v0.6.0...v0.7.0) (2026-07-04)
 
 
