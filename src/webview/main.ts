@@ -72,6 +72,8 @@ app.append(toolbar, contentEl);
 const card = el('div', 'ext-card');
 card.hidden = true;
 card.setAttribute('role', 'group');
+// Programmatic-focus fallback target for syncOpenCard's focus restoration (not in tab order).
+card.tabIndex = -1;
 document.body.append(card);
 
 let cardOwnerExtId: string | undefined;
@@ -164,8 +166,34 @@ function syncOpenCard(): void {
     hideCard();
     return;
   }
+
+  // If keyboard focus was inside the card, the rebuild is about to drop it to <body>, which
+  // would leave an open card that no longer closes on tab-away. Remember which control held
+  // focus (by its stable data-action name) and restore it after the rebuild — falling back to
+  // the card container itself (tabindex=-1) when the control no longer exists (e.g. the
+  // extension became app-scoped and install/remove disappeared). Escape still closes either way.
+  const active = document.activeElement;
+  const focusedAction =
+    active instanceof HTMLElement && card.contains(active) ? active.dataset['action'] : undefined;
+  const focusWasInCard = active instanceof HTMLElement && card.contains(active);
+
   rebuildCard(ext);
   positionCard(trigger);
+
+  if (focusWasInCard) {
+    rebuildingCard = true; // the focus() below must not look like a tab-away to card focusout
+    try {
+      const restored = focusedAction
+        ? card.querySelector<HTMLElement>(`[data-action="${CSS.escape(focusedAction)}"]`)
+        : undefined;
+      // focus() on a disabled button is a silent no-op (focus would drop to <body>) — a button
+      // that just became pending-disabled falls back to the card container instead.
+      const focusable = restored && !(restored as HTMLButtonElement).disabled ? restored : card;
+      focusable.focus();
+    } finally {
+      rebuildingCard = false;
+    }
+  }
 }
 
 function buildCardContent(ext: ExtensionRecord): void {
@@ -176,6 +204,7 @@ function buildCardContent(ext: ExtensionRecord): void {
   const nameLink = el('a', 'ext-card-name', ext.displayName) as HTMLAnchorElement;
   nameLink.href = '#';
   nameLink.tabIndex = 0;
+  nameLink.dataset['action'] = 'open-page'; // stable id for syncOpenCard's focus restoration
   const openPage = (e: Event) => {
     e.preventDefault();
     post({ type: 'openExtensionPage', extId: ext.id });
@@ -207,6 +236,7 @@ function buildCardContent(ext: ExtensionRecord): void {
   const actions = el('div', 'ext-card-actions');
   if (!ext.applyToAllProfiles) {
     const installAllBtn = el('button', 'row-action', 'Install in all profiles') as HTMLButtonElement;
+    installAllBtn.dataset['action'] = 'install-everywhere';
     installAllBtn.title =
       "Install in every profile via the VS Code CLI. Unlike VS Code's native 'apply to all profiles' flag, future new profiles will not inherit it.";
     installAllBtn.disabled = rowPending;
@@ -214,12 +244,14 @@ function buildCardContent(ext: ExtensionRecord): void {
     actions.append(installAllBtn);
 
     const removeAllBtn = el('button', 'row-action', 'Remove from all profiles') as HTMLButtonElement;
+    removeAllBtn.dataset['action'] = 'remove-everywhere';
     removeAllBtn.title = 'Uninstall from every profile where it is directly installed.';
     removeAllBtn.disabled = rowPending;
     removeAllBtn.addEventListener('click', () => post({ type: 'removeEverywhere', extId: ext.id }));
     actions.append(removeAllBtn);
   }
   const applyAllBtn = el('button', 'row-action', 'Apply to all profiles…') as HTMLButtonElement;
+  applyAllBtn.dataset['action'] = 'apply-all';
   applyAllBtn.title =
     "Opens the Extensions view where you can toggle VS Code's native 'Apply Extension to all Profiles' option — VS Code provides no API for extensions to toggle it directly.";
   applyAllBtn.disabled = rowPending;
@@ -392,6 +424,12 @@ function renderContent(): void {
     });
     nameTrigger.addEventListener('focus', () => scheduleShowCard(row.extId, nameTrigger, 0));
     nameTrigger.addEventListener('blur', (e) => {
+      // Removal-fired blur: renderContent()'s replaceChildren() detaches this element while it
+      // holds keyboard focus, and Chromium fires blur with relatedTarget null before
+      // syncOpenCard can re-anchor the open card. That is not the user tabbing away — bail, or
+      // the keyboard path would lose the card on every live refresh (the pointer path never
+      // routes through blur).
+      if (!nameTrigger.isConnected) return;
       const related = (e as FocusEvent).relatedTarget;
       if (related instanceof Node && card.contains(related)) return;
       hideCard();
