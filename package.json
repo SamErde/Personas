@@ -10,7 +10,7 @@
   "extensionKind": ["ui"],
   "icon": "media/icon-256.png",
   "galleryBanner": { "color": "#16213E", "theme": "dark" },
-  "repository": { "type": "git", "url": "https://github.com/SamErde/profile-extension-manager" },
+  "repository": { "type": "git", "url": "https://github.com/SamErde/ProfileExtensionManager" },
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {

@@ -38,6 +38,6 @@ Profile Extension Manager reads the same files VS Code itself maintains — the 
 ## Publishing checklist (maintainer)
 
 - [ ] Verify the Marketplace publisher ID (`SamErde`) is registered and you're signed in to it.
-- [ ] Create the GitHub repo `profile-extension-manager` and push this branch — the `repository` field in `package.json` already points at `https://github.com/SamErde/profile-extension-manager`.
+- [x] GitHub repo created: the `repository` field in `package.json` points at `https://github.com/SamErde/ProfileExtensionManager`.
 - [ ] Record `docs/media/matrix.gif` (open matrix → toggle a cell → run cleanup) and link it from the Screenshot section above.
 - [ ] `npx vsce publish`
