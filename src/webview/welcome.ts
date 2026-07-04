@@ -9,6 +9,11 @@ let orphanSizeText = '';
 document.getElementById('open')?.addEventListener('click', () => vscode.postMessage({ type: 'openMatrix' }));
 
 window.addEventListener('message', (event: MessageEvent<HostToWelcome>) => {
+  // Same origin check as the matrix webview (main.ts): host messages are
+  // delivered same-origin in VS Code's webview architecture. Do NOT use
+  // `event.source !== window` here — the sender is the host page, never this
+  // window, so that guard would silently drop every legitimate message.
+  if (event.origin !== window.location.origin) return;
   const m = event.data;
   switch (m.type) {
     case 'state':
