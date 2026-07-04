@@ -47,6 +47,9 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 .inherited { opacity: 0.55; }
 .spinner { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* In-flight mutation feedback: shown the instant a checkbox is toggled (localPending) or once
+ * the host echoes a 'pending' message — Persona Amber alpha-blended so it reads on light+dark. */
+.cell.pending { background: rgba(245, 166, 35, 0.28); border-radius: 3px; }
 .warning {
   background: var(--vscode-inputValidation-warningBackground);
   border: 1px solid var(--vscode-inputValidation-warningBorder);
@@ -62,10 +65,13 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
   max-width: 320px;
   background: var(--vscode-editorHoverWidget-background);
   color: var(--vscode-editorHoverWidget-foreground);
-  border: 1px solid var(--vscode-editorHoverWidget-border);
+  /* Fixed brand blue (Cell Sky) rather than a theme var: the themed hover-widget border can
+   * blend into the editor background on either theme, which is the bug being fixed here. A
+   * fixed hue plus a matching glow gives a consistently visible edge on both dark and light. */
+  border: 1px solid #38bdf8;
   border-radius: 3px;
   padding: 0.6rem 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 2px 12px rgba(56, 189, 248, 0.25);
 }
 .ext-card[hidden] { display: none; }
 .ext-card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
@@ -95,3 +101,6 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 }
 .ext-card-actions button:disabled { cursor: not-allowed; opacity: 0.5; }
 .ext-card-actions button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+/* Immediate in-flight feedback for a just-clicked bulk action, before the host's per-cell
+ * pending echoes arrive (those only start once the user confirms the modal). */
+.ext-card-actions button.in-flight { background: rgba(245, 166, 35, 0.28); }

@@ -9,7 +9,18 @@ let toggleSupported = false;
 let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
 let chip: Chip = 'all';
 let filter = '';
-let pending = new Set<string>(); // `${extId}|${profileId}`
+let pending = new Set<string>(); // `${extId}|${profileId}`, echoed back by the host
+// Presentation-only "in flight" state set the instant the user acts, before the host's 'pending'
+// round-trip lands — never shows a target state early (not optimistic UI), only a working state.
+// Keys are `${extId}|${profileId}` for a single-cell toggle, or `${extId}|*` for a card bulk
+// action (install/remove in all profiles) whose per-cell targets are computed host-side and
+// only become known once the user confirms the resulting modal. Cleared wholesale whenever a
+// fresh 'inventory' message arrives (mirrors the `pending` reset below); the `${extId}|*` keys
+// are additionally cleared on 'orphans'/'cleanupResult' since those don't imply an inventory
+// refresh on their own. This also covers the modal-cancel path for free: cancelling triggers a
+// host-side refresh, which pushes a fresh 'inventory', which clears localPending, which reverts
+// the cell/button to its normal look — no timers needed.
+let localPending = new Set<string>();
 let orphans: OrphanInfo[] | undefined; // non-undefined = cleanup view open
 let checked = new Set<string>(); // folderNames selected for cleanup
 let banner = '';
@@ -232,7 +243,11 @@ function buildCardContent(ext: ExtensionRecord): void {
     card.append(el('div', 'ext-card-meta', metaParts.join(' · ')));
   }
 
-  const rowPending = [...pending].some((key) => key.startsWith(`${ext.id}|`));
+  // Host-echoed per-cell pending plus this extension's local (not-yet-echoed) keys — the same
+  // `${ext.id}|` prefix check covers both a single toggled cell and the `${ext.id}|*` bulk key.
+  const bulkKey = `${ext.id}|*`;
+  const rowPending = [...pending, ...localPending].some((key) => key.startsWith(`${ext.id}|`));
+  const bulkInFlight = localPending.has(bulkKey);
   const actions = el('div', 'ext-card-actions');
   if (!ext.applyToAllProfiles) {
     const installAllBtn = el('button', 'row-action', 'Install in all profiles') as HTMLButtonElement;
@@ -240,14 +255,26 @@ function buildCardContent(ext: ExtensionRecord): void {
     installAllBtn.title =
       "Install in every profile via the VS Code CLI. Unlike VS Code's native 'apply to all profiles' flag, future new profiles will not inherit it.";
     installAllBtn.disabled = rowPending;
-    installAllBtn.addEventListener('click', () => post({ type: 'installEverywhere', extId: ext.id }));
+    installAllBtn.classList.toggle('in-flight', bulkInFlight);
+    installAllBtn.addEventListener('click', () => {
+      // Immediate local feedback: the modal that decides real targets hasn't run yet, so only
+      // the clicked control itself gets an in-flight look — cells wait for the host's echoes.
+      localPending.add(bulkKey);
+      renderContent();
+      post({ type: 'installEverywhere', extId: ext.id });
+    });
     actions.append(installAllBtn);
 
     const removeAllBtn = el('button', 'row-action', 'Remove from all profiles') as HTMLButtonElement;
     removeAllBtn.dataset['action'] = 'remove-everywhere';
     removeAllBtn.title = 'Uninstall from every profile where it is directly installed.';
     removeAllBtn.disabled = rowPending;
-    removeAllBtn.addEventListener('click', () => post({ type: 'removeEverywhere', extId: ext.id }));
+    removeAllBtn.classList.toggle('in-flight', bulkInFlight);
+    removeAllBtn.addEventListener('click', () => {
+      localPending.add(bulkKey);
+      renderContent();
+      post({ type: 'removeEverywhere', extId: ext.id });
+    });
     actions.append(removeAllBtn);
   }
   const applyAllBtn = el('button', 'row-action', 'Apply to all profiles…') as HTMLButtonElement;
@@ -314,6 +341,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
       toggleSupported = m.toggleSupported;
       icons = m.icons;
       pending = new Set();
+      localPending = new Set();
       if (orphans !== undefined) {
         // The cleanup view's snapshot is now stale (inventory changed under it) — ask the
         // host for a fresh orphan list instead of leaving the old one on screen.
@@ -334,6 +362,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
       const freshNames = new Set(m.orphans.flatMap((o) => o.folders.map((f) => f.folderName)));
       orphans = m.orphans;
       checked = enteringFromMatrix ? new Set() : new Set([...checked].filter((name) => freshNames.has(name)));
+      clearLocalBulkPending();
       render();
       return;
     }
@@ -341,6 +370,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
       const failed = m.results.filter((r) => !r.ok);
       orphans = undefined;
       if (failed.length > 0) alertBanner(`Could not remove: ${failed.map((f) => `${f.folderName} (${f.error ?? '?'})`).join(', ')}`);
+      clearLocalBulkPending();
       render();
       return;
     }
@@ -353,6 +383,14 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
 
 function post(m: WebviewToHost): void {
   vscode.postMessage(m);
+}
+
+/** Drops only the `${extId}|*` bulk-action in-flight markers, leaving any single-cell
+ * `${extId}|${profileId}` keys alone (those clear on the next 'inventory' instead). */
+function clearLocalBulkPending(): void {
+  for (const key of localPending) {
+    if (key.endsWith('|*')) localPending.delete(key);
+  }
 }
 
 function alertBanner(text: string): void {
@@ -457,9 +495,10 @@ function renderContent(): void {
 
     tr.append(name);
     for (const cell of row.cells) {
-      const td = el('td', 'cell');
       const key = `${row.extId}|${cell.profileId}`;
-      if (pending.has(key)) {
+      const isPending = pending.has(key) || localPending.has(key);
+      const td = el('td', isPending ? 'cell pending' : 'cell');
+      if (isPending) {
         td.append(el('span', 'spinner', '◐'));
       } else if (cell.disabled) {
         td.append(el('span', 'inherited', cell.installed ? '✓' : '—'));
@@ -474,9 +513,14 @@ function renderContent(): void {
         const box = document.createElement('input');
         box.type = 'checkbox';
         box.checked = cell.installed;
-        box.addEventListener('change', () =>
-          post({ type: 'toggleCell', extId: row.extId, profileId: cell.profileId, install: box.checked }),
-        );
+        box.addEventListener('change', () => {
+          // Immediate "working" feedback — not optimistic UI: box.checked already reflects the
+          // user's click, but the cell itself renders as pending (spinner + amber tint), not the
+          // new checked state, the moment renderContent() below rebuilds it.
+          localPending.add(key);
+          renderContent();
+          post({ type: 'toggleCell', extId: row.extId, profileId: cell.profileId, install: box.checked });
+        });
         td.append(box);
       }
       tr.append(td);
