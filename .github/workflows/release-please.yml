@@ -9,8 +9,23 @@ permissions:
   contents: write
   pull-requests: write
 
+# Serialize runs: a release-PR merge and a fast follow-up push must not
+# interleave their release/PR phases.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+# Three phases, deliberately ordered. This repo uses IMMUTABLE releases, so
+# release-please creates DRAFT releases (mutable) and job 2 attaches the vsix
+# before publishing. Because a draft has no tag and doesn't count as the
+# "latest release", the release-PR phase MUST run only after the publish —
+# otherwise release-please finds no boundary, re-collects the entire commit
+# history, and opens an ever-incrementing garbage release PR (observed as
+# PRs #13/#14 repeating the full changelog).
 jobs:
-  release-please:
+  # Phase 1: process a merged release PR -> create the DRAFT release.
+  # Never creates/updates release PRs (skip-github-pull-request).
+  release:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -22,27 +37,24 @@ jobs:
         id: release
         with:
           # Default GITHUB_TOKEN. Note: releases/tags created with the default
-          # GITHUB_TOKEN do NOT trigger other workflows that listen on
-          # `on: release` or `on: push` for the tag ref (GitHub's anti-recursion
-          # guard). That's intentional here — the packaging/publish steps run
-          # as job 2 in *this same* workflow run instead of a separate
-          # tag-triggered workflow.
+          # GITHUB_TOKEN do NOT trigger other workflows (GitHub's
+          # anti-recursion guard) — packaging runs as job 2 in this same run.
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
 
+  # Phase 2: quality gates, package, attach vsix to the draft, publish.
+  # Publishing creates the tag and immutability seals the release with assets.
   package-and-publish:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    needs: release
+    if: ${{ needs.release.outputs.release_created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          # SHA, not tag: this repo uses immutable releases, so release-please
-          # creates a DRAFT release (no tag exists yet). The vsix is attached
-          # while the draft is mutable; publishing (below) creates the tag and
-          # seals the release — assets included — immutably.
-          ref: ${{ needs.release-please.outputs.sha }}
+          # SHA, not tag: the draft release has no tag until published below.
+          ref: ${{ needs.release.outputs.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: 20
@@ -59,12 +71,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" releases/*.vsix
+        run: gh release upload "${{ needs.release.outputs.tag_name }}" releases/*.vsix
       - name: Publish release (immutability seals it with assets attached)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release edit "${{ needs.release-please.outputs.tag_name }}" --draft=false
+        run: gh release edit "${{ needs.release.outputs.tag_name }}" --draft=false
 
       # --- Marketplace publishing (disabled until VSCE_PAT secret exists) ---
       # To enable auto-publish to the VS Code Marketplace:
@@ -77,3 +89,21 @@ jobs:
       #   env:
       #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
       #   run: npx vsce publish --packagePath releases/*.vsix
+
+  # Phase 3: create/update the NEXT release PR — only after any release from
+  # this push is fully published, so the boundary lookup succeeds. Runs on
+  # ordinary pushes too (phase 2 is skipped in that case).
+  release-pr:
+    needs: [release, package-and-publish]
+    if: >-
+      ${{ !cancelled()
+          && needs.release.result == 'success'
+          && contains(fromJSON('["success", "skipped"]'), needs.package-and-publish.result) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
