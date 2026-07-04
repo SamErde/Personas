@@ -1,0 +1,39 @@
+body {
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  padding: 0.5rem 1rem;
+}
+.toolbar { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
+.toolbar input {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 0.3rem 0.5rem;
+}
+.chip {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none; padding: 0.3rem 0.7rem; border-radius: 1rem; cursor: pointer;
+}
+.chip.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
+table { border-collapse: collapse; }
+th, td { padding: 0.25rem 0.75rem; text-align: center; border-bottom: 1px solid var(--vscode-panel-border); }
+th { position: sticky; top: 0; background: var(--vscode-editor-background); }
+.ext-col { text-align: left; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.version { opacity: 0.6; font-size: 0.85em; }
+.name.orphaned { opacity: 0.6; text-decoration: line-through; }
+.badge {
+  margin-left: 0.5rem; font-size: 0.7em; padding: 0.1rem 0.4rem; border-radius: 0.5rem; border: none; cursor: pointer;
+  background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
+}
+.inherited { opacity: 0.55; }
+.spinner { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.warning {
+  background: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  padding: 0.4rem 0.8rem; margin-bottom: 0.5rem;
+}
+.orphan-row { display: block; padding: 0.25rem 0; }

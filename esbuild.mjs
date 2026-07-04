@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import fs from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 
@@ -22,6 +23,9 @@ const webviewCtx = await esbuild.context({
   outfile: 'dist/webview.js',
   sourcemap: true,
 });
+
+fs.mkdirSync('dist', { recursive: true });
+fs.copyFileSync('src/webview/style.css', 'dist/webview.css');
 
 if (watch) {
   await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
