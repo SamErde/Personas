@@ -18,6 +18,8 @@ body {
 }
 .chip.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
 .chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
+.chip.refresh { margin-left: auto; }
+.chip:disabled { opacity: 0.55; cursor: not-allowed; }
 table { border-collapse: collapse; }
 th, td { padding: 0.25rem 0.75rem; text-align: center; border-bottom: 1px solid var(--vscode-panel-border); }
 th { position: sticky; top: 0; background: var(--vscode-editor-background); }
