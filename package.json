@@ -50,7 +50,7 @@
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.4.0",
     "@vscode/vsce": "^3.0.0",
-    "esbuild": "^0.23.0",
+    "esbuild": "^0.28.1",
     "mocha": "^10.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
