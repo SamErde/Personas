@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 import { MatrixPanel } from './panel/matrixPanel';
-import { registerPemReadOnlyProvider } from './panel/readOnlyProvider';
+import { registerPemReadOnlyProvider, type PemReadOnlyContentProvider } from './panel/readOnlyProvider';
 import { WelcomeViewProvider } from './panel/welcomeView';
 import { getOrBuildServices } from './servicesFactory';
 
 let welcomeProvider: WelcomeViewProvider | undefined;
+let readOnlyProvider: PemReadOnlyContentProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  registerPemReadOnlyProvider(context);
+  readOnlyProvider = registerPemReadOnlyProvider(context);
 
   welcomeProvider = new WelcomeViewProvider(context);
   context.subscriptions.push(
@@ -41,6 +42,8 @@ function scheduleRefresh(): void {
   watchTimer = setTimeout(() => {
     void MatrixPanel.current?.refresh();
     void welcomeProvider?.refresh();
+    // Open pem-readonly documents are live windows onto profile manifests — re-provide them too.
+    readOnlyProvider?.refreshOpenDocuments();
   }, 300);
 }
 
