@@ -2,15 +2,7 @@
 
 <img src="assets/brand/banner.png" alt="Profile Extension Manager banner" width="100%" />
 
-<!--
-  Marketplace note: this banner (and any other relative-path image in this README) only renders
-  on the VS Code Marketplace once the `repository` field in package.json points at a real, public
-  GitHub repo — the Marketplace resolves relative README links through that repo's raw content,
-  not through the packaged .vsix. Locally (GitHub, `code --install-extension`), it just works.
--->
-
 See and manage which extensions are installed in which VS Code profiles, all from one convenient matrix.
-
 
 ## Features
 
@@ -18,7 +10,7 @@ See and manage which extensions are installed in which VS Code profiles, all fro
 - **Cross-profile install/uninstall** — act on any profile directly from the matrix; you never have to switch into a profile just to add or remove an extension from it.
 - **`ALL` badge for native "apply to all profiles" extensions** — extensions VS Code itself has flagged via its native "Apply Extension to all Profiles" option are badged `ALL`, kept visually distinct from extensions that merely happen to be installed in every profile individually.
 - **Orphan cleanup** — find extension versions on disk that no profile references, review them (size, last modified), and move them to the Recycle Bin/Trash. Nothing is ever deleted without your explicit confirmation.
-- **Privacy** - This extension never collects or transmits any data.**
+- **Privacy** - This extension never collects or transmits any data.
 
 ## How it works
 
@@ -37,7 +29,7 @@ Profile Extension Manager reads the same files VS Code itself maintains — the 
 
 ## Publishing checklist (maintainer)
 
-- [ ] Verify the Marketplace publisher ID (`SamErde`) is registered and you're signed in to it.
+- [x] Verify the Marketplace publisher ID (`SamErde`) is registered and you're signed in to it.
 - [x] GitHub repo created: the `repository` field in `package.json` points at `https://github.com/SamErde/ProfileExtensionManager`.
 - [ ] Record `docs/media/matrix.gif` (open matrix → toggle a cell → run cleanup) and link it from the Screenshot section above.
 - [ ] `npx vsce publish`
