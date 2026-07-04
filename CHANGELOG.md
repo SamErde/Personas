@@ -2,6 +2,13 @@
 
 All notable changes to the Profile Extension Manager extension are documented in this file.
 
+## [0.8.1](https://github.com/SamErde/ProfileExtensionManager/compare/v0.8.0...v0.8.1) (2026-07-04)
+
+
+### Bug Fixes
+
+* verify message origin in welcome-view handler (code scanning alert 2) ([56e117a](https://github.com/SamErde/ProfileExtensionManager/commit/56e117a603c8cda34c6f851c14a6b12e2b7683cd))
+
 ## [0.8.0](https://github.com/SamErde/ProfileExtensionManager/compare/v0.7.1...v0.8.0) (2026-07-04)
 
 Re-release of the 0.7.1 content with no code changes. A release-automation
