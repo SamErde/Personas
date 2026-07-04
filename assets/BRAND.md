@@ -25,10 +25,18 @@ the product's whole job in one figure.
 
 Inter (700 wordmark, 400 taglines). Fallback: Segoe UI, sans-serif.
 
+## Directory roles
+
+- `assets/` stores brand, content, mockup, and other reusable source images for
+  the repository, README, blog posts, documentation sites, and social previews.
+  It is excluded from the packaged VS Code extension by `.vscodeignore`.
+- `media/` stores only the images required by the VS Code extension package,
+  such as the Marketplace icon and activity bar icon referenced from `package.json`.
+
 ## package.json snippets
 
 ```json
-"icon": "images/icon-256.png",
+"icon": "media/icon-256.png",
 "galleryBanner": { "color": "#16213E", "theme": "dark" }
 ```
 
