@@ -1,8 +1,8 @@
 {
   "name": "profile-extension-manager",
   "displayName": "Profile Extension Manager",
-  "description": "See and manage which extensions are installed in which VS Code profiles. No telemetry.",
-  "version": "0.1.0",
+  "description": "See and manage which extensions are installed in which VS Code profiles.",
+  "version": "0.3.0",
   "publisher": "SamErde",
   "license": "MIT",
   "engines": { "vscode": "^1.90.0" },
@@ -45,20 +45,12 @@
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.0",
     "@types/node": "^22",
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^3.0.0",
-    "@vscode/vsce": "^3.0.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.1",
-    "mocha": "^11.7.6",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
-  },
-  "overrides": {
-    "mocha": {
-      "diff": "^9.0.0",
-      "serialize-javascript": "^7.0.7"
-    }
   }
 }
