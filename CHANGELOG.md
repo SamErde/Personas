@@ -2,6 +2,13 @@
 
 All notable changes to the Profile Extension Manager extension are documented in this file.
 
+## [0.8.3](https://github.com/SamErde/ProfileExtensionManager/compare/v0.8.2...v0.8.3) (2026-07-04)
+
+
+### Miscellaneous Chores
+
+* first Marketplace release ([8a48630](https://github.com/SamErde/ProfileExtensionManager/commit/8a4863008bca44d6fa4a237646f4cf4b4f340562))
+
 ## [0.8.2](https://github.com/SamErde/ProfileExtensionManager/compare/v0.8.1...v0.8.2) (2026-07-04)
 
 
