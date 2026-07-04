@@ -13,3 +13,4 @@ All notable changes to the Profile Extension Manager extension are documented in
 - No telemetry — this extension does not collect or transmit any data.
 - Clicking the activity-bar icon now opens the Extension Matrix automatically; configurable via `profileExtensionManager.openMatrixOnActivityBarClick`.
 - Per-row bulk actions in the extension matrix: install in every profile via the CLI, remove from every profile where it's directly installed, and a guided "Apply to all profiles…" shortcut that opens the Extensions view for VS Code's native toggle.
+- UX polish: extension icons in the matrix (with a themed letter-tile fallback), a correctly-themed "Open Extension Matrix" button in dark themes, a clearer "Applied to all profiles" filter label, and a "Profile Extension Matrix" tab title.

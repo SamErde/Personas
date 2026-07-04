@@ -42,8 +42,27 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <title>Profile Extension Manager</title>
+<style nonce="${nonce}">
+  body {
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-foreground);
+    background: var(--vscode-sideBar-background);
+    padding: 0.5rem 1rem;
+  }
+  button {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 0.3rem 0.7rem;
+    border-radius: 1rem;
+    cursor: pointer;
+  }
+  button:hover {
+    background: var(--vscode-button-hoverBackground);
+  }
+</style>
 </head>
 <body>
 <p>The Extension Matrix opens as an editor tab.</p>

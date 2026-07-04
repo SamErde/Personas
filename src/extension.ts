@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { CleanupService } from './core/cleanup';
 import { InventoryService, type InventoryIo } from './core/inventory';
 import { createNodeCliRunner, MutationService } from './core/mutations';
-import { findCli, resolvePaths, type Platform } from './core/paths';
+import { findCli, resolvePaths, type Platform, type ResolvedPaths } from './core/paths';
 import { MatrixPanel } from './panel/matrixPanel';
 import { WelcomeViewProvider } from './panel/welcomeView';
 
@@ -35,6 +35,7 @@ type Services = {
   inventory: InventoryService;
   mutations: MutationService;
   cleanup: CleanupService;
+  paths: ResolvedPaths;
   watched: string[];
 };
 
@@ -89,12 +90,16 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
         return [];
       }
     },
-    readDisplayName: async (folder) => {
+    readPackageMeta: async (folder) => {
       try {
         const pkg = JSON.parse(await fsp.readFile(path.join(folder, 'package.json'), 'utf8')) as {
           displayName?: unknown;
+          icon?: unknown;
         };
-        return typeof pkg.displayName === 'string' && !pkg.displayName.startsWith('%') ? pkg.displayName : undefined;
+        const displayName =
+          typeof pkg.displayName === 'string' && !pkg.displayName.startsWith('%') ? pkg.displayName : undefined;
+        const icon = typeof pkg.icon === 'string' ? pkg.icon : undefined;
+        return { displayName, icon };
       } catch {
         return undefined;
       }
@@ -110,7 +115,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const cleanup = new CleanupService((fsPath) =>
     Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.file(fsPath), { recursive: true, useTrash: true })),
   );
-  return { inventory, mutations, cleanup, watched: inventory.watchedFiles() };
+  return { inventory, mutations, cleanup, paths, watched: inventory.watchedFiles() };
 }
 
 const watchedDirs = new Set<string>();

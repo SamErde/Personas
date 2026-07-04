@@ -43,7 +43,7 @@ const io: InventoryIo = {
       return [];
     }
   },
-  readDisplayName: async () => undefined,
+  readPackageMeta: async () => undefined,
 };
 
 let suiteFailed = false;

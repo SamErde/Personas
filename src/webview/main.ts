@@ -6,6 +6,7 @@ const vscode = acquireVsCodeApi();
 
 let inventory: Inventory | undefined;
 let toggleSupported = false;
+let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
 let chip: Chip = 'all';
 let filter = '';
 let pending = new Set<string>(); // `${extId}|${profileId}`
@@ -37,7 +38,7 @@ filterInput.addEventListener('input', () => {
 toolbar.append(filterInput);
 
 const chipButtons: [Chip, HTMLElement][] = [];
-for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['allProfiles', 'All profiles']] as const) {
+for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['allProfiles', 'Applied to all profiles']] as const) {
   const b = el('button', chip === key ? 'chip active' : 'chip', label);
   b.addEventListener('click', () => {
     chip = key;
@@ -70,6 +71,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
     case 'inventory':
       inventory = m.inventory;
       toggleSupported = m.toggleSupported;
+      icons = m.icons;
       pending = new Set();
       if (orphans !== undefined) {
         // The cleanup view's snapshot is now stale (inventory changed under it) — ask the
@@ -162,6 +164,7 @@ function renderContent(): void {
   for (const row of vm.rows) {
     const tr = document.createElement('tr');
     const name = el('td', 'ext-col');
+    name.append(extIcon(row.extId, row.displayName));
     name.append(el('span', row.orphaned ? 'name orphaned' : 'name', row.displayName));
     name.append(el('span', 'version', row.version ? ` ${row.version}` : ''));
     if (row.applyToAllProfiles) {
@@ -271,6 +274,25 @@ function renderCleanup(list: OrphanInfo[]): void {
     }
   }
   contentEl.append(go);
+}
+
+/** Icon image when the host resolved one for this extension, otherwise a themed letter-tile
+ * fallback. Also swaps a broken/unresolvable icon path to the fallback at load time, so a stale
+ * or invalid host-provided URI never surfaces a broken-image glyph. */
+function extIcon(extId: string, displayName: string): HTMLElement {
+  const src = icons[extId];
+  if (!src) return letterTile(displayName);
+  const img = document.createElement('img');
+  img.className = 'ext-icon';
+  img.alt = '';
+  img.addEventListener('error', () => img.replaceWith(letterTile(displayName)), { once: true });
+  img.src = src;
+  return img;
+}
+
+function letterTile(displayName: string): HTMLElement {
+  const letter = displayName.trim().charAt(0).toUpperCase() || '?';
+  return el('span', 'ext-icon ext-icon-fallback', letter);
 }
 
 function el(tag: string, className: string, text?: string): HTMLElement {

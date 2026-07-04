@@ -20,6 +20,8 @@ export interface ExtensionRecord {
   applyToAllProfiles: boolean;
   installedIn: string[]; // Profile.id values (includes inheriting profiles)
   orphaned: boolean; // derived: installedIn.length === 0 && !applyToAllProfiles
+  /** Absolute path to the icon file, composed from the first disk version folder that has one. */
+  iconFsPath?: string;
 }
 
 export interface ParseWarning {
@@ -45,7 +47,7 @@ export interface OrphanInfo {
 // --- Webview message protocol ---
 
 export type HostToWebview =
-  | { type: 'inventory'; inventory: Inventory; toggleSupported: boolean }
+  | { type: 'inventory'; inventory: Inventory; toggleSupported: boolean; icons: Record<string, string> }
   | { type: 'pending'; extId: string; profileId: string }
   | { type: 'orphans'; orphans: OrphanInfo[] }
   | { type: 'cleanupResult'; results: { folderName: string; ok: boolean; error?: string }[] }

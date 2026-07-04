@@ -7,6 +7,7 @@ import {
   type InventoryService,
 } from '../core/inventory';
 import { MutationError, type MutationService } from '../core/mutations';
+import type { ResolvedPaths } from '../core/paths';
 import type { HostToWebview, Inventory, WebviewToHost } from '../core/types';
 
 // Spike B verdict (docs/spikes/findings.md): TOGGLE_SUPPORTED = no. The command
@@ -17,27 +18,32 @@ import type { HostToWebview, Inventory, WebviewToHost } from '../core/types';
 // offer the guided fallback in toggleAllProfiles below instead.
 const TOGGLE_ALL_PROFILES_COMMAND: string | undefined = undefined;
 
-type Services = { inventory: InventoryService; mutations: MutationService; cleanup: CleanupService };
+type Services = {
+  inventory: InventoryService;
+  mutations: MutationService;
+  cleanup: CleanupService;
+  paths: ResolvedPaths;
+};
 
 export class MatrixPanel {
   static current: MatrixPanel | undefined;
 
-  static show(
-    context: vscode.ExtensionContext,
-    services: { inventory: InventoryService; mutations: MutationService; cleanup: CleanupService },
-  ): void {
+  static show(context: vscode.ExtensionContext, services: Services): void {
     if (MatrixPanel.current) {
       MatrixPanel.current.panel.reveal();
       return;
     }
     const panel = vscode.window.createWebviewPanel(
       'profileExtensionManager.matrix',
-      'Extension Matrix',
+      'Profile Extension Matrix',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist')],
+        localResourceRoots: [
+          vscode.Uri.joinPath(context.extensionUri, 'dist'),
+          vscode.Uri.file(services.paths.extensionsDir),
+        ],
       },
     );
     MatrixPanel.current = new MatrixPanel(panel, context, services, undefined);
@@ -56,7 +62,7 @@ export class MatrixPanel {
     }
     const panel = vscode.window.createWebviewPanel(
       'profileExtensionManager.matrix',
-      'Extension Matrix',
+      'Profile Extension Matrix',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -85,10 +91,17 @@ export class MatrixPanel {
   async refresh(): Promise<void> {
     if (!this.services) return; // unsupported mode — nothing to read; see onMessage's guard.
     this.lastInventory = await this.services.inventory.getInventory();
+    const icons: Record<string, string> = {};
+    for (const ext of this.lastInventory.extensions) {
+      if (ext.iconFsPath) {
+        icons[ext.id] = this.panel.webview.asWebviewUri(vscode.Uri.file(ext.iconFsPath)).toString();
+      }
+    }
     this.post({
       type: 'inventory',
       inventory: this.lastInventory,
       toggleSupported: TOGGLE_ALL_PROFILES_COMMAND !== undefined,
+      icons,
     });
   }
 
@@ -315,7 +328,7 @@ export class MatrixPanel {
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'none'; style-src ${w.cspSource}; script-src 'nonce-${nonce}';">
+  content="default-src 'none'; style-src ${w.cspSource}; script-src 'nonce-${nonce}'; img-src ${w.cspSource};">
 <link rel="stylesheet" href="${style}">
 <title>Extension Matrix</title>
 </head>

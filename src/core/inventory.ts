@@ -18,6 +18,8 @@ export interface ComposeInput {
   diskFolders: string[];
   obsoleteFolderNames: string[];
   displayNames: Map<string, string>;
+  /** extension id -> absolute icon fsPath, from the first disk version folder that has one */
+  iconFsPaths?: Map<string, string>;
   extensionsDir: string;
   /**
    * Set when orphan knowledge is unreliable for reasons compose cannot see itself
@@ -116,6 +118,7 @@ export function composeInventory(input: ComposeInput): Inventory {
     .map((id) => {
       const installedIn = profiles.map((p) => p.id).filter((pid) => membership.get(id)?.has(pid));
       const isAppScoped = appScoped.has(id);
+      const iconFsPath = input.iconFsPaths?.get(id);
       return {
         id,
         displayName: input.displayNames.get(id) ?? id,
@@ -123,6 +126,7 @@ export function composeInventory(input: ComposeInput): Inventory {
         applyToAllProfiles: isAppScoped,
         installedIn,
         orphaned: installedIn.length === 0 && !isAppScoped,
+        ...(iconFsPath !== undefined ? { iconFsPath } : {}),
       };
     });
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
@@ -187,8 +191,8 @@ export interface InventoryIo {
    */
   readFile(p: string): Promise<string | undefined | Error>;
   listDirs(p: string): Promise<string[]>;
-  /** best-effort displayName from <folder>/package.json */
-  readDisplayName(extFolderPath: string): Promise<string | undefined>;
+  /** best-effort displayName/icon from <folder>/package.json; undefined when unreadable */
+  readPackageMeta(extFolderPath: string): Promise<{ displayName?: string; icon?: string } | undefined>;
 }
 
 export class InventoryService {
@@ -254,11 +258,20 @@ export class InventoryService {
     }
 
     const displayNames = new Map<string, string>();
+    const iconFsPaths = new Map<string, string>();
     for (const folderName of diskFolders) {
       const parsed = parseExtensionFolderName(folderName);
-      if (!parsed || displayNames.has(parsed.id)) continue;
-      const name = await this.io.readDisplayName(joinP(this.paths.extensionsDir, folderName));
-      if (name) displayNames.set(parsed.id, name);
+      if (!parsed) continue;
+      const needDisplayName = !displayNames.has(parsed.id);
+      const needIcon = !iconFsPaths.has(parsed.id);
+      if (!needDisplayName && !needIcon) continue;
+      const meta = await this.io.readPackageMeta(joinP(this.paths.extensionsDir, folderName));
+      if (!meta) continue;
+      if (needDisplayName && meta.displayName) displayNames.set(parsed.id, meta.displayName);
+      if (needIcon && meta.icon) {
+        const raw = `${this.paths.extensionsDir}/${folderName}/${meta.icon}`;
+        iconFsPaths.set(parsed.id, raw.replaceAll('/', sep(this.paths.extensionsDir)));
+      }
     }
 
     const inventory = composeInventory({
@@ -268,6 +281,7 @@ export class InventoryService {
       diskFolders,
       obsoleteFolderNames,
       displayNames,
+      iconFsPaths,
       extensionsDir: this.paths.extensionsDir,
       // Without the registry, named profiles (and their manifests) are invisible; without
       // .obsolete we cannot tell stale folders from orphans. Suppress rather than guess.

@@ -24,6 +24,18 @@ table { border-collapse: collapse; }
 th, td { padding: 0.25rem 0.75rem; text-align: center; border-bottom: 1px solid var(--vscode-panel-border); }
 th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 .ext-col { text-align: left; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-icon {
+  width: 16px; height: 16px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 0.375rem;
+  object-fit: contain;
+}
+.ext-icon-fallback {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
+  font-size: 0.65em; font-weight: 600;
+}
 .version { opacity: 0.6; font-size: 0.85em; }
 .name.orphaned { opacity: 0.6; text-decoration: line-through; }
 .badge {

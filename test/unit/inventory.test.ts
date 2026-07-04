@@ -122,10 +122,16 @@ describe('InventoryService', () => {
     files: Record<string, string | Error>,
     dirs: string[] = [],
     displayNames: Record<string, string> = {},
+    icons: Record<string, string> = {},
   ): InventoryIo => ({
     readFile: (p) => Promise.resolve(files[p]),
     listDirs: () => Promise.resolve(dirs),
-    readDisplayName: (p) => Promise.resolve(displayNames[p]),
+    readPackageMeta: (p) =>
+      Promise.resolve(
+        displayNames[p] !== undefined || icons[p] !== undefined
+          ? { displayName: displayNames[p], icon: icons[p] }
+          : undefined,
+      ),
   });
 
   const storageJson = JSON.stringify({ userDataProfiles: [{ location: 'aaa', name: 'Work' }] });
@@ -145,6 +151,7 @@ describe('InventoryService', () => {
       },
       ['pub.alpha-1.0.0', 'pub.beta-2.0.0'],
       { '/ext/pub.alpha-1.0.0': 'Alpha!' },
+      { '/ext/pub.alpha-1.0.0': 'media/icon.png' },
     );
     const inv = await new InventoryService(PATHS, io).getInventory();
     expect(inv.warnings).toEqual([]);
@@ -155,10 +162,29 @@ describe('InventoryService', () => {
     expect(alpha?.versions).toEqual([
       { version: '1.0.0', folderName: 'pub.alpha-1.0.0', fsPath: '/ext/pub.alpha-1.0.0' },
     ]);
+    // package.json declared an icon — the record gets its absolute, folder-relative fsPath.
+    expect(alpha?.iconFsPath).toBe('/ext/pub.alpha-1.0.0/media/icon.png');
     const beta = inv.extensions.find((e) => e.id === 'pub.beta');
     expect(beta?.installedIn).toEqual(['aaa']);
     expect(beta?.displayName).toBe('pub.beta');
+    // No icon declared for beta — the field is absent, not an empty string.
+    expect(beta?.iconFsPath).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+
+  it('uses the icon from the first disk version folder that has one, skipping iconless versions', async () => {
+    const io = makeIo(
+      {
+        [PATHS.storageJson]: storageJson,
+        [PATHS.globalExtensionsJson]: defaultManifest,
+      },
+      ['pub.alpha-1.0.0', 'pub.alpha-0.9.0'],
+      {},
+      { '/ext/pub.alpha-0.9.0': 'icon.png' },
+    );
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
+    expect(alpha?.iconFsPath).toBe('/ext/pub.alpha-0.9.0/icon.png');
   });
 
   it('degrades a corrupt storage.json into a registry-wide warning without rejecting', async () => {
