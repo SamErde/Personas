@@ -27,13 +27,21 @@
         { "id": "profileExtensionManager", "title": "Profile Extension Manager", "icon": "media/activity-icon.svg" }
       ]
     },
-    "views": { "profileExtensionManager": [{ "id": "profileExtensionManager.welcome", "name": "Profiles" }] },
-    "viewsWelcome": [
-      {
-        "view": "profileExtensionManager.welcome",
-        "contents": "Manage extensions across all your VS Code profiles.\n[Open Extension Matrix](command:profileExtensionManager.showMatrix)"
+    "views": {
+      "profileExtensionManager": [
+        { "id": "profileExtensionManager.welcome", "name": "Profiles", "type": "webview" }
+      ]
+    },
+    "configuration": {
+      "title": "Profile Extension Manager",
+      "properties": {
+        "profileExtensionManager.openMatrixOnActivityBarClick": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When enabled, activating the Profile Extension Manager sidebar automatically opens the Extension Matrix — including on window restore if the sidebar was left active. Disable to require clicking the \"Open Extension Matrix\" button instead."
+        }
       }
-    ]
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",

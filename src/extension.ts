@@ -4,8 +4,12 @@ import { InventoryService, type InventoryIo } from './core/inventory';
 import { createNodeCliRunner, MutationService } from './core/mutations';
 import { findCli, resolvePaths, type Platform } from './core/paths';
 import { MatrixPanel } from './panel/matrixPanel';
+import { WelcomeViewProvider } from './panel/welcomeView';
 
 export function activate(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('profileExtensionManager.welcome', new WelcomeViewProvider(context)),
+  );
   context.subscriptions.push(
     vscode.commands.registerCommand('profileExtensionManager.showMatrix', async () => {
       const setup = await buildServices(context);
