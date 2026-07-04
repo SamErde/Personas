@@ -78,17 +78,15 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh release edit "${{ needs.release.outputs.tag_name }}" --draft=false
 
-      # --- Marketplace publishing (disabled until VSCE_PAT secret exists) ---
-      # To enable auto-publish to the VS Code Marketplace:
-      #   1. Create a Marketplace Personal Access Token (Azure DevOps org
-      #      settings > Personal Access Tokens, Marketplace > Manage scope).
-      #   2. Add it as a repository secret named VSCE_PAT.
-      #   3. Uncomment the step below.
-      #
-      # - name: Publish to VS Code Marketplace
-      #   env:
-      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      #   run: npx vsce publish --packagePath releases/*.vsix
+      # Marketplace publish runs AFTER the GitHub release is sealed: the GitHub
+      # release is the source of truth and stays consistent even if this step
+      # fails (PAT expiry, marketplace scan rejection). Recovery from a failure
+      # here is manual: download the released vsix and run
+      # `npx vsce publish --packagePath <file>` with a valid VSCE_PAT.
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath releases/*.vsix
 
   # Phase 3: create/update the NEXT release PR — only after any release from
   # this push is fully published, so the boundary lookup succeeds. Runs on
