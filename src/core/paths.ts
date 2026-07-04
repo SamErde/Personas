@@ -55,10 +55,22 @@ export function findCli(
   exists: (p: string) => boolean,
 ): string | undefined {
   const p = pathFor(platform);
-  const binDirs =
-    platform === 'darwin'
-      ? [p.join(appRoot, 'bin')]
-      : [p.join(appRoot, '..', '..', 'bin'), p.join(appRoot, 'bin')];
+  let binDirs: string[];
+  if (platform === 'darwin') {
+    binDirs = [p.join(appRoot, 'bin')];
+  } else if (platform === 'win32') {
+    // Modern Windows installs (and the @vscode/test-electron archive distribution — verified
+    // identical, same commit-hash folder name) nest resources/app three levels below the
+    // install root, inside a commit-hash folder that sits alongside bin/. Try that first, then
+    // fall back to the flatter two-level layout in case some Windows distribution uses it.
+    binDirs = [
+      p.join(appRoot, '..', '..', '..', 'bin'),
+      p.join(appRoot, '..', '..', 'bin'),
+      p.join(appRoot, 'bin'),
+    ];
+  } else {
+    binDirs = [p.join(appRoot, '..', '..', 'bin'), p.join(appRoot, 'bin')];
+  }
   for (const dir of binDirs) {
     for (const name of CLI_NAMES[platform]) {
       const candidate = p.normalize(p.join(dir, name));

@@ -35,6 +35,12 @@ describe('findCli', () => {
     expect(findCli(appRoot, 'win32', (p) => p === expected)).toBe(expected);
   });
 
+  it('finds code.cmd three levels above appRoot when nested under a commit-hash folder (real Windows installs and the @vscode/test-electron archive both use this layout)', () => {
+    const appRoot = 'C:\\apps\\VSCode\\4fe60c8b1c\\resources\\app';
+    const expected = 'C:\\apps\\VSCode\\bin\\code.cmd';
+    expect(findCli(appRoot, 'win32', (p) => p === expected)).toBe(expected);
+  });
+
   it('finds insiders CLI name', () => {
     const appRoot = 'C:\\apps\\Insiders\\resources\\app';
     const expected = 'C:\\apps\\Insiders\\bin\\code-insiders.cmd';

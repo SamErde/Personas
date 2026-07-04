@@ -30,7 +30,7 @@
     "watch": "node esbuild.mjs --watch",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "npm run build && tsc -p tsconfig.integration.json && node out-test/integration/runTests.js",
+    "test:integration": "npm run build && tsc -p tsconfig.integration.json && node out-test/test/integration/runTests.js",
     "package": "vsce package"
   },
   "devDependencies": {

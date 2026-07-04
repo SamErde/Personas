@@ -1,0 +1,11 @@
+{
+  "name": "visex-hello-fixture",
+  "displayName": "Visex Hello Fixture",
+  "description": "Inert fixture extension used by Visex integration tests.",
+  "version": "0.0.1",
+  "publisher": "visex-tests",
+  "license": "MIT",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "contributes": {}
+}
