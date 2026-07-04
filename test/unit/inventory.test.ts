@@ -310,6 +310,30 @@ describe('installEverywhereTargets', () => {
     const inv = composeInventory(baseInput());
     expect(installEverywhereTargets(inv, 'pub.does-not-exist')).toEqual([]);
   });
+
+  it('never targets an app-scoped extension, even if a profile were missing from installedIn', () => {
+    // Regression: app-scoped ids must be excluded by the applyToAllProfiles flag itself, not
+    // merely because composeInventory happens to fill installedIn — a hand-built record with a
+    // gap in installedIn must still yield no targets.
+    const inv: Inventory = {
+      profiles: [
+        { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
+        { id: 'p1', name: 'P1', isDefault: false, inheritsDefaultExtensions: false },
+      ],
+      extensions: [
+        {
+          id: 'pub.appscoped',
+          displayName: 'AppScoped',
+          versions: [],
+          applyToAllProfiles: true,
+          installedIn: ['default'], // p1 missing — must still not be targeted
+          orphaned: false,
+        },
+      ],
+      warnings: [],
+    };
+    expect(installEverywhereTargets(inv, 'pub.appscoped')).toEqual([]);
+  });
 });
 
 describe('removeEverywhereTargets', () => {
@@ -343,5 +367,14 @@ describe('removeEverywhereTargets', () => {
       warnings: [{ file: 'profiles/p2/extensions.json', message: 'bad', affectedProfileIds: ['p2'] }],
     };
     expect(removeEverywhereTargets(inv, 'pub.shared').map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('never targets an app-scoped extension despite installedIn covering every profile', () => {
+    // Regression: composeInventory propagates app-scoped ids into every profile's installedIn,
+    // so directInstallProfileIds alone would report phantom per-profile installs (pub.everywhere
+    // → default, aaa) — the applyToAllProfiles flag must short-circuit to no targets.
+    const inv = composeInventory(baseInput());
+    expect(directInstallProfileIds(inv, 'pub.everywhere')).toEqual(['default', 'aaa']); // the trap
+    expect(removeEverywhereTargets(inv, 'pub.everywhere')).toEqual([]);
   });
 });

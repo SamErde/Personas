@@ -174,18 +174,23 @@ function renderContent(): void {
     const rowPending = [...pending].some((key) => key.startsWith(`${row.extId}|`));
     const actions = el('span', 'row-actions');
 
-    const installAllBtn = el('button', 'row-action', 'Install') as HTMLButtonElement;
-    installAllBtn.title =
-      "Install in every profile via the VS Code CLI. Unlike VS Code's native 'apply to all profiles' flag, future new profiles will not inherit it.";
-    installAllBtn.disabled = rowPending;
-    installAllBtn.addEventListener('click', () => post({ type: 'installEverywhere', extId: row.extId }));
-    actions.append(installAllBtn);
+    // App-scoped rows get no bulk install/remove buttons: VS Code's native flag already applies
+    // them everywhere, and the host-side target helpers return [] for them by design. Only the
+    // Apply… guide button remains — the correct affordance for managing (or unflagging) the flag.
+    if (!row.applyToAllProfiles) {
+      const installAllBtn = el('button', 'row-action', 'Install') as HTMLButtonElement;
+      installAllBtn.title =
+        "Install in every profile via the VS Code CLI. Unlike VS Code's native 'apply to all profiles' flag, future new profiles will not inherit it.";
+      installAllBtn.disabled = rowPending;
+      installAllBtn.addEventListener('click', () => post({ type: 'installEverywhere', extId: row.extId }));
+      actions.append(installAllBtn);
 
-    const removeAllBtn = el('button', 'row-action', 'Remove') as HTMLButtonElement;
-    removeAllBtn.title = 'Uninstall from every profile where it is directly installed.';
-    removeAllBtn.disabled = rowPending;
-    removeAllBtn.addEventListener('click', () => post({ type: 'removeEverywhere', extId: row.extId }));
-    actions.append(removeAllBtn);
+      const removeAllBtn = el('button', 'row-action', 'Remove') as HTMLButtonElement;
+      removeAllBtn.title = 'Uninstall from every profile where it is directly installed.';
+      removeAllBtn.disabled = rowPending;
+      removeAllBtn.addEventListener('click', () => post({ type: 'removeEverywhere', extId: row.extId }));
+      actions.append(removeAllBtn);
+    }
 
     const applyAllBtn = el('button', 'row-action', 'Apply…') as HTMLButtonElement;
     applyAllBtn.title =

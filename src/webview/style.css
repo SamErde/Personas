@@ -38,7 +38,7 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 }
 tr:hover .row-actions button, .row-actions button:focus { opacity: 1; }
 .row-actions button:disabled { cursor: not-allowed; }
-tr:hover .row-actions button:disabled, .row-actions button:disabled:focus { opacity: 0.35; }
+tr:hover .row-actions button:disabled { opacity: 0.35; }
 .inherited { opacity: 0.55; }
 .spinner { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }

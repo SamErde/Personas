@@ -148,6 +148,17 @@ export class MatrixPanel {
     }
   }
 
+  /**
+   * Sentence appended to uninstall confirmations when the Default profile is affected and other
+   * profiles inherit its extensions — they lose the extension too. Empty when not applicable.
+   */
+  private cascadeWarning(inv: Inventory, defaultIsAffected: boolean): string {
+    const inheritingProfiles = defaultIsAffected ? inv.profiles.filter((p) => p.inheritsDefaultExtensions) : [];
+    return inheritingProfiles.length > 0
+      ? ` Profiles that inherit the Default profile's extensions (${inheritingProfiles.map((p) => p.name).join(', ')}) will also lose it.`
+      : '';
+  }
+
   private async toggleCell(services: Services, extId: string, profileId: string, install: boolean): Promise<void> {
     const inv = this.lastInventory;
     if (!inv) return;
@@ -168,13 +179,7 @@ export class MatrixPanel {
       // direct installs only to detect the true last-profile case.
       const direct = directInstallProfileIds(inv, extId);
       if (direct.length === 1 && direct[0] === profileId) {
-        const inheritingProfiles = profile.isDefault
-          ? inv.profiles.filter((p) => p.inheritsDefaultExtensions)
-          : [];
-        const inheritWarning =
-          inheritingProfiles.length > 0
-            ? ` Profiles that inherit the Default profile's extensions (${inheritingProfiles.map((p) => p.name).join(', ')}) will also lose it.`
-            : '';
+        const inheritWarning = this.cascadeWarning(inv, profile.isDefault);
         const pick = await vscode.window.showWarningMessage(
           `"${ext.displayName}" is installed only in the "${profile.name}" profile. Uninstall it from your last profile?${inheritWarning}`,
           { modal: true },
@@ -255,13 +260,10 @@ export class MatrixPanel {
 
     // Always warn like the last-profile path in toggleCell, appending the cascade sentence
     // whenever the default profile is a target and other profiles inherit its extensions.
-    const inheritingProfiles = targets.some((p) => p.isDefault)
-      ? inv.profiles.filter((p) => p.inheritsDefaultExtensions)
-      : [];
-    const cascadeWarning =
-      inheritingProfiles.length > 0
-        ? ` Profiles that inherit the Default profile's extensions (${inheritingProfiles.map((p) => p.name).join(', ')}) will also lose it.`
-        : '';
+    const cascadeWarning = this.cascadeWarning(
+      inv,
+      targets.some((p) => p.isDefault),
+    );
 
     const pick = await vscode.window.showWarningMessage(
       `Remove "${ext.displayName}" from ${targets.length} profile(s)?\n\n${targets.map((p) => p.name).join('\n')}${cascadeWarning}`,

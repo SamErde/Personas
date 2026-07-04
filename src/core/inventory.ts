@@ -147,10 +147,12 @@ export function directInstallProfileIds(inventory: Inventory, extId: string): st
 /**
  * Profiles "Install in all profiles" should target: non-inheriting (inheriting profiles can't
  * hold a direct install), not disabled by a parse warning, and not already installed.
+ * App-scoped extensions (applyToAllProfiles) are never targeted: they are already active in
+ * every profile via VS Code's native flag, so per-profile CLI installs are meaningless.
  */
 export function installEverywhereTargets(inventory: Inventory, extId: string): Profile[] {
   const ext = inventory.extensions.find((e) => e.id === extId);
-  if (!ext) return [];
+  if (!ext || ext.applyToAllProfiles) return [];
   const disabledIds = new Set(inventory.warnings.flatMap((w) => w.affectedProfileIds));
   return inventory.profiles.filter(
     (p) => !p.inheritsDefaultExtensions && !disabledIds.has(p.id) && !ext.installedIn.includes(p.id),
@@ -160,8 +162,14 @@ export function installEverywhereTargets(inventory: Inventory, extId: string): P
 /**
  * Profiles "Remove from all profiles" should target: every profile the extension is directly
  * installed in (see directInstallProfileIds), minus any disabled by a parse warning.
+ * App-scoped extensions are never targeted: composeInventory propagates their id into every
+ * profile's installedIn, so directInstallProfileIds cannot distinguish real per-profile installs
+ * from app-scope propagation — per-profile `--uninstall-extension` calls would act on installs
+ * that don't exist per-profile. VS Code's native flag is the correct affordance for them.
  */
 export function removeEverywhereTargets(inventory: Inventory, extId: string): Profile[] {
+  const ext = inventory.extensions.find((e) => e.id === extId);
+  if (!ext || ext.applyToAllProfiles) return [];
   const disabledIds = new Set(inventory.warnings.flatMap((w) => w.affectedProfileIds));
   const direct = new Set(directInstallProfileIds(inventory, extId).filter((pid) => !disabledIds.has(pid)));
   return inventory.profiles.filter((p) => direct.has(p.id));

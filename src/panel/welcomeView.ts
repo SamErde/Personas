@@ -18,11 +18,15 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     // created), so also auto-open on visibility change to visible — this covers re-clicking the
     // activity-bar icon after the matrix editor tab was closed.
     this.maybeAutoOpen();
-    this.context.subscriptions.push(
-      webviewView.onDidChangeVisibility(() => {
-        if (webviewView.visible) this.maybeAutoOpen();
-      }),
-    );
+    // Tie the listener to this webviewView's own lifetime, not just the extension's: if the
+    // view is disposed and later re-resolved, a context.subscriptions-only registration would
+    // stack a stale listener per resolve. context.subscriptions stays as the outer bound for
+    // extension deactivation (Disposable.dispose is idempotent, so double-dispose is safe).
+    const visibilityListener = webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) this.maybeAutoOpen();
+    });
+    webviewView.onDidDispose(() => visibilityListener.dispose());
+    this.context.subscriptions.push(visibilityListener);
   }
 
   private maybeAutoOpen(): void {
