@@ -83,21 +83,10 @@ jobs:
       # fails (PAT expiry, marketplace scan rejection). Recovery from a failure
       # here is manual: download the released vsix and run
       # `npx vsce publish --packagePath <file>` with a valid VSCE_PAT.
-      # TEMPORARY continue-on-error: the Marketplace rejected the previous
-      # display name ("Profile Extension Manager" ~ existing "Private Extension
-      # Manager"); the extension has been renamed to "Personas" to resolve this.
-      # Remove continue-on-error once the "Personas" listing succeeds.
       - name: Publish to VS Code Marketplace
-        continue-on-error: true
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          if npx vsce publish --packagePath releases/*.vsix; then
-            echo "Marketplace publish succeeded."
-          else
-            echo "::warning::Marketplace publish failed (expected while the display-name exception is pending). GitHub Release is unaffected."
-            exit 1
-          fi
+        run: npx vsce publish --packagePath releases/*.vsix
 
   # Phase 3: create/update the NEXT release PR — only after any release from
   # this push is fully published, so the boundary lookup succeeds. Runs on
