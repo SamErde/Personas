@@ -78,19 +78,34 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: gh release edit "${{ needs.release.outputs.tag_name }}" --draft=false
 
-      # Marketplace publish runs AFTER the GitHub release is sealed: the GitHub
-      # release is the source of truth and stays consistent even if this step
-      # fails (PAT expiry, marketplace scan rejection). Recovery from a failure
-      # here is manual: download the released vsix and run
-      # `npx vsce publish --packagePath <file>` with a valid VSCE_PAT.
+  # Phase 2b: publish to the VS Code Marketplace in a SEPARATE job so a
+  # Marketplace failure (PAT expiry, scan rejection) fails visibly WITHOUT
+  # blocking phase 3 — the GitHub release is sealed by phase 2 and is the
+  # source of truth. Skipped if package-and-publish failed (no sealed release
+  # or vsix). Recovery is manual: re-run this job, or download the released
+  # vsix and run `npx @vscode/vsce publish --packagePath <file>`.
+  publish-marketplace:
+    needs: [release, package-and-publish]
+    if: ${{ needs.release.outputs.release_created }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Download released VSIX
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release download "${{ needs.release.outputs.tag_name }}" --pattern '*.vsix' --dir releases
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --packagePath releases/*.vsix
+        run: npx --yes @vscode/vsce@3 publish --packagePath releases/*.vsix
 
-  # Phase 3: create/update the NEXT release PR — only after any release from
-  # this push is fully published, so the boundary lookup succeeds. Runs on
-  # ordinary pushes too (phase 2 is skipped in that case).
+  # Phase 3: create/update the NEXT release PR — only after the GitHub release
+  # is sealed (phase 2), so the boundary lookup succeeds. Independent of the
+  # Marketplace publish outcome (phase 2b). Runs on ordinary pushes too (phase
+  # 2 is skipped in that case).
   release-pr:
     needs: [release, package-and-publish]
     if: >-
