@@ -2,7 +2,7 @@
   "name": "personas",
   "displayName": "Personas",
   "description": "Easily manage your dev personas: the different Git identities, VS Code profiles, and extensions that you need in different contexts.",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "publisher": "SamErde",
   "license": "MIT",
   "engines": {

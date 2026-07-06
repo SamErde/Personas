@@ -2,6 +2,18 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [0.8.6](https://github.com/SamErde/Personas/compare/v0.8.5...v0.8.6) (2026-07-06)
+
+
+### Bug Fixes
+
+* replace rectangle with circle in activity icon SVG ([f3ff194](https://github.com/SamErde/Personas/commit/f3ff194a620dcc1461fc8a78ca7f73c24cbbf26d))
+
+
+### Miscellaneous Chores
+
+* realign release-please to published 0.8.5 and trigger 0.8.6 ([e2a04fc](https://github.com/SamErde/Personas/commit/e2a04fc906dc10fea4cd9d9ee116271e1f8abee2))
+
 ## [0.8.5](https://github.com/SamErde/Personas/compare/v0.8.3...v0.8.5) (2026-07-06)
 
 
