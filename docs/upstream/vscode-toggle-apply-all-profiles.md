@@ -22,7 +22,7 @@ available on request).
 
 ## Use case
 
-[Profile Extension Manager](https://github.com/SamErde/ProfileExtensionManager) shows an
+[Personas](https://github.com/SamErde/Personas) shows an
 extensions × profiles matrix and lets users install/uninstall per profile through the
 `code` CLI. Users naturally expect to toggle "apply to all profiles" from the same matrix.
 Today the best we can do is deep-link the Extensions view (`workbench.extensions.search`

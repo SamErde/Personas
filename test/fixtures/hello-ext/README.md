@@ -1,1 +1,1 @@
-Fixture for Visex integration tests.
+Fixture for Personas integration tests.

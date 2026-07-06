@@ -1,9 +1,9 @@
 # Personas
 
-> [!WARNING]
-> This extension is being re-branded from "Profile Extension Manager" because there are too many extensions with *similar* names. This is a test release to see if the new "Persona Manager" name will be allowed.
+> [!NOTE]
+> This extension was renamed from "Profile Extension Manager" to **Personas** — the former name was too similar to existing Marketplace extensions.
 
-<img src="assets/brand/banner.png" alt="Profile Extension Manager banner" width="100%" />
+<img src="assets/brand/banner.png" alt="Personas banner" width="100%" />
 
 Easily see and manage which extensions are installed in each VS Code profile, all from one convenient matrix.
 
@@ -18,11 +18,11 @@ Easily see and manage which extensions are installed in each VS Code profile, al
 
 - VS Code Stable or Insiders on Windows, macOS, or Linux.
 - Portable installations and custom `--user-data-dir`/`--extensions-dir` are supported.
-- Remote workspaces (SSH, WSL, containers, github.dev) are not managed. Profile Extension Manager manages the local desktop install it runs in.
+- Remote workspaces (SSH, WSL, containers, github.dev) are not managed. Personas manages the local desktop install it runs in.
 
 ## How It Works
 
-Profile Extension Manager reads the same files VS Code itself maintains: the profile registry and each profile's extension list. All installs and uninstalls run through the official `code` command-line interface, scoped to the right profile (and, when applicable, the right `--user-data-dir`/`--extensions-dir`).
+Personas reads the same files VS Code itself maintains: the profile registry and each profile's extension list. All installs and uninstalls run through the official `code` command-line interface, scoped to the right profile (and, when applicable, the right `--user-data-dir`/`--extensions-dir`).
 
 ## Releasing (maintainers)
 

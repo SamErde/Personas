@@ -1,8 +1,8 @@
-# Visex — Profile Extension Manager: Design Spec
+# Personas: Design Spec
 
 **Date:** 2026-07-03
 **Status:** Approved design, pending implementation plan
-**Naming note:** "Visex" is a working name. A final marketplace name will be chosen before publishing; the internal identifier remains `visex` until then.
+**Naming note:** originally drafted under the working name "Visex"; the extension was subsequently renamed to **Personas** (identifier `personas`).
 
 ## Purpose
 
@@ -17,8 +17,8 @@ A Visual Studio Code extension that makes VS Code profiles' extension state visi
 ### Non-goals (v1)
 
 - Extension **sets / baselines / sync** between profiles (deferred to v2; a "Differences" view is deferred with it, since differences are only meaningful against a baseline — differing extensions are otherwise the whole point of profiles).
-- Managing a **different** VS Code installation than the one Visex runs in.
-- Remote workspaces (SSH/WSL/Containers/web). Visex declares `"extensionKind": ["ui"]` and always runs locally.
+- Managing a **different** VS Code installation than the one Personas runs in.
+- Remote workspaces (SSH/WSL/Containers/web). Personas declares `"extensionKind": ["ui"]` and always runs locally.
 - Cleanup of stale profile folders or outdated duplicate extension versions (v2 candidates).
 - Telemetry. None, ever — stated in the README as a feature.
 
@@ -29,7 +29,7 @@ A Visual Studio Code extension that makes VS Code profiles' extension state visi
 
 ## Architecture
 
-**Approach: hybrid — read from disk, mutate via CLI.** The VS Code extension API is profile-scoped (`vscode.extensions.all` only sees the current profile), so Visex reads VS Code's own state files for the full picture and uses the supported `code` CLI for mutations. Direct writes to VS Code's state files are avoided (corruption/race risk), except deleting orphaned extension folders that nothing references.
+**Approach: hybrid — read from disk, mutate via CLI.** The VS Code extension API is profile-scoped (`vscode.extensions.all` only sees the current profile), so Personas reads VS Code's own state files for the full picture and uses the supported `code` CLI for mutations. Direct writes to VS Code's state files are avoided (corruption/race risk), except deleting orphaned extension folders that nothing references.
 
 ### Components
 
@@ -79,7 +79,7 @@ The webview receives exactly this shape, so the display and the services cannot 
 
 ## UX flows
 
-**Opening:** Command palette ("Visex: Show Extension Matrix") or activity-bar icon. The matrix opens as a full editor tab (it is too wide for the sidebar).
+**Opening:** Command palette ("Personas: Show Extension Matrix") or activity-bar icon. The matrix opens as a full editor tab (it is too wide for the sidebar).
 
 **Matrix:** rows = extensions (name + version), columns = profiles, cells = toggles.
 - Cell states: installed (✓), not installed (empty). Apply-to-all-profiles renders as a row-level badge (the flag is per-extension, not per-cell).
@@ -95,7 +95,7 @@ The webview receives exactly this shape, so the display and the services cannot 
 
 Three failure classes, each with defined behavior:
 
-1. **Can't find things** (no CLI binary, no `storage.json`, unsupported environment): the panel renders a clear "Visex can't manage profiles in this environment" state explaining why. Never a blank screen or a stack trace.
+1. **Can't find things** (no CLI binary, no `storage.json`, unsupported environment): the panel renders a clear "Personas can't manage profiles in this environment" state explaining why. Never a blank screen or a stack trace.
 2. **Can't parse things** (format drift in a future VS Code release): warning banner naming the file; the matrix renders whatever parsed; mutations for affected profiles are disabled rather than guessed at.
 3. **Mutation failed** (CLI nonzero exit): error surfaced verbatim, state re-read from disk, no automatic retry.
 
