@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
 import { MatrixPanel } from './panel/matrixPanel';
-import { registerPemReadOnlyProvider, type PemReadOnlyContentProvider } from './panel/readOnlyProvider';
+import { registerPersonasReadOnlyProvider, type PersonasReadOnlyContentProvider } from './panel/readOnlyProvider';
 import { WelcomeViewProvider } from './panel/welcomeView';
 import { getOrBuildServices, setOnServicesBuilt } from './servicesFactory';
 
 let welcomeProvider: WelcomeViewProvider | undefined;
-let readOnlyProvider: PemReadOnlyContentProvider | undefined;
+let readOnlyProvider: PersonasReadOnlyContentProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  readOnlyProvider = registerPemReadOnlyProvider(context);
+  readOnlyProvider = registerPersonasReadOnlyProvider(context);
 
   // Watchers start with service construction, not with the showMatrix command: the sidebar
-  // dashboard and open pem-readonly documents must live-update even when the user disables
+  // dashboard and open personas-readonly documents must live-update even when the user disables
   // openMatrixOnActivityBarClick and never opens the matrix. Fires once, on the first successful
   // build, from whichever caller (showMatrix or the welcome view) builds services first; the
   // unsupported-environment error path never fires it.
@@ -19,17 +19,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
   welcomeProvider = new WelcomeViewProvider(context);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('profileExtensionManager.welcome', welcomeProvider),
+    vscode.window.registerWebviewViewProvider('personas.welcome', welcomeProvider),
   );
   context.subscriptions.push(
-    vscode.commands.registerCommand('profileExtensionManager.showMatrix', async () => {
+    vscode.commands.registerCommand('personas.showMatrix', async () => {
       const setup = await getOrBuildServices(context);
       if ('error' in setup) {
         // Primary cue: the panel itself renders the can't-manage state (never a blank screen).
         MatrixPanel.showUnsupported(context, setup.error);
         // Secondary cue: a toast, kept for users who miss/close the panel.
         void vscode.window.showErrorMessage(
-          `Profile Extension Manager can't manage profiles in this environment: ${setup.error}`,
+          `Personas can't manage profiles in this environment: ${setup.error}`,
         );
         return;
       }
@@ -48,7 +48,7 @@ function scheduleRefresh(): void {
   watchTimer = setTimeout(() => {
     void MatrixPanel.current?.refresh();
     void welcomeProvider?.refresh();
-    // Open pem-readonly documents are live windows onto profile manifests — re-provide them too.
+    // Open personas-readonly documents are live windows onto profile manifests — re-provide them too.
     readOnlyProvider?.refreshOpenDocuments();
   }, 300);
 }

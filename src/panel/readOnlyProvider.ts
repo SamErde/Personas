@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-const SCHEME = 'pem-readonly';
+const SCHEME = 'personas-readonly';
 
 /**
  * Serves a real on-disk file as a live-updating read-only virtual document. Registered once for
@@ -10,7 +10,7 @@ const SCHEME = 'pem-readonly';
  * file watchers) fires `onDidChange` so open documents re-render after VS Code rewrites a
  * manifest — these are windows onto the live file, not snapshots.
  */
-export class PemReadOnlyContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
+export class PersonasReadOnlyContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changeEmitter.event;
 
@@ -27,7 +27,7 @@ export class PemReadOnlyContentProvider implements vscode.TextDocumentContentPro
     }
   }
 
-  /** Signals every open pem-readonly document to re-provide its content from disk. */
+  /** Signals every open personas-readonly document to re-provide its content from disk. */
   refreshOpenDocuments(): void {
     for (const doc of vscode.workspace.textDocuments) {
       if (doc.uri.scheme === SCHEME) this.changeEmitter.fire(doc.uri);
@@ -39,8 +39,8 @@ export class PemReadOnlyContentProvider implements vscode.TextDocumentContentPro
   }
 }
 
-export function registerPemReadOnlyProvider(context: vscode.ExtensionContext): PemReadOnlyContentProvider {
-  const provider = new PemReadOnlyContentProvider();
+export function registerPersonasReadOnlyProvider(context: vscode.ExtensionContext): PersonasReadOnlyContentProvider {
+  const provider = new PersonasReadOnlyContentProvider();
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(SCHEME, provider), provider);
   return provider;
 }
@@ -60,7 +60,7 @@ export async function openReadOnly(label: string, fsPath: string): Promise<void>
     await vscode.window.showTextDocument(doc, { preview: true });
   } catch (e) {
     void vscode.window.showErrorMessage(
-      `Profile Extension Manager: couldn't open "${label}" — ${e instanceof Error ? e.message : String(e)}`,
+      `Personas: couldn't open "${label}" — ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 }

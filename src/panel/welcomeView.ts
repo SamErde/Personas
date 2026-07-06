@@ -61,9 +61,9 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 
   private maybeAutoOpen(): void {
     const enabled = vscode.workspace
-      .getConfiguration('profileExtensionManager')
+      .getConfiguration('personas')
       .get<boolean>('openMatrixOnActivityBarClick', true);
-    if (enabled) void vscode.commands.executeCommand('profileExtensionManager.showMatrix');
+    if (enabled) void vscode.commands.executeCommand('personas.showMatrix');
   }
 
   private post(message: HostToWelcome): void {
@@ -105,7 +105,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         await this.renderDashboard();
         return;
       case 'openMatrix':
-        await vscode.commands.executeCommand('profileExtensionManager.showMatrix');
+        await vscode.commands.executeCommand('personas.showMatrix');
         return;
       case 'openProfileReadOnly': {
         const profile = this.profiles.find((p) => p.id === m.profileId);
@@ -121,7 +121,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           await vscode.window.showTextDocument(doc, { preview: false });
         } catch (e) {
           void vscode.window.showErrorMessage(
-            `Profile Extension Manager: couldn't open ${profile.filePath} — ${e instanceof Error ? e.message : String(e)}`,
+            `Personas: couldn't open ${profile.filePath} — ${e instanceof Error ? e.message : String(e)}`,
           );
         }
         return;
@@ -129,7 +129,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       case 'reviewOrphans':
         // Same host round trip the matrix's own "Review…" button takes, just triggered from the
         // sidebar: show the matrix, then jump it straight into the cleanup view.
-        await vscode.commands.executeCommand('profileExtensionManager.showMatrix');
+        await vscode.commands.executeCommand('personas.showMatrix');
         await MatrixPanel.current?.openCleanup();
         return;
     }
@@ -143,7 +143,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<title>Profile Extension Manager</title>
+<title>Personas</title>
 <style nonce="${nonce}">
   body {
     font-family: var(--vscode-font-family);

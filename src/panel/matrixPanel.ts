@@ -23,8 +23,8 @@ export class MatrixPanel {
       return;
     }
     const panel = vscode.window.createWebviewPanel(
-      'profileExtensionManager.matrix',
-      'Profile Extension Matrix',
+      'personas.matrix',
+      'Extension Matrix',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -50,8 +50,8 @@ export class MatrixPanel {
       return;
     }
     const panel = vscode.window.createWebviewPanel(
-      'profileExtensionManager.matrix',
-      'Profile Extension Matrix',
+      'personas.matrix',
+      'Extension Matrix',
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -164,7 +164,7 @@ export class MatrixPanel {
       await action();
     } catch (e) {
       const detail = e instanceof MutationError ? e.message : e instanceof Error ? e.message : String(e);
-      const pick = await vscode.window.showErrorMessage(`Profile Extension Manager: ${detail}`, 'Copy Details');
+      const pick = await vscode.window.showErrorMessage(`Personas: ${detail}`, 'Copy Details');
       if (pick === 'Copy Details') await vscode.env.clipboard.writeText(detail);
       await this.refresh();
     }
@@ -328,7 +328,7 @@ export class MatrixPanel {
   /**
    * Opens VS Code's own extension page for `extId` — used by the hover card's name link.
    * Honest network note: VS Code's `extension.open` implementation queries its gallery service
-   * as part of opening the page. PEM itself makes no network calls — the navigation is
+   * as part of opening the page. Personas itself makes no network calls — the navigation is
    * user-initiated, and any Marketplace contact is VS Code's own, governed by VS Code's settings.
    */
   private async openExtensionPage(extId: string): Promise<void> {
@@ -376,7 +376,7 @@ export class MatrixPanel {
 <meta http-equiv="Content-Security-Policy"
   content="default-src 'none'; style-src ${w.cspSource}; script-src 'nonce-${nonce}'; img-src ${w.cspSource};">
 <link rel="stylesheet" href="${style}">
-<title>Profile Extension Matrix</title>
+<title>Extension Matrix</title>
 </head>
 <body>
 <div id="app">Loading…</div>

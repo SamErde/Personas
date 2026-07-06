@@ -16,12 +16,12 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   // In a dev host (F5), context.extensionUri is the source folder, not an installed extension,
   // so the derived extensions pool resolves to the repo's parent directory — one toggle would
   // run mutations against the developer's real user-data dir under the Spike C silent-hybrid
-  // failure mode (docs/spikes/findings.md), not a sandbox. Guard it out; PEM_DEV_ALLOW=1 is the
+  // failure mode (docs/spikes/findings.md), not a sandbox. Guard it out; PERSONAS_DEV_ALLOW=1 is the
   // deliberate escape hatch for intentional dev-host testing.
-  if (context.extensionMode !== vscode.ExtensionMode.Production && process.env['PEM_DEV_ALLOW'] !== '1') {
+  if (context.extensionMode !== vscode.ExtensionMode.Production && process.env['PERSONAS_DEV_ALLOW'] !== '1') {
     return {
       error:
-        'running in a development host — Profile Extension Manager manages the install it runs in; run from an installed build.',
+        'running in a development host — Personas manages the install it runs in; run from an installed build.',
     };
   }
   if (vscode.env.remoteName !== undefined) return { error: 'remote workspaces are not supported.' };
@@ -102,7 +102,7 @@ let onFirstBuild: ((context: vscode.ExtensionContext, services: Services) => voi
 /**
  * Registers the hook run exactly once, when services are first built successfully. extension.ts
  * uses it to start the file watchers that drive live refresh (matrix, sidebar dashboard, open
- * pem-readonly documents) — tied to service construction rather than the showMatrix command, so
+ * personas-readonly documents) — tied to service construction rather than the showMatrix command, so
  * the sidebar-only path (welcome view resolve, with openMatrixOnActivityBarClick disabled) gets
  * watchers too. Lives here as a hook, not a direct call, because servicesFactory importing
  * extension.ts would be circular. Never invoked on the unsupported-environment error path.

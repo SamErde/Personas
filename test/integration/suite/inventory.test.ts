@@ -9,11 +9,11 @@ import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/pa
 
 const SUITE_TIMEOUT_MS = 120000;
 
-const userDataDir = process.env['VISEX_IT_USER_DATA'] as string;
-const extensionsDir = process.env['VISEX_IT_EXT_DIR'] as string;
+const userDataDir = process.env['PERSONAS_IT_USER_DATA'] as string;
+const extensionsDir = process.env['PERSONAS_IT_EXT_DIR'] as string;
 // Packaged by runTests.ts (the plain launcher process, not this sandboxed extension host —
 // spawning vsce's cmd.exe shim from inside the Extension Development Host fails with ENOENT).
-const vsixPath = process.env['VISEX_IT_VSIX_PATH'] as string;
+const vsixPath = process.env['PERSONAS_IT_VSIX_PATH'] as string;
 
 function testPaths(): ResolvedPaths {
   const userDir = path.join(userDataDir, 'User');
@@ -82,7 +82,7 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 
 /** Resolves once every test in the suite has run, with `true` if any of them failed. */
 export const done: Promise<boolean> = new Promise((resolveDone) => {
-  describe('Visex end-to-end against a sandboxed VS Code', { timeout: SUITE_TIMEOUT_MS }, () => {
+  describe('Personas end-to-end against a sandboxed VS Code', { timeout: SUITE_TIMEOUT_MS }, () => {
     it('reads an inventory with the default profile from a fresh sandbox', guard(async () => {
       const inventory = await new InventoryService(testPaths(), io).getInventory();
       assert.ok(inventory.profiles.some((p) => p.isDefault));
@@ -100,14 +100,14 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
 
       await mutations.install(vsixPath); // CLI accepts a .vsix path for --install-extension
       let inventory = await new InventoryService(testPaths(), io).getInventory();
-      const installed = inventory.extensions.find((e) => e.id === 'visex-tests.visex-hello-fixture');
+      const installed = inventory.extensions.find((e) => e.id === 'personas-tests.personas-hello-fixture');
       assert.ok(installed, 'fixture not found in inventory after install');
       assert.deepStrictEqual(installed.installedIn, ['default']);
 
-      await mutations.uninstall('visex-tests.visex-hello-fixture');
+      await mutations.uninstall('personas-tests.personas-hello-fixture');
       inventory = await new InventoryService(testPaths(), io).getInventory();
       const remaining = inventory.extensions.find(
-        (e) => e.id === 'visex-tests.visex-hello-fixture' && e.installedIn.length > 0,
+        (e) => e.id === 'personas-tests.personas-hello-fixture' && e.installedIn.length > 0,
       );
       assert.strictEqual(remaining, undefined);
     }));

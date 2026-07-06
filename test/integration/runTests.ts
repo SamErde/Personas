@@ -7,8 +7,8 @@ import * as path from 'node:path';
 async function main(): Promise<void> {
   const extensionDevelopmentPath = path.resolve(__dirname, '..', '..', '..');
   const extensionTestsPath = path.resolve(__dirname, 'suite', 'index');
-  const userDataDir = mkdtempSync(path.join(tmpdir(), 'visex-it-data-'));
-  const extensionsDir = mkdtempSync(path.join(tmpdir(), 'visex-it-ext-'));
+  const userDataDir = mkdtempSync(path.join(tmpdir(), 'personas-it-data-'));
+  const extensionsDir = mkdtempSync(path.join(tmpdir(), 'personas-it-ext-'));
 
   // Package the fixture here, in the plain launcher process: invoking vsce (which needs a
   // shell on Windows) from inside the sandboxed Extension Development Host fails with
@@ -40,9 +40,9 @@ async function main(): Promise<void> {
       '--skip-welcome',
     ],
     extensionTestsEnv: {
-      VISEX_IT_USER_DATA: userDataDir,
-      VISEX_IT_EXT_DIR: extensionsDir,
-      VISEX_IT_VSIX_PATH: vsixPath,
+      PERSONAS_IT_USER_DATA: userDataDir,
+      PERSONAS_IT_EXT_DIR: extensionsDir,
+      PERSONAS_IT_VSIX_PATH: vsixPath,
     },
   });
 }

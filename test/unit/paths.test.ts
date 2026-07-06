@@ -4,8 +4,8 @@ import { findCli, resolvePaths } from '../../src/core/paths';
 describe('resolvePaths', () => {
   it('derives user data layout from globalStorage path (win32)', () => {
     const p = resolvePaths({
-      globalStorageFsPath: 'C:\\Users\\sam\\AppData\\Roaming\\Code\\User\\globalStorage\\samerde.visex',
-      extensionFsPath: 'C:\\Users\\sam\\.vscode\\extensions\\samerde.visex-0.1.0',
+      globalStorageFsPath: 'C:\\Users\\sam\\AppData\\Roaming\\Code\\User\\globalStorage\\samerde.personas',
+      extensionFsPath: 'C:\\Users\\sam\\.vscode\\extensions\\samerde.personas-0.1.0',
       platform: 'win32',
     });
     expect(p.userDir).toBe('C:\\Users\\sam\\AppData\\Roaming\\Code\\User');
@@ -19,8 +19,8 @@ describe('resolvePaths', () => {
 
   it('derives layout on posix paths', () => {
     const p = resolvePaths({
-      globalStorageFsPath: '/home/sam/.config/Code/User/globalStorage/samerde.visex',
-      extensionFsPath: '/home/sam/.vscode/extensions/samerde.visex-0.1.0',
+      globalStorageFsPath: '/home/sam/.config/Code/User/globalStorage/samerde.personas',
+      extensionFsPath: '/home/sam/.vscode/extensions/samerde.personas-0.1.0',
       platform: 'linux',
     });
     expect(p.userDir).toBe('/home/sam/.config/Code/User');
