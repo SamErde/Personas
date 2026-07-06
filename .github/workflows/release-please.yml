@@ -83,10 +83,10 @@ jobs:
       # fails (PAT expiry, marketplace scan rejection). Recovery from a failure
       # here is manual: download the released vsix and run
       # `npx vsce publish --packagePath <file>` with a valid VSCE_PAT.
-      # TEMPORARY continue-on-error: the Marketplace rejects the display name
-      # ("Profile Extension Manager" ~ existing "Private Extension Manager");
-      # an exception request is pending with VSMarketplace@microsoft.com.
-      # Remove continue-on-error once the listing succeeds.
+      # TEMPORARY continue-on-error: the Marketplace rejected the previous
+      # display name ("Profile Extension Manager" ~ existing "Private Extension
+      # Manager"); the extension has been renamed to "Personas" to resolve this.
+      # Remove continue-on-error once the "Personas" listing succeeds.
       - name: Publish to VS Code Marketplace
         continue-on-error: true
         env:
