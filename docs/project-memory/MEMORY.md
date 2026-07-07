@@ -1,0 +1,2 @@
+- [Personas VS Code extension project state](profile-extension-manager-project.md) — renamed 2026-07-06 from "Profile Extension Manager" (was "Visex"); IDs now personas.*; repo renamed to SamErde/Personas; 0.8.6 published via release-please
+- [Personas release workflow](personas-release-workflow.md) — release-please driven; never hand-bump/manual-publish; prefer PRs over direct-to-main; Release-As footer to force versions
