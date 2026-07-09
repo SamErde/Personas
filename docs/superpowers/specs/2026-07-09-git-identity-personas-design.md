@@ -101,6 +101,8 @@ interface GitIdentityAudit {
 
 `repoRoot` is optional in `GitIdentityAudit` because Personas can still show global/default Git identity context when no local Git repository is open.
 
+`RepoPersonaBinding.repoRoot` is a normalized binding key, not raw UI input. Personas derives it from the detected Git repository root, resolves it to an absolute real path, normalizes path separators and trailing separators, and applies platform-appropriate case normalization before storage or comparison. UI can still display the original path, but lookup must always use the normalized key so symlinks, casing differences, and alternate workspace openings do not create duplicate bindings for the same checkout.
+
 ## Architecture
 
 V1 adds a Git identity subsystem beside the existing profile/extension subsystem.
@@ -112,6 +114,8 @@ Stores and validates Git personas in `context.globalState`. It registers the per
 ### RepoBindingService
 
 Stores local-only mappings from Git repo root to persona ID. Bindings use the Git repository root, not the VS Code workspace folder, because V1 apply writes repo-local config. If a binding points to a missing persona, the service reports it as stale instead of guessing a replacement.
+
+The service never stores a raw workspace path as the binding key. It accepts only the normalized repo-root key produced by `GitIdentityService`.
 
 ### GitIdentityService
 
@@ -125,6 +129,8 @@ Apply writes only:
 git config --local user.name <persona.gitUserName>
 git config --local user.email <persona.gitUserEmail>
 ```
+
+The apply operation must protect against partial writes. Before changing values, `GitIdentityService` captures the existing repo-local `user.name` and `user.email` state. If either write fails before verification completes, the service attempts to restore each changed key to its previous local value, or unset it if it was previously inherited. If rollback also fails, Personas reports the partial state explicitly and does not claim the persona was applied.
 
 ### IdentityCommandController
 
@@ -192,6 +198,7 @@ Command: **Personas: Apply Git Persona to Current Repo**
 6. Re-read effective identity.
 7. Report verified success only if effective name and email match the selected persona.
 8. If visible Git identity environment variables exist, warn that commits may still use env-provided identity.
+9. If any write or verification step fails, attempt rollback to the previous repo-local state and report the result.
 
 This command is unavailable when no local repository is open.
 
@@ -205,6 +212,7 @@ This command is unavailable when no local repository is open.
 - **Missing persona fields:** prevent save and apply until display name, Git name, and Git email are present.
 - **Stale repo binding:** show the missing persona reference and offer to choose a new persona or remove the binding.
 - **Apply mismatch:** show expected values, actual values, and source details after verification.
+- **Apply rollback failure:** show the previous local values, attempted desired values, and current effective values so the user can repair the repo config.
 - **Visible env override:** warn that commits may use environment-provided identity even when Git config matches.
 
 ## Testing
@@ -213,8 +221,10 @@ Unit tests:
 
 - Persona catalog validation and sync-key registration.
 - Repo binding storage remains local-only.
+- Repo binding keys are normalized before storage and lookup.
 - Git config provenance parsing into source type and optional path.
 - Apply preview generation.
+- Apply rollback behavior for failed partial writes.
 - Env override warning detection.
 - No-repo global/default identity display behavior.
 - Stale binding behavior.
