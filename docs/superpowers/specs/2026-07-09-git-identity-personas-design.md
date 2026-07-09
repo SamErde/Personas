@@ -33,7 +33,7 @@ V1 does not provide:
 - VS Code profile to Git persona associations.
 - Git signing configuration.
 - Credential policy management.
-- Remote, WSL, container, or github.dev Git identity management.
+- Remote, WSL, containers, or github.dev Git identity management.
 - A dedicated Git identity webview editor.
 - Bulk dashboard management for every repository in a workspace.
 
@@ -156,7 +156,7 @@ When no local repository is open, Personas may show global/default identity and 
 
 ### Create Git Persona from Current Identity
 
-Command: **Personas: Create Git Persona from Current Repo**
+Command: **Personas: Create Git Persona from Current Identity**
 
 1. Resolve or select a local repository when available.
 2. If no repository is available, read global/default identity context.
@@ -170,7 +170,7 @@ Command: **Personas: Bind Git Persona to Current Repo**
 
 1. Resolve or select a local repository.
 2. Let the user choose a saved Git persona.
-3. Save a local repo-root to persona-id binding.
+3. Save a local repo-root to persona ID binding.
 4. Do not write Git config as part of binding.
 
 This command is unavailable when no local repository is open.
