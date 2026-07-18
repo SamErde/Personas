@@ -55,7 +55,7 @@ jobs:
         with:
           # SHA, not tag: the draft release has no tag until published below.
           ref: ${{ needs.release.outputs.sha }}
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -89,7 +89,7 @@ jobs:
     if: ${{ needs.release.outputs.release_created }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Download released VSIX
