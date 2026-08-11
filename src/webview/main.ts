@@ -463,7 +463,7 @@ function renderContent(): void {
       el('span', '', '✓ Enabled'),
       el('span', '', '○ Not enabled'),
       el('span', '', '— Not installed in profile'),
-      el('span', '', 'W ✓ Workspace-local'),
+      el('span', '', '✓ W Workspace-local'),
       el('span', '', '? Unknown'),
     );
     contentEl.append(legend);

@@ -138,7 +138,7 @@ function toWorkspaceCell(status: WorkspaceExtensionStatus): WorkspaceCellVm {
     return {
       state: status.state,
       label: 'Workspace-local',
-      symbol: 'W ✓',
+      symbol: '✓ W',
       tooltip: `Workspace-local — ${status.reason}`,
     };
   }

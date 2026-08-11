@@ -132,7 +132,7 @@ describe('createWorkspaceDescriptor', () => {
   it('uses one saved workspace identity and exposes its local JSON manifest', () => {
     expect(
       createWorkspaceDescriptor({
-        name: 'Shared setup',
+        name: 'Shared setup (Workspace)',
         workspaceFileUri: 'file:///c%3A/code/shared.code-workspace',
         workspaceFileFsPath: 'C:\\code\\shared.code-workspace',
         folders: [

@@ -204,7 +204,10 @@ describe('buildViewModel', () => {
       runtimeSource: 'workspace',
     });
     const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([localOnly, bothSources]));
-    expect(vm.rows.find((row) => row.extId === 'local.only')?.workspaceCell?.label).toBe('Workspace-local');
+    expect(vm.rows.find((row) => row.extId === 'local.only')?.workspaceCell).toMatchObject({
+      label: 'Workspace-local',
+      symbol: '✓ W',
+    });
     expect(vm.rows.find((row) => row.extId === 'pub.a')?.workspaceCell?.label).toBe('Enabled');
   });
 });

@@ -232,7 +232,7 @@ ${renderContentSecurityPolicyMeta(welcomeContentSecurityPolicy(nonce))}
   .workspace-card {
     width: 100%;
     box-sizing: border-box;
-    margin-top: 0.35rem;
+    margin-top: 0.75rem;
     border: 1px solid var(--vscode-panel-border);
     border-radius: 4px;
     background: var(--vscode-sideBar-background);

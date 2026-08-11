@@ -90,8 +90,11 @@ export function createWorkspaceDescriptor(input: WorkspaceDescriptorInput): Work
     onlyFolder?.name ||
     basenameFromUri(input.workspaceFileUri) ||
     (kind === 'workspace' ? 'Untitled workspace' : 'Current workspace');
+  const suppliedName = input.name?.trim();
+  const displayName =
+    kind === 'workspace' ? suppliedName?.replace(/\s*\(Workspace\)$/i, '').trim() : suppliedName;
   return {
-    name: input.name?.trim() || fallbackName,
+    name: displayName || fallbackName,
     kind,
     ...(associationUri ? { associationUri } : {}),
     ...(isLocalWorkspaceManifest(input.workspaceFileUri, input.workspaceFileFsPath)
