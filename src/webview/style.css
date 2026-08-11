@@ -23,6 +23,41 @@ body {
 table { border-collapse: collapse; }
 th, td { padding: 0.25rem 0.75rem; text-align: center; border-bottom: 1px solid var(--vscode-panel-border); }
 th { position: sticky; top: 0; background: var(--vscode-editor-background); }
+.workspace-col { border-left: 2px solid var(--vscode-focusBorder); }
+.workspace-header { min-width: 9.5rem; }
+.workspace-header-title, .workspace-header-name { display: block; }
+.workspace-header-name {
+  margin-top: 0.15rem;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  font-weight: normal;
+}
+.workspace-legend {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.6rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+}
+.workspace-state { cursor: default; }
+.workspace-symbol { font-weight: 600; white-space: nowrap; }
+.workspace-warning { border-left-width: 3px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .ext-col { text-align: left; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ext-icon {
   width: 16px; height: 16px;
@@ -48,8 +83,8 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 .spinner { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* In-flight mutation feedback: shown the instant a checkbox is toggled (localPending) or once
- * the host echoes a 'pending' message — Persona Amber alpha-blended so it reads on light+dark. */
-.cell.pending { background: rgba(245, 166, 35, 0.28); border-radius: 3px; }
+ * the host echoes a 'pending' message — Cell Sky alpha-blended so it reads on light+dark. */
+.cell.pending { background: rgba(56, 189, 248, 0.25); border-radius: 3px; }
 .warning {
   background: var(--vscode-inputValidation-warningBackground);
   border: 1px solid var(--vscode-inputValidation-warningBorder);
@@ -103,4 +138,4 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 .ext-card-actions button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 /* Immediate in-flight feedback for a just-clicked bulk action, before the host's per-cell
  * pending echoes arrive (those only start once the user confirms the modal). */
-.ext-card-actions button.in-flight { background: rgba(245, 166, 35, 0.28); }
+.ext-card-actions button.in-flight { background: rgba(56, 189, 248, 0.25); }

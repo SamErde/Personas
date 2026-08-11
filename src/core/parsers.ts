@@ -22,6 +22,12 @@ export interface ManifestEntry {
   installedTimestamp?: number;
 }
 
+export interface ParsedWorkspaceProfileAssociations {
+  workspaces: Map<string, string>;
+  warnings: string[];
+  present: boolean;
+}
+
 function parseJson(text: string, what: string): unknown {
   try {
     return JSON.parse(text);
@@ -46,6 +52,45 @@ export function parseProfileRegistry(text: string): RawProfile[] {
     profiles.push({ location: e['location'], name: e['name'], inheritsDefaultExtensions: inherits });
   }
   return profiles;
+}
+
+/**
+ * Reads only the optional workspace/profile association map from storage.json. Invalid entries
+ * are ignored individually and reported so one bad association cannot hide all valid ones.
+ */
+export function parseWorkspaceProfileAssociations(text: string): ParsedWorkspaceProfileAssociations {
+  const root = parseJson(text, 'storage.json');
+  if (typeof root !== 'object' || root === null) throw new ParseError('storage.json: not an object');
+  const associations = (root as Record<string, unknown>)['profileAssociations'];
+  if (associations === undefined) return { workspaces: new Map(), warnings: [], present: false };
+  if (typeof associations !== 'object' || associations === null || Array.isArray(associations)) {
+    return {
+      workspaces: new Map(),
+      warnings: ['profileAssociations is not an object.'],
+      present: false,
+    };
+  }
+  const rawWorkspaces = (associations as Record<string, unknown>)['workspaces'];
+  if (rawWorkspaces === undefined) return { workspaces: new Map(), warnings: [], present: false };
+  if (typeof rawWorkspaces !== 'object' || rawWorkspaces === null || Array.isArray(rawWorkspaces)) {
+    return {
+      workspaces: new Map(),
+      warnings: ['profileAssociations.workspaces is not an object.'],
+      present: false,
+    };
+  }
+
+  const workspaces = new Map<string, string>();
+  const warnings: string[] = [];
+  for (const [uri, profileId] of Object.entries(rawWorkspaces as Record<string, unknown>)) {
+    const displayUri = uri.trim() === '' ? '<empty key>' : uri;
+    if (uri.trim() === '' || typeof profileId !== 'string' || profileId.trim() === '') {
+      warnings.push(`Ignored malformed workspace profile association for ${displayUri}.`);
+      continue;
+    }
+    workspaces.set(uri, profileId);
+  }
+  return { workspaces, warnings, present: true };
 }
 
 export function parseExtensionsManifest(text: string): ManifestEntry[] {

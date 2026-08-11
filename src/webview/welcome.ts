@@ -1,9 +1,23 @@
-import type { HostToWelcome, ParseWarning, WelcomeProfileVm, WelcomeToHost } from '../core/types';
+import type {
+  HostToWelcome,
+  ParseWarning,
+  WelcomeProfileVm,
+  WelcomeToHost,
+  WelcomeWorkspaceVm,
+} from '../core/types';
+import { isTrustedHostMessageOrigin } from './messageSecurity';
 
 declare function acquireVsCodeApi(): { postMessage(m: WelcomeToHost): void };
 const vscode = acquireVsCodeApi();
 
-let state: { profiles: WelcomeProfileVm[]; orphanCount: number; warnings: ParseWarning[] } | undefined;
+let state:
+  | {
+      profiles: WelcomeProfileVm[];
+      workspace?: WelcomeWorkspaceVm;
+      orphanCount: number;
+      warnings: ParseWarning[];
+    }
+  | undefined;
 let orphanSizeText = '';
 
 document.getElementById('open')?.addEventListener('click', () => vscode.postMessage({ type: 'openMatrix' }));
@@ -13,7 +27,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWelcome>) => {
   // delivered same-origin in VS Code's webview architecture. Do NOT use
   // `event.source !== window` here — the sender is the host page, never this
   // window, so that guard would silently drop every legitimate message.
-  if (event.origin !== window.location.origin) return;
+  if (!isTrustedHostMessageOrigin(event.origin, window.location.origin)) return;
   const m = event.data;
   switch (m.type) {
     case 'state':
@@ -52,9 +66,11 @@ function formatBytes(n: number): string {
 
 function render(): void {
   const list = document.getElementById('profiles');
+  const workspaceEl = document.getElementById('workspace');
   const extra = document.getElementById('extra');
-  if (!list || !extra) return;
+  if (!list || !workspaceEl || !extra) return;
   list.replaceChildren();
+  workspaceEl.replaceChildren();
   extra.replaceChildren();
   if (!state) return;
 
@@ -94,6 +110,58 @@ function render(): void {
     }
     li.append(line1, el('div', 'profile-counts', `${p.direct} direct + ${p.shared} shared`));
     list.append(li);
+  }
+
+  if (state.workspace) {
+    const workspace = state.workspace;
+    const card = el('section', 'workspace-card');
+    card.setAttribute('aria-label', `Current workspace: ${workspace.name}`);
+    const matrix = el('button', 'workspace-matrix') as HTMLButtonElement;
+    matrix.type = 'button';
+    matrix.title = 'Open the read-only current workspace column in the Extension Matrix';
+    matrix.setAttribute('aria-label', `Current workspace: ${workspace.name}. Open Extension Matrix.`);
+    matrix.addEventListener('click', () => vscode.postMessage({ type: 'openMatrix' }));
+    matrix.append(
+      el('div', 'workspace-title', 'Current workspace'),
+      el('div', 'workspace-name', workspace.name),
+      el('div', 'workspace-readonly', 'Read-only extension status'),
+    );
+    matrix.append(
+      el(
+        'div',
+        'workspace-profile',
+        workspace.activeProfileName
+          ? `Active profile: ${workspace.activeProfileName}`
+          : 'Active profile: Unknown',
+      ),
+    );
+    const countParts = [
+      `${workspace.counts.enabled} Enabled`,
+      `${workspace.counts.notEnabled} Not enabled`,
+      `${workspace.counts.unknown} Unknown`,
+    ];
+    if (workspace.counts.workspaceLocal > 0) {
+      countParts.push(`${workspace.counts.workspaceLocal} Workspace-local`);
+    }
+    matrix.append(el('div', 'workspace-counts', countParts.join(' · ')));
+    card.append(matrix);
+    if (workspace.manifestFsPath) {
+      const actions = el('div', 'workspace-actions');
+      const open = el('button', 'workspace-action', 'Open manifest') as HTMLButtonElement;
+      open.type = 'button';
+      open.title = `Open ${workspace.name}'s .code-workspace JSON as read-only`;
+      open.addEventListener('click', () => vscode.postMessage({ type: 'openWorkspaceReadOnly' }));
+      const edit = el('button', 'workspace-action', 'Edit manifest') as HTMLButtonElement;
+      edit.type = 'button';
+      edit.title = `Edit ${workspace.name}'s .code-workspace JSON`;
+      edit.addEventListener('click', () => vscode.postMessage({ type: 'editWorkspaceFile' }));
+      actions.append(open, edit);
+      card.append(actions);
+    }
+    workspaceEl.append(card);
+    for (const warning of workspace.warnings) {
+      workspaceEl.append(el('p', 'workspace-warning', `⚠ ${warning}`));
+    }
   }
 
   if (state.orphanCount > 0) {

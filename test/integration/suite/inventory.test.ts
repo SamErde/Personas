@@ -6,6 +6,12 @@ import * as vscode from 'vscode';
 import { InventoryService, type InventoryIo } from '../../../src/core/inventory';
 import { createNodeCliRunner, MutationService } from '../../../src/core/mutations';
 import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/paths';
+import {
+  WorkspaceInventoryService,
+  createWorkspaceDescriptor,
+  type WorkspaceInventoryIo,
+} from '../../../src/core/workspace';
+import { readBoundedWorkspaceManifest } from '../../../src/workspaceFileIo';
 
 const SUITE_TIMEOUT_MS = 120000;
 
@@ -14,6 +20,7 @@ const extensionsDir = process.env['PERSONAS_IT_EXT_DIR'] as string;
 // Packaged by runTests.ts (the plain launcher process, not this sandboxed extension host —
 // spawning vsce's cmd.exe shim from inside the Extension Development Host fails with ENOENT).
 const vsixPath = process.env['PERSONAS_IT_VSIX_PATH'] as string;
+const workspaceDir = process.env['PERSONAS_IT_WORKSPACE'] as string;
 
 function testPaths(): ResolvedPaths {
   const userDir = path.join(userDataDir, 'User');
@@ -46,6 +53,52 @@ const io: InventoryIo = {
   readPackageMeta: async () => undefined,
 };
 
+const workspaceIo: WorkspaceInventoryIo = {
+  readFile: async (p) => {
+    try {
+      return fs.readFileSync(p, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      return error instanceof Error ? error : new Error(String(error));
+    }
+  },
+  readCandidateManifest: readBoundedWorkspaceManifest,
+  listEntries: async (p) => {
+    try {
+      return fs.readdirSync(p, { withFileTypes: true }).map((entry) => ({
+        name: entry.name,
+        isDirectory: entry.isDirectory(),
+      }));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      return error instanceof Error ? error : new Error(String(error));
+    }
+  },
+  getDescriptor: () =>
+    createWorkspaceDescriptor({
+      name: vscode.workspace.name,
+      workspaceFileUri: vscode.workspace.workspaceFile?.toString(),
+      ...(vscode.workspace.workspaceFile?.scheme === 'file'
+        ? { workspaceFileFsPath: vscode.workspace.workspaceFile.fsPath }
+        : {}),
+      folders: (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
+        name: folder.name,
+        uri: folder.uri.toString(),
+        scheme: folder.uri.scheme,
+        ...(folder.uri.scheme === 'file' ? { fsPath: folder.uri.fsPath } : {}),
+      })),
+    }),
+  getRuntimeExtensions: () =>
+    vscode.extensions.all.map((extension) => ({
+      id: extension.id,
+      uri: extension.extensionUri.toString(),
+      ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
+      ...(typeof extension.packageJSON['version'] === 'string'
+        ? { version: extension.packageJSON['version'] }
+        : {}),
+    })),
+};
+
 let suiteFailed = false;
 
 // node:test never rejects a test()/it() promise on assertion failure or timeout (failures are
@@ -59,6 +112,7 @@ function guard(fn: () => Promise<void>): () => Promise<void> {
       await withTimeout(fn(), SUITE_TIMEOUT_MS);
     } catch (err) {
       suiteFailed = true;
+      console.error(err);
       throw err;
     }
   };
@@ -87,9 +141,24 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       const inventory = await new InventoryService(testPaths(), io).getInventory();
       assert.ok(inventory.profiles.some((p) => p.isDefault));
       assert.deepStrictEqual(inventory.warnings, []);
+      assert.strictEqual(vscode.workspace.workspaceFolders?.length, 1);
+      assert.strictEqual(
+        comparableFsPath(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''),
+        comparableFsPath(workspaceDir),
+      );
+
+      const workspace = await new WorkspaceInventoryService(testPaths().storageJson, workspaceIo).getWorkspaceInventory(
+        inventory,
+      );
+      assert.ok(workspace, 'workspace inventory missing for disposable folder fixture');
+      const candidate = workspace.extensions.find((extension) => extension.id === 'personas-tests.workspace-candidate');
+      assert.ok(candidate, 'workspace-local candidate fixture was not discovered');
+      assert.strictEqual(candidate.state, 'unknown');
+      assert.strictEqual(candidate.workspaceLocal, 'candidate');
+      assert.strictEqual(candidate.profileBacked, false);
     }));
 
-    it('CLI install into default profile appears in inventory; uninstall removes it', guard(async () => {
+    it('CLI changes fire the stable event and the installed fixture becomes positively enabled', guard(async () => {
       const cliPath = findCli(vscode.env.appRoot, process.platform as Platform, (p) => fs.existsSync(p));
       assert.ok(cliPath, 'CLI not found from appRoot');
       const mutations = new MutationService({
@@ -98,13 +167,35 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
         run: createNodeCliRunner(),
       });
 
+      const installedEvent = nextExtensionsChange();
       await mutations.install(vsixPath); // CLI accepts a .vsix path for --install-extension
+      await installedEvent;
+      await waitFor(
+        () => vscode.extensions.all.some((extension) => extension.id === 'personas-tests.personas-hello-fixture'),
+        'installed fixture did not enter vscode.extensions.all',
+      );
       let inventory = await new InventoryService(testPaths(), io).getInventory();
       const installed = inventory.extensions.find((e) => e.id === 'personas-tests.personas-hello-fixture');
       assert.ok(installed, 'fixture not found in inventory after install');
       assert.deepStrictEqual(installed.installedIn, ['default']);
 
+      const workspace = await new WorkspaceInventoryService(testPaths().storageJson, workspaceIo).getWorkspaceInventory(
+        inventory,
+      );
+      const effective = workspace?.extensions.find(
+        (extension) => extension.id === 'personas-tests.personas-hello-fixture',
+      );
+      assert.ok(effective, 'installed fixture missing from workspace snapshot');
+      assert.strictEqual(effective.state, 'enabled');
+      assert.ok(effective.runtimeUri, 'enabled fixture did not retain public runtime URI evidence');
+
+      const uninstalledEvent = nextExtensionsChange();
       await mutations.uninstall('personas-tests.personas-hello-fixture');
+      await uninstalledEvent;
+      await waitFor(
+        () => !vscode.extensions.all.some((extension) => extension.id === 'personas-tests.personas-hello-fixture'),
+        'uninstalled fixture remained in vscode.extensions.all',
+      );
       inventory = await new InventoryService(testPaths(), io).getInventory();
       const remaining = inventory.extensions.find(
         (e) => e.id === 'personas-tests.personas-hello-fixture' && e.installedIn.length > 0,
@@ -121,3 +212,28 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
     });
   });
 });
+
+function nextExtensionsChange(): Promise<void> {
+  return withTimeout(
+    new Promise<void>((resolve) => {
+      const disposable = vscode.extensions.onDidChange(() => {
+        disposable.dispose();
+        resolve();
+      });
+    }),
+    30_000,
+  );
+}
+
+async function waitFor(predicate: () => boolean, failureMessage: string): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(failureMessage);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+function comparableFsPath(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}

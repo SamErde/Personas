@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
+import { areFsPathsEqual } from './core/workspace';
 import { MatrixPanel } from './panel/matrixPanel';
 import { registerPersonasReadOnlyProvider, type PersonasReadOnlyContentProvider } from './panel/readOnlyProvider';
 import { WelcomeViewProvider } from './panel/welcomeView';
-import { getOrBuildServices, setOnServicesBuilt } from './servicesFactory';
+import { getOrBuildServices, setOnServicesBuilt, type Services } from './servicesFactory';
 
 let welcomeProvider: WelcomeViewProvider | undefined;
 let readOnlyProvider: PersonasReadOnlyContentProvider | undefined;
@@ -15,7 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // openMatrixOnActivityBarClick and never opens the matrix. Fires once, on the first successful
   // build, from whichever caller (showMatrix or the welcome view) builds services first; the
   // unsupported-environment error path never fires it.
-  setOnServicesBuilt((ctx, services) => watchForChanges(ctx, services.watched));
+  setOnServicesBuilt((ctx, services) => watchForChanges(ctx, services));
 
   welcomeProvider = new WelcomeViewProvider(context);
   context.subscriptions.push(
@@ -42,19 +43,20 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {}
 
 const watchedDirs = new Set<string>();
+let workspaceWatchers: vscode.FileSystemWatcher[] = [];
 let watchTimer: NodeJS.Timeout | undefined;
 function scheduleRefresh(): void {
   clearTimeout(watchTimer);
   watchTimer = setTimeout(() => {
     void MatrixPanel.current?.refresh();
     void welcomeProvider?.refresh();
-    // Open personas-readonly documents are live windows onto profile manifests — re-provide them too.
+    // Open personas-readonly documents are live windows onto profile or workspace manifests.
     readOnlyProvider?.refreshOpenDocuments();
   }, 300);
 }
 
-function watchForChanges(context: vscode.ExtensionContext, watched: string[]): void {
-  for (const p of watched) {
+function watchForChanges(context: vscode.ExtensionContext, services: Services): void {
+  for (const p of services.watched) {
     const dir = dirOf(p);
     if (watchedDirs.has(dir)) continue;
     watchedDirs.add(dir);
@@ -65,6 +67,38 @@ function watchForChanges(context: vscode.ExtensionContext, watched: string[]): v
     watcher.onDidDelete(scheduleRefresh);
     context.subscriptions.push(watcher);
   }
+
+  const rebuildWorkspaceWatchers = () => {
+    for (const watcher of workspaceWatchers) watcher.dispose();
+    workspaceWatchers = services.workspace.watchedTargets().map((target) => {
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(vscode.Uri.file(target.baseFsPath), target.pattern),
+      );
+      const refreshIfMatched = (uri: vscode.Uri) => {
+        if (!target.exactFsPath || areFsPathsEqual(target.exactFsPath, uri.fsPath)) scheduleRefresh();
+      };
+      watcher.onDidChange(refreshIfMatched);
+      watcher.onDidCreate(refreshIfMatched);
+      watcher.onDidDelete(refreshIfMatched);
+      return watcher;
+    });
+  };
+  rebuildWorkspaceWatchers();
+  context.subscriptions.push(
+    vscode.extensions.onDidChange(scheduleRefresh),
+    vscode.workspace.onDidGrantWorkspaceTrust(scheduleRefresh),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      rebuildWorkspaceWatchers();
+      scheduleRefresh();
+    }),
+    {
+      dispose: () => {
+        clearTimeout(watchTimer);
+        for (const watcher of workspaceWatchers) watcher.dispose();
+        workspaceWatchers = [];
+      },
+    },
+  );
 }
 
 function dirOf(p: string): string {

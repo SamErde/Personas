@@ -58,6 +58,23 @@ describe('composeInventory', () => {
     const inv = composeInventory(baseInput());
     const defOnly = inv.extensions.find((e) => e.id === 'pub.default-only');
     expect(defOnly?.installedIn).toEqual(['default', 'builtin/agents']);
+    expect(defOnly?.profileVersions).toEqual([
+      { profileId: 'default', version: '2.0.0' },
+      { profileId: 'builtin/agents', version: '2.0.0' },
+    ]);
+  });
+
+  it('preserves the manifest-selected version independently for each profile', () => {
+    const input = baseInput();
+    input.rawProfiles = [{ location: 'aaa', name: 'Work', inheritsDefaultExtensions: false }];
+    input.defaultManifest = [entry('pub.shared', '1.0.0')];
+    input.profileManifests = new Map([['aaa', [entry('pub.shared', '2.0.0')]]]);
+    input.diskFolders = ['pub.shared-1.0.0', 'pub.shared-2.0.0'];
+    const shared = composeInventory(input).extensions.find((extension) => extension.id === 'pub.shared');
+    expect(shared?.profileVersions).toEqual([
+      { profileId: 'default', version: '1.0.0' },
+      { profileId: 'aaa', version: '2.0.0' },
+    ]);
   });
 
   it('flags orphans: on disk, in no profile, not app-scoped', () => {

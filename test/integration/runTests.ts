@@ -1,6 +1,6 @@
 import { runTests } from '@vscode/test-electron';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -9,6 +9,10 @@ async function main(): Promise<void> {
   const extensionTestsPath = path.resolve(__dirname, 'suite', 'index');
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'personas-it-data-'));
   const extensionsDir = mkdtempSync(path.join(tmpdir(), 'personas-it-ext-'));
+  const workspaceDir = mkdtempSync(path.join(tmpdir(), 'personas-it-workspace-'));
+  cpSync(path.resolve(extensionDevelopmentPath, 'test', 'fixtures', 'integration-workspace'), workspaceDir, {
+    recursive: true,
+  });
 
   // Package the fixture here, in the plain launcher process: invoking vsce (which needs a
   // shell on Windows) from inside the sandboxed Extension Development Host fails with
@@ -34,6 +38,7 @@ async function main(): Promise<void> {
     extensionDevelopmentPath,
     extensionTestsPath,
     launchArgs: [
+      workspaceDir,
       '--user-data-dir', userDataDir,
       '--extensions-dir', extensionsDir,
       '--disable-workspace-trust',
@@ -43,6 +48,7 @@ async function main(): Promise<void> {
       PERSONAS_IT_USER_DATA: userDataDir,
       PERSONAS_IT_EXT_DIR: extensionsDir,
       PERSONAS_IT_VSIX_PATH: vsixPath,
+      PERSONAS_IT_WORKSPACE: workspaceDir,
     },
   });
 }

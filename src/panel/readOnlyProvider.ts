@@ -52,11 +52,11 @@ export function registerPersonasReadOnlyProvider(context: vscode.ExtensionContex
  * place as the file changes on disk. Never throws: an open failure surfaces as an error toast,
  * and a content read failure renders as placeholder text in the document body (see the provider).
  */
-export async function openReadOnly(label: string, fsPath: string): Promise<void> {
+export async function openReadOnly(label: string, fsPath: string, languageId = 'json'): Promise<void> {
   try {
     const uri = vscode.Uri.from({ scheme: SCHEME, path: `/${label}`, query: fsPath });
     const doc = await vscode.workspace.openTextDocument(uri);
-    await vscode.languages.setTextDocumentLanguage(doc, 'json').then(undefined, () => undefined);
+    await vscode.languages.setTextDocumentLanguage(doc, languageId).then(undefined, () => undefined);
     await vscode.window.showTextDocument(doc, { preview: true });
   } catch (e) {
     void vscode.window.showErrorMessage(

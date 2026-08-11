@@ -1,0 +1,13 @@
+{
+  "name": "personas-web-fixture",
+  "displayName": "Personas Web Fixture",
+  "description": "Inert browser-only fixture used by the Personas workspace-status spike.",
+  "version": "0.0.1",
+  "publisher": "personas-tests",
+  "license": "MIT",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "browser": "./browser.js",
+  "extensionKind": ["workspace"],
+  "activationEvents": []
+}

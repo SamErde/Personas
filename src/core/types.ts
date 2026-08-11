@@ -17,6 +17,9 @@ export interface ExtensionRecord {
   id: string; // publisher.name, lowercase
   displayName: string;
   versions: DiskVersion[];
+  /** Manifest-selected version for each profile. Unlike `versions`, this preserves which
+   *  coexisting disk version the profile actually references. */
+  profileVersions?: { profileId: string; version: string }[];
   applyToAllProfiles: boolean;
   installedIn: string[]; // Profile.id values (includes inheriting profiles)
   orphaned: boolean; // derived: installedIn.length === 0 && !applyToAllProfiles
@@ -50,6 +53,65 @@ export interface Inventory {
   warnings: ParseWarning[];
 }
 
+export type WorkspaceExtensionState =
+  | 'enabled'
+  | 'notEnabled'
+  | 'notInstalledInProfile'
+  | 'unknown';
+
+export interface WorkspaceDescriptor {
+  name: string;
+  kind: 'folder' | 'workspace';
+  /** Exact folder or saved-workspace URI used by VS Code's profile association map. */
+  associationUri?: string;
+  /** Local saved .code-workspace JSON file, when one exists and is safe to open directly. */
+  manifestFsPath?: string;
+  /** Local file-system roots only; non-file roots are deliberately omitted. */
+  rootFsPaths: string[];
+}
+
+export interface WorkspaceLocalExtension {
+  id: string;
+  displayName: string;
+  version?: string;
+  description?: string;
+  publisher?: string;
+  fsPath: string;
+  runtimeVisible: boolean;
+}
+
+export interface WorkspaceExtensionStatus {
+  id: string;
+  displayName: string;
+  description?: string;
+  publisher?: string;
+  version?: string;
+  state: WorkspaceExtensionState;
+  installedInActiveProfile: boolean | 'unknown';
+  workspaceLocal: 'installed' | 'candidate' | 'none';
+  runtimeSource: 'profile' | 'workspace' | 'unknown';
+  /** True only when this row has a normal profile-backed ExtensionRecord. */
+  profileBacked: boolean;
+  runtimeUri?: string;
+  reason: string;
+}
+
+export interface WorkspaceInventory {
+  descriptor: WorkspaceDescriptor;
+  activeProfileId?: string;
+  activeProfileName?: string;
+  extensions: WorkspaceExtensionStatus[];
+  localExtensions: WorkspaceLocalExtension[];
+  warnings: string[];
+}
+
+export interface WorkspaceExtensionCounts {
+  enabled: number;
+  notEnabled: number;
+  unknown: number;
+  workspaceLocal: number;
+}
+
 export interface OrphanInfo {
   id: string;
   displayName: string;
@@ -60,7 +122,13 @@ export interface OrphanInfo {
 // --- Webview message protocol ---
 
 export type HostToWebview =
-  | { type: 'inventory'; inventory: Inventory; toggleSupported: boolean; icons: Record<string, string> }
+  | {
+      type: 'inventory';
+      inventory: Inventory;
+      workspace?: WorkspaceInventory;
+      toggleSupported: boolean;
+      icons: Record<string, string>;
+    }
   | { type: 'pending'; extId: string; profileId: string }
   | { type: 'orphans'; orphans: OrphanInfo[] }
   | { type: 'cleanupResult'; results: { folderName: string; ok: boolean; error?: string }[] }
@@ -93,8 +161,24 @@ export interface WelcomeProfileVm {
   filePath?: string;
 }
 
+export interface WelcomeWorkspaceVm {
+  name: string;
+  kind: WorkspaceDescriptor['kind'];
+  /** Local saved .code-workspace manifest. Never populated for a folder or non-file workspace. */
+  manifestFsPath?: string;
+  activeProfileName?: string;
+  counts: WorkspaceExtensionCounts;
+  warnings: string[];
+}
+
 export type HostToWelcome =
-  | { type: 'state'; profiles: WelcomeProfileVm[]; orphanCount: number; warnings: ParseWarning[] }
+  | {
+      type: 'state';
+      profiles: WelcomeProfileVm[];
+      workspace?: WelcomeWorkspaceVm;
+      orphanCount: number;
+      warnings: ParseWarning[];
+    }
   | { type: 'orphanSize'; totalSizeBytes: number }
   | { type: 'unsupported'; reason: string };
 
@@ -103,4 +187,6 @@ export type WelcomeToHost =
   | { type: 'openMatrix' }
   | { type: 'openProfileReadOnly'; profileId: string }
   | { type: 'editProfileFile'; profileId: string }
+  | { type: 'openWorkspaceReadOnly' }
+  | { type: 'editWorkspaceFile' }
   | { type: 'reviewOrphans' };
