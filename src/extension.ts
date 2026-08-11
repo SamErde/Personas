@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { areFsPathsEqual } from './core/workspace';
 import { MatrixPanel } from './panel/matrixPanel';
 import { registerPersonasReadOnlyProvider, type PersonasReadOnlyContentProvider } from './panel/readOnlyProvider';
 import { WelcomeViewProvider } from './panel/welcomeView';
@@ -73,9 +74,12 @@ function watchForChanges(context: vscode.ExtensionContext, services: Services): 
       const watcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(vscode.Uri.file(target.baseFsPath), target.pattern),
       );
-      watcher.onDidChange(scheduleRefresh);
-      watcher.onDidCreate(scheduleRefresh);
-      watcher.onDidDelete(scheduleRefresh);
+      const refreshIfMatched = (uri: vscode.Uri) => {
+        if (!target.exactFsPath || areFsPathsEqual(target.exactFsPath, uri.fsPath)) scheduleRefresh();
+      };
+      watcher.onDidChange(refreshIfMatched);
+      watcher.onDidCreate(refreshIfMatched);
+      watcher.onDidDelete(refreshIfMatched);
       return watcher;
     });
   };

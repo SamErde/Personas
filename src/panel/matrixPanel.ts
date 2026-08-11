@@ -65,6 +65,7 @@ export class MatrixPanel {
 
   private lastInventory: Inventory | undefined;
   private lastWorkspace: WorkspaceInventory | undefined;
+  private refreshQueue: Promise<void> = Promise.resolve();
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -79,20 +80,31 @@ export class MatrixPanel {
     panel.webview.onDidReceiveMessage((m: WebviewToHost) => void this.onMessage(m));
   }
 
-  async refresh(): Promise<void> {
+  refresh(): Promise<void> {
+    // A mutation refresh can race a watcher refresh. Serialize complete snapshots so inventory and
+    // workspace composition from different runs can never be mixed, and keep the queue usable when
+    // an individual refresh rejects.
+    const task = this.refreshQueue.then(() => this.performRefresh());
+    this.refreshQueue = task.catch(() => undefined);
+    return task;
+  }
+
+  private async performRefresh(): Promise<void> {
     if (!this.services) return; // unsupported mode — nothing to read; see onMessage's guard.
-    this.lastInventory = await this.services.inventory.getInventory();
-    this.lastWorkspace = await this.services.workspace.getWorkspaceInventory(this.lastInventory);
+    const inventory = await this.services.inventory.getInventory();
+    const workspace = await this.services.workspace.getWorkspaceInventory(inventory);
     const icons: Record<string, string> = {};
-    for (const ext of this.lastInventory.extensions) {
+    for (const ext of inventory.extensions) {
       if (ext.iconFsPath) {
         icons[ext.id] = this.panel.webview.asWebviewUri(vscode.Uri.file(ext.iconFsPath)).toString();
       }
     }
+    this.lastInventory = inventory;
+    this.lastWorkspace = workspace;
     this.post({
       type: 'inventory',
-      inventory: this.lastInventory,
-      ...(this.lastWorkspace ? { workspace: this.lastWorkspace } : {}),
+      inventory,
+      ...(workspace ? { workspace } : {}),
       toggleSupported: TOGGLE_ALL_PROFILES_COMMAND !== undefined,
       icons,
     });

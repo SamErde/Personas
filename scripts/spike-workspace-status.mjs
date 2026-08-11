@@ -38,9 +38,11 @@ execFileSync(vsce, ['package', '--allow-missing-repository', '--out', associatio
   stdio: 'inherit',
 });
 
-async function waitForProbeResult(resultPath, child, timeoutMs = 45000) {
+async function waitForProbeResult(resultPath, child, getSpawnError, timeoutMs = 45000) {
   const deadline = Date.now() + timeoutMs;
   while (!existsSync(resultPath)) {
+    const spawnError = getSpawnError();
+    if (spawnError) throw spawnError;
     if (child.exitCode !== null) throw new Error(`regular VS Code probe exited with ${child.exitCode}`);
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${resultPath}`);
     await delay(100);
@@ -82,8 +84,12 @@ async function runRegularWindowAssociationProbe({ executable, target, profile, u
   const env = { ...process.env, PERSONAS_ASSOCIATION_PROBE_RESULT: resultPath };
   delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(executable, args, { env, stdio: 'ignore' });
+  let spawnError;
+  child.once('error', (error) => {
+    spawnError = error;
+  });
   try {
-    await waitForProbeResult(resultPath, child);
+    await waitForProbeResult(resultPath, child, () => spawnError);
     // The installed probe writes after startup; leave a short flush window for storage.json.
     await delay(1000);
   } finally {
@@ -106,9 +112,14 @@ async function ensureNamedProfile({ executable, target, profile, userDataDir, ex
     '--skip-release-notes',
     '--no-sandbox',
   ], { env, stdio: 'ignore' });
+  let spawnError;
+  child.once('error', (error) => {
+    spawnError = error;
+  });
   const deadline = Date.now() + 45000;
   try {
     for (;;) {
+      if (spawnError) throw spawnError;
       if (child.exitCode !== null) throw new Error(`profile-creation window exited with ${child.exitCode}`);
       if (existsSync(storagePath)) {
         try {

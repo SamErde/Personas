@@ -64,6 +64,10 @@ export interface WorkspaceDiscoveryResult {
 export interface WorkspaceWatchTarget {
   baseFsPath: string;
   pattern: string;
+  /** When set, the broad pattern is only a transport for file events; callers must refresh only
+   *  when the changed path equals this literal path. This avoids treating manifest filenames as
+   *  glob syntax. */
+  exactFsPath?: string;
 }
 
 export interface ComposeWorkspaceInventoryInput {
@@ -322,7 +326,10 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
   const profileById = new Map(input.inventory.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...candidatesById.keys()]);
   const affectedProfiles = new Set(input.inventory.warnings.flatMap((warning) => warning.affectedProfileIds));
-  const defaultProfile = input.inventory.profiles.find((profile) => profile.isDefault);
+  // Any unreadable profile manifest can hide an application-scoped entry. Because such an entry
+  // applies to every profile, membership in even a different readable active profile is uncertain
+  // until all profile manifests that can carry the flag are readable.
+  const profileMembershipReliable = affectedProfiles.size === 0;
   const statuses: WorkspaceExtensionStatus[] = [];
 
   for (const id of allIds) {
@@ -338,14 +345,7 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
         ? runtimes.find((item) => item.fsPath && isFsPathContained(localMatch.fsPath, item.fsPath))
         : undefined) ?? runtimes[0];
 
-    const manifestReliable = activeProfile
-      ? !affectedProfiles.has(activeProfile.id) &&
-        !(
-          activeProfile.inheritsDefaultExtensions &&
-          defaultProfile &&
-          affectedProfiles.has(defaultProfile.id)
-        )
-      : false;
+    const manifestReliable = activeProfile ? profileMembershipReliable : false;
     const installedInActiveProfile: boolean | 'unknown' =
       activeProfile && manifestReliable
         ? (profileExtension?.installedIn.includes(activeProfile.id) ?? false)
@@ -489,7 +489,7 @@ export function workspaceExtensionsRootPaths(descriptor: WorkspaceDescriptor): s
 
 /** Narrow watcher targets that also work before .vscode/extensions exists. */
 export function workspaceWatchTargets(descriptor: WorkspaceDescriptor): WorkspaceWatchTarget[] {
-  const targets = descriptor.rootFsPaths.map((root) => ({
+  const targets: WorkspaceWatchTarget[] = descriptor.rootFsPaths.map((root) => ({
     baseFsPath: root,
     pattern: '.vscode/extensions/**',
   }));
@@ -498,7 +498,8 @@ export function workspaceWatchTargets(descriptor: WorkspaceDescriptor): Workspac
     const pathApi = windows ? path.win32 : path.posix;
     targets.push({
       baseFsPath: pathApi.dirname(descriptor.manifestFsPath),
-      pattern: pathApi.basename(descriptor.manifestFsPath),
+      pattern: '*',
+      exactFsPath: descriptor.manifestFsPath,
     });
   }
   return targets;
@@ -550,6 +551,10 @@ export class WorkspaceInventoryService {
     }
     return composeWorkspaceInventory({ descriptor, inventory, associations, discovery, runtimeExtensions });
   }
+}
+
+export function areFsPathsEqual(a: string, b: string): boolean {
+  return normalizeFsPath(a) === normalizeFsPath(b);
 }
 
 export function isFsPathContained(parent: string, child: string): boolean {

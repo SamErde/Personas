@@ -11,6 +11,7 @@ import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
   MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
   WorkspaceInventoryService,
+  areFsPathsEqual,
   composeWorkspaceInventory,
   createWorkspaceDescriptor,
   discoverWorkspaceLocalExtensions,
@@ -390,23 +391,36 @@ describe('workspace-local candidate discovery', () => {
     ]);
     expect(workspaceWatchTargets(posixDescriptor)).toEqual([
       { baseFsPath: '/home/me/repo\\archive', pattern: '.vscode/extensions/**' },
-      { baseFsPath: '/home/me', pattern: 'shared\\name.code-workspace' },
+      {
+        baseFsPath: '/home/me',
+        pattern: '*',
+        exactFsPath: '/home/me/shared\\name.code-workspace',
+      },
     ]);
+    expect(areFsPathsEqual('/home/me/shared\\name.code-workspace', '/home/me/shared\\name.code-workspace')).toBe(true);
+    expect(areFsPathsEqual('/home/me/shared\\name.code-workspace', '/home/me/shared/name.code-workspace')).toBe(false);
     expect(isFsPathContained('/home/me/repo\\archive', '/home/me/repo\\archive/child')).toBe(true);
     expect(isFsPathContained('/home/me/repo\\archive', '/home/me/repo/archive/child')).toBe(false);
     expect(isFsPathContained('/home/me/Repo\\archive', '/home/me/repo\\archive/child')).toBe(false);
   });
 
-  it('builds narrow patterns that catch candidate-root creation and saved-manifest changes', () => {
+  it('watches a manifest parent and filters the exact path without interpreting glob metacharacters', () => {
     expect(
       workspaceWatchTargets({
         ...descriptor,
-        manifestFsPath: 'C:\\Code\\Example\\shared.code-workspace',
+        manifestFsPath: 'C:\\Code\\Example\\project[1].code-workspace',
       }),
     ).toEqual([
       { baseFsPath: 'C:\\Code\\Example', pattern: '.vscode/extensions/**' },
-      { baseFsPath: 'C:\\Code\\Example', pattern: 'shared.code-workspace' },
+      {
+        baseFsPath: 'C:\\Code\\Example',
+        pattern: '*',
+        exactFsPath: 'C:\\Code\\Example\\project[1].code-workspace',
+      },
     ]);
+    expect(areFsPathsEqual('C:\\Code\\Example\\PROJECT[1].code-workspace', 'c:\\code\\example\\project[1].code-workspace')).toBe(
+      true,
+    );
   });
 });
 
@@ -555,6 +569,28 @@ describe('workspace status composition', () => {
       associations: association('agents'),
     });
     expect(result.extensions[0]).toMatchObject({
+      state: 'unknown',
+      installedInActiveProfile: 'unknown',
+    });
+  });
+
+  it('treats another unreadable manifest as active membership uncertainty because it can hide app scope', () => {
+    const inv = inventory({
+      installedIn: ['default'],
+      warnings: [
+        {
+          file: 'profiles/other/extensions.json',
+          message: 'bad JSON',
+          affectedProfileIds: ['other'],
+        },
+      ],
+    });
+    inv.profiles = [
+      ...profiles,
+      { id: 'other', name: 'Other', isDefault: false, inheritsDefaultExtensions: false },
+    ];
+
+    expect(compose({ inv }).extensions[0]).toMatchObject({
       state: 'unknown',
       installedInActiveProfile: 'unknown',
     });
