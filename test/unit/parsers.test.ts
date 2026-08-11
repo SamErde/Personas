@@ -7,6 +7,7 @@ import {
   parseExtensionsManifest,
   parseObsolete,
   parseProfileRegistry,
+  parseWorkspaceProfileAssociations,
 } from '../../src/core/parsers';
 
 const fixture = (name: string) => readFileSync(join(__dirname, '..', 'fixtures', name), 'utf8');
@@ -32,6 +33,72 @@ describe('parseProfileRegistry', () => {
   it('skips malformed entries instead of throwing', () => {
     const text = '{"userDataProfiles": [{"name": "NoLocation"}, {"location": "ab", "name": "OK"}]}';
     expect(parseProfileRegistry(text)).toEqual([{ location: 'ab', name: 'OK', inheritsDefaultExtensions: false }]);
+  });
+});
+
+describe('parseWorkspaceProfileAssociations', () => {
+  it('returns an absent, empty map when profile associations are missing', () => {
+    expect(parseWorkspaceProfileAssociations('{"other": 1}')).toEqual({
+      workspaces: new Map(),
+      warnings: [],
+      present: false,
+    });
+  });
+
+  it('extracts valid workspace associations without depending on unrelated keys', () => {
+    const parsed = parseWorkspaceProfileAssociations(
+      JSON.stringify({
+        unrelated: true,
+        profileAssociations: {
+          workspaces: {
+            'file:///c%3A/code/one': '__default__profile__',
+            'file:///c%3A/code/two.code-workspace': 'profile-id',
+          },
+          emptyWindows: { window: 'ignored' },
+        },
+      }),
+    );
+    expect(parsed.present).toBe(true);
+    expect([...parsed.workspaces]).toEqual([
+      ['file:///c%3A/code/one', '__default__profile__'],
+      ['file:///c%3A/code/two.code-workspace', 'profile-id'],
+    ]);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it('ignores malformed entries individually and reports them', () => {
+    const parsed = parseWorkspaceProfileAssociations(
+      JSON.stringify({
+        profileAssociations: {
+          workspaces: {
+            '': 'profile-id',
+            'file:///valid': '__default__profile__',
+            'file:///number': 42,
+            'file:///blank': '   ',
+          },
+        },
+      }),
+    );
+    expect([...parsed.workspaces]).toEqual([['file:///valid', '__default__profile__']]);
+    expect(parsed.warnings).toHaveLength(3);
+  });
+
+  it('fails closed when the associations container or workspace map has the wrong shape', () => {
+    expect(parseWorkspaceProfileAssociations('{"profileAssociations": []}')).toMatchObject({
+      present: false,
+      warnings: ['profileAssociations is not an object.'],
+    });
+    expect(
+      parseWorkspaceProfileAssociations('{"profileAssociations": {"workspaces": []}}'),
+    ).toMatchObject({
+      present: false,
+      warnings: ['profileAssociations.workspaces is not an object.'],
+    });
+  });
+
+  it('preserves the normal storage.json parse error contract', () => {
+    expect(() => parseWorkspaceProfileAssociations('{nope')).toThrow(ParseError);
+    expect(() => parseWorkspaceProfileAssociations('null')).toThrow(ParseError);
   });
 });
 

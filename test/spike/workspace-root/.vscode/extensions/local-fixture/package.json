@@ -1,0 +1,11 @@
+{
+  "name": "personas-local-workspace-fixture",
+  "displayName": "Personas Local Workspace Fixture",
+  "description": "Inert local workspace extension used by the Personas workspace-status spike.",
+  "version": "0.0.1",
+  "publisher": "personas-tests",
+  "engines": { "vscode": "^1.90.0" },
+  "extensionKind": ["ui"],
+  "main": "./extension.js",
+  "activationEvents": ["*"]
+}

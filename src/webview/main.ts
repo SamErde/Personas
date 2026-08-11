@@ -1,10 +1,12 @@
-import type { ExtensionRecord, HostToWebview, Inventory, OrphanInfo, WebviewToHost } from '../core/types';
-import { buildViewModel, formatBytes, type Chip } from './render';
+import type { HostToWebview, Inventory, OrphanInfo, WebviewToHost, WorkspaceInventory } from '../core/types';
+import { buildViewModel, formatBytes, supportsProfileActions, type Chip, type RowVm } from './render';
 
 declare function acquireVsCodeApi(): { postMessage(m: WebviewToHost): void };
 const vscode = acquireVsCodeApi();
 
 let inventory: Inventory | undefined;
+let workspace: WorkspaceInventory | undefined;
+let renderedRows: RowVm[] = [];
 let toggleSupported = false;
 let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
 let chip: Chip = 'all';
@@ -139,10 +141,10 @@ function showCard(extId: string, trigger: HTMLElement): void {
   // detached and would position the card at (0,0). Ignore it; the re-created element gets its
   // own listeners.
   if (!trigger.isConnected) return;
-  const ext = inventory.extensions.find((e) => e.id === extId);
-  if (!ext) return;
+  const row = renderedRows.find((item) => item.extId === extId);
+  if (!row) return;
   cardOwnerExtId = extId;
-  rebuildCard(ext);
+  rebuildCard(row);
   card.hidden = false;
   positionCard(trigger);
 }
@@ -152,10 +154,10 @@ function showCard(extId: string, trigger: HTMLElement): void {
  * user tabbing away (it would close the card on every live refresh for keyboard users). */
 let rebuildingCard = false;
 
-function rebuildCard(ext: ExtensionRecord): void {
+function rebuildCard(row: RowVm): void {
   rebuildingCard = true;
   try {
-    buildCardContent(ext);
+    buildCardContent(row);
   } finally {
     rebuildingCard = false;
   }
@@ -171,9 +173,9 @@ function rebuildCard(ext: ExtensionRecord): void {
  */
 function syncOpenCard(): void {
   if (card.hidden || cardOwnerExtId === undefined) return;
-  const ext = inventory?.extensions.find((e) => e.id === cardOwnerExtId);
+  const row = renderedRows.find((item) => item.extId === cardOwnerExtId);
   const trigger = contentEl.querySelector<HTMLElement>(`.name[data-ext-id="${CSS.escape(cardOwnerExtId)}"]`);
-  if (!ext || !trigger) {
+  if (!row || !trigger) {
     hideCard();
     return;
   }
@@ -188,7 +190,7 @@ function syncOpenCard(): void {
     active instanceof HTMLElement && card.contains(active) ? active.dataset['action'] : undefined;
   const focusWasInCard = active instanceof HTMLElement && card.contains(active);
 
-  rebuildCard(ext);
+  rebuildCard(row);
   positionCard(trigger);
 
   if (focusWasInCard) {
@@ -207,25 +209,29 @@ function syncOpenCard(): void {
   }
 }
 
-function buildCardContent(ext: ExtensionRecord): void {
+function buildCardContent(ext: RowVm): void {
   card.replaceChildren();
 
   const header = el('div', 'ext-card-header');
-  header.append(extIcon(ext.id, ext.displayName));
-  const nameLink = el('a', 'ext-card-name', ext.displayName) as HTMLAnchorElement;
-  nameLink.href = '#';
-  nameLink.tabIndex = 0;
-  nameLink.dataset['action'] = 'open-page'; // stable id for syncOpenCard's focus restoration
-  const openPage = (e: Event) => {
-    e.preventDefault();
-    post({ type: 'openExtensionPage', extId: ext.id });
-  };
-  nameLink.addEventListener('click', openPage);
-  nameLink.addEventListener('keydown', (e) => {
-    const key = (e as KeyboardEvent).key;
-    if (key === 'Enter' || key === ' ') openPage(e);
-  });
-  header.append(nameLink);
+  header.append(extIcon(ext.extId, ext.displayName));
+  if (supportsProfileActions(ext)) {
+    const nameLink = el('a', 'ext-card-name', ext.displayName) as HTMLAnchorElement;
+    nameLink.href = '#';
+    nameLink.tabIndex = 0;
+    nameLink.dataset['action'] = 'open-page'; // stable id for syncOpenCard's focus restoration
+    const openPage = (e: Event) => {
+      e.preventDefault();
+      post({ type: 'openExtensionPage', extId: ext.extId });
+    };
+    nameLink.addEventListener('click', openPage);
+    nameLink.addEventListener('keydown', (e) => {
+      const key = (e as KeyboardEvent).key;
+      if (key === 'Enter' || key === ' ') openPage(e);
+    });
+    header.append(nameLink);
+  } else {
+    header.append(el('span', 'ext-card-name', ext.displayName));
+  }
   card.append(header);
 
   const publisherText = ext.publisherDisplayName ?? ext.publisher;
@@ -233,20 +239,25 @@ function buildCardContent(ext: ExtensionRecord): void {
 
   if (ext.description) card.append(el('div', 'ext-card-description', ext.description));
 
-  const latestVersion = ext.versions[ext.versions.length - 1]?.version;
-  if (latestVersion) {
-    const metaParts = [`v${latestVersion}`];
+  if (ext.version || ext.sourceLabel) {
+    const metaParts = ext.version ? [`v${ext.version}`] : [];
     // "installed" is the local install time from offline metadata, not a marketplace publish date.
     if (ext.installedTimestampMs !== undefined) {
       metaParts.push(`installed ${new Date(ext.installedTimestampMs).toLocaleDateString()}`);
     }
+    if (ext.sourceLabel) metaParts.push(ext.sourceLabel);
     card.append(el('div', 'ext-card-meta', metaParts.join(' · ')));
+  }
+
+  if (!supportsProfileActions(ext)) {
+    card.append(el('div', 'ext-card-meta', 'Read-only workspace extension; profile actions are unavailable.'));
+    return;
   }
 
   // Host-echoed per-cell pending plus this extension's local (not-yet-echoed) keys — the same
   // `${ext.id}|` prefix check covers both a single toggled cell and the `${ext.id}|*` bulk key.
-  const bulkKey = `${ext.id}|*`;
-  const rowPending = [...pending, ...localPending].some((key) => key.startsWith(`${ext.id}|`));
+  const bulkKey = `${ext.extId}|*`;
+  const rowPending = [...pending, ...localPending].some((key) => key.startsWith(`${ext.extId}|`));
   const bulkInFlight = localPending.has(bulkKey);
   const actions = el('div', 'ext-card-actions');
   if (!ext.applyToAllProfiles) {
@@ -261,7 +272,7 @@ function buildCardContent(ext: ExtensionRecord): void {
       // the clicked control itself gets an in-flight look — cells wait for the host's echoes.
       localPending.add(bulkKey);
       renderContent();
-      post({ type: 'installEverywhere', extId: ext.id });
+      post({ type: 'installEverywhere', extId: ext.extId });
     });
     actions.append(installAllBtn);
 
@@ -273,7 +284,7 @@ function buildCardContent(ext: ExtensionRecord): void {
     removeAllBtn.addEventListener('click', () => {
       localPending.add(bulkKey);
       renderContent();
-      post({ type: 'removeEverywhere', extId: ext.id });
+      post({ type: 'removeEverywhere', extId: ext.extId });
     });
     actions.append(removeAllBtn);
   }
@@ -282,7 +293,7 @@ function buildCardContent(ext: ExtensionRecord): void {
   applyAllBtn.title =
     "Opens the Extensions view where you can toggle VS Code's native 'Apply Extension to all Profiles' option — VS Code provides no API for extensions to toggle it directly.";
   applyAllBtn.disabled = rowPending;
-  applyAllBtn.addEventListener('click', () => post({ type: 'toggleAllProfiles', extId: ext.id }));
+  applyAllBtn.addEventListener('click', () => post({ type: 'toggleAllProfiles', extId: ext.extId }));
   actions.append(applyAllBtn);
   card.append(actions);
 }
@@ -338,6 +349,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
   switch (m.type) {
     case 'inventory':
       inventory = m.inventory;
+      workspace = m.workspace;
       toggleSupported = m.toggleSupported;
       icons = m.icons;
       pending = new Set();
@@ -417,30 +429,57 @@ function updateOrphanButton(): void {
 function renderContent(): void {
   contentEl.replaceChildren();
   if (!inventory) {
+    renderedRows = [];
     hideCard();
     contentEl.append(el('div', '', 'Loading…'));
     return;
   }
   if (orphans !== undefined) {
+    renderedRows = [];
     hideCard(); // the cleanup view has no extension names to anchor a card to
     renderCleanup(orphans);
     return;
   }
 
-  const vm = buildViewModel(inventory, { filter, chip });
+  const vm = buildViewModel(inventory, { filter, chip }, workspace);
+  renderedRows = vm.rows;
 
   for (const w of vm.warnings) {
     contentEl.append(el('div', 'warning', `⚠ ${w.file}: ${w.message} — actions for affected profiles are disabled.`));
+  }
+  for (const warning of vm.workspaceWarnings) {
+    contentEl.append(el('div', 'warning workspace-warning', `⚠ Current workspace: ${warning}`));
   }
   if (banner) {
     contentEl.append(el('div', 'warning', banner));
     banner = '';
   }
 
+  if (vm.workspace) {
+    const legend = el('div', 'workspace-legend');
+    legend.setAttribute('aria-label', 'Current workspace extension status legend');
+    legend.append(
+      el('span', '', '✓ Enabled'),
+      el('span', '', '○ Not enabled'),
+      el('span', '', '— Not installed in profile'),
+      el('span', '', 'W ✓ Workspace-local'),
+      el('span', '', '? Unknown'),
+    );
+    contentEl.append(legend);
+  }
+
   const table = document.createElement('table');
   const head = document.createElement('tr');
   head.append(el('th', 'ext-col', 'Extension'));
   for (const p of vm.profileNames) head.append(el('th', '', p.inherits ? `${p.name} ⤷` : p.name));
+  if (vm.workspace) {
+    const workspaceHead = el('th', 'workspace-col workspace-header');
+    workspaceHead.append(
+      el('span', 'workspace-header-title', 'Current workspace'),
+      el('span', 'workspace-header-name', vm.workspace.name),
+    );
+    head.append(workspaceHead);
+  }
   table.append(head);
 
   for (const row of vm.rows) {
@@ -498,7 +537,11 @@ function renderContent(): void {
       const key = `${row.extId}|${cell.profileId}`;
       const isPending = pending.has(key) || localPending.has(key);
       const td = el('td', isPending ? 'cell pending' : 'cell');
-      if (isPending) {
+      if (cell.workspaceOnly) {
+        td.append(el('span', 'inherited', '—'));
+        td.title = 'Workspace-only extension — profile installation actions are unavailable.';
+        td.setAttribute('aria-label', 'Not represented in this profile; read-only workspace extension');
+      } else if (isPending) {
         td.append(el('span', 'spinner', '◐'));
       } else if (cell.disabled) {
         td.append(el('span', 'inherited', cell.installed ? '✓' : '—'));
@@ -523,6 +566,16 @@ function renderContent(): void {
         });
         td.append(box);
       }
+      tr.append(td);
+    }
+    if (vm.workspace) {
+      const status = row.workspaceCell;
+      const td = el('td', `workspace-col workspace-state workspace-${status?.state ?? 'unknown'}`);
+      const label = status?.label ?? 'Unknown';
+      const symbol = status?.symbol ?? '?';
+      td.append(el('span', 'workspace-symbol', symbol), el('span', 'sr-only', label));
+      td.title = status?.tooltip ?? 'Unknown — no supported workspace status evidence was available.';
+      td.setAttribute('aria-label', `${label}. ${td.title}`);
       tr.append(td);
     }
     table.append(tr);

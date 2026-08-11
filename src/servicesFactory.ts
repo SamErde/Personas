@@ -3,9 +3,15 @@ import { CleanupService } from './core/cleanup';
 import { InventoryService, type InventoryIo } from './core/inventory';
 import { createNodeCliRunner, MutationService } from './core/mutations';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths } from './core/paths';
+import {
+  createWorkspaceDescriptor,
+  WorkspaceInventoryService,
+  type WorkspaceInventoryIo,
+} from './core/workspace';
 
 export type Services = {
   inventory: InventoryService;
+  workspace: WorkspaceInventoryService;
   mutations: MutationService;
   cleanup: CleanupService;
   paths: ResolvedPaths;
@@ -41,27 +47,33 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const cliPath = findCli(vscode.env.appRoot, process.platform as Platform, (p) => fs.existsSync(p));
   if (!cliPath) return { error: `the "code" CLI was not found near ${vscode.env.appRoot}.` };
 
+  const readFile: InventoryIo['readFile'] = async (p) => {
+    try {
+      return await fsp.readFile(p, 'utf8');
+    } catch (e) {
+      // ENOENT (does not exist) degrades to the usual "missing file" handling. Any other
+      // error (EPERM/EACCES on a locked storage.json or global extensions.json, etc.) must
+      // not be conflated with "missing" — that would silently disable orphan suppression for
+      // data InventoryService can no longer see, the exact false-orphan class the inventory
+      // design guards against. Surface it as an Error so getInventory degrades it like a
+      // parse failure instead.
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      return e instanceof Error ? e : new Error(String(e));
+    }
+  };
+  const listDirs = async (p: string): Promise<string[] | Error> => {
+    try {
+      return (await fsp.readdir(p, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      return e instanceof Error ? e : new Error(String(e));
+    }
+  };
   const io: InventoryIo = {
-    readFile: async (p) => {
-      try {
-        return await fsp.readFile(p, 'utf8');
-      } catch (e) {
-        // ENOENT (does not exist) degrades to the usual "missing file" handling. Any other
-        // error (EPERM/EACCES on a locked storage.json or global extensions.json, etc.) must
-        // not be conflated with "missing" — that would silently disable orphan suppression for
-        // data InventoryService can no longer see, the exact false-orphan class the inventory
-        // design guards against. Surface it as an Error so getInventory degrades it like a
-        // parse failure instead.
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-        return e instanceof Error ? e : new Error(String(e));
-      }
-    },
+    readFile,
     listDirs: async (p) => {
-      try {
-        return (await fsp.readdir(p, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
-      } catch {
-        return [];
-      }
+      const result = await listDirs(p);
+      return result instanceof Error ? [] : result;
     },
     readPackageMeta: async (folder) => {
       try {
@@ -85,6 +97,41 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   };
 
   const inventory = new InventoryService(paths, io);
+  const workspaceIo: WorkspaceInventoryIo = {
+    readFile,
+    listEntries: async (p) => {
+      try {
+        return (await fsp.readdir(p, { withFileTypes: true })).map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+        }));
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        return e instanceof Error ? e : new Error(String(e));
+      }
+    },
+    getDescriptor: () =>
+      createWorkspaceDescriptor({
+        name: vscode.workspace.name,
+        workspaceFileUri: vscode.workspace.workspaceFile?.toString(),
+        ...(vscode.workspace.workspaceFile?.scheme === 'file'
+          ? { workspaceFileFsPath: vscode.workspace.workspaceFile.fsPath }
+          : {}),
+        folders: (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
+          name: folder.name,
+          uri: folder.uri.toString(),
+          scheme: folder.uri.scheme,
+          ...(folder.uri.scheme === 'file' ? { fsPath: folder.uri.fsPath } : {}),
+        })),
+      }),
+    getRuntimeExtensions: () =>
+      vscode.extensions.all.map((extension) => ({
+        id: extension.id.toLowerCase(),
+        uri: extension.extensionUri.toString(),
+        ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
+      })),
+  };
+  const workspace = new WorkspaceInventoryService(paths.storageJson, workspaceIo);
   const mutations = new MutationService({
     cliPath,
     extraArgs: ['--user-data-dir', paths.userDataDir, '--extensions-dir', paths.extensionsDir],
@@ -93,7 +140,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const cleanup = new CleanupService((fsPath) =>
     Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.file(fsPath), { recursive: true, useTrash: true })),
   );
-  return { inventory, mutations, cleanup, paths, watched: inventory.watchedFiles() };
+  return { inventory, workspace, mutations, cleanup, paths, watched: inventory.watchedFiles() };
 }
 
 let servicesPromise: Promise<Services | { error: string }> | undefined;

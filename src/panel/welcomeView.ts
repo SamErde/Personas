@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { profileExtensionCounts, profileManifestPath } from '../core/inventory';
-import type { HostToWelcome, WelcomeProfileVm, WelcomeToHost } from '../core/types';
+import type { HostToWelcome, WelcomeProfileVm, WelcomeToHost, WelcomeWorkspaceVm } from '../core/types';
+import { workspaceExtensionCounts } from '../core/workspace';
 import { getOrBuildServices } from '../servicesFactory';
 import { statFolder } from './fsStat';
 import { MatrixPanel } from './matrixPanel';
@@ -18,6 +19,7 @@ import { openReadOnly } from './readOnlyProvider';
 export class WelcomeViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private profiles: WelcomeProfileVm[] = [];
+  private workspaceManifestPath: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -74,6 +76,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     const setup = await getOrBuildServices(this.context);
     if ('error' in setup) {
       this.profiles = [];
+      this.workspaceManifestPath = undefined;
       this.post({ type: 'unsupported', reason: setup.error });
       return;
     }
@@ -88,7 +91,29 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       filePath: profileManifestPath(setup.paths, p),
     }));
     const orphanCount = inventory.extensions.filter((e) => e.orphaned).length;
-    this.post({ type: 'state', profiles: this.profiles, orphanCount, warnings: inventory.warnings });
+    const workspaceInventory = await setup.workspace.getWorkspaceInventory(inventory);
+    const workspace: WelcomeWorkspaceVm | undefined = workspaceInventory
+      ? {
+          name: workspaceInventory.descriptor.name,
+          kind: workspaceInventory.descriptor.kind,
+          ...(workspaceInventory.descriptor.manifestFsPath
+            ? { manifestFsPath: workspaceInventory.descriptor.manifestFsPath }
+            : {}),
+          ...(workspaceInventory.activeProfileName
+            ? { activeProfileName: workspaceInventory.activeProfileName }
+            : {}),
+          counts: workspaceExtensionCounts(workspaceInventory),
+          warnings: workspaceInventory.warnings,
+        }
+      : undefined;
+    this.workspaceManifestPath = workspace?.manifestFsPath;
+    this.post({
+      type: 'state',
+      profiles: this.profiles,
+      ...(workspace ? { workspace } : {}),
+      orphanCount,
+      warnings: inventory.warnings,
+    });
 
     if (orphanCount > 0) {
       // Sent as a follow-up patch, not blocking the state push above: the size walk is a real
@@ -116,14 +141,21 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       case 'editProfileFile': {
         const profile = this.profiles.find((p) => p.id === m.profileId);
         if (!profile?.filePath) return;
-        try {
-          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(profile.filePath));
-          await vscode.window.showTextDocument(doc, { preview: false });
-        } catch (e) {
-          void vscode.window.showErrorMessage(
-            `Personas: couldn't open ${profile.filePath} — ${e instanceof Error ? e.message : String(e)}`,
-          );
-        }
+        await this.openEditableFile(profile.filePath);
+        return;
+      }
+      case 'openWorkspaceReadOnly': {
+        if (!this.workspaceManifestPath) return;
+        await openReadOnly(
+          `${vscode.workspace.name ?? 'Workspace'} — .code-workspace (read-only)`,
+          this.workspaceManifestPath,
+          'jsonc',
+        );
+        return;
+      }
+      case 'editWorkspaceFile': {
+        if (!this.workspaceManifestPath) return;
+        await this.openEditableFile(this.workspaceManifestPath);
         return;
       }
       case 'reviewOrphans':
@@ -132,6 +164,17 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand('personas.showMatrix');
         await MatrixPanel.current?.openCleanup();
         return;
+    }
+  }
+
+  private async openEditableFile(filePath: string): Promise<void> {
+    try {
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (e) {
+      void vscode.window.showErrorMessage(
+        `Personas: couldn't open ${filePath} — ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -178,6 +221,53 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
   .edit-icon:focus { outline: 1px solid var(--vscode-focusBorder); }
   .inherits { opacity: 0.75; font-size: 0.9em; margin-left: 0.3rem; flex-shrink: 0; }
   .profile-counts { margin-top: 0.15rem; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+  .workspace-card {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.35rem;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    background: var(--vscode-sideBar-background);
+    color: var(--vscode-foreground);
+  }
+  .workspace-matrix {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.55rem 0.65rem;
+    text-align: left;
+    border: none;
+    border-radius: 3px 3px 0 0;
+    background: transparent;
+    color: inherit;
+  }
+  .workspace-matrix:hover { background: var(--vscode-list-hoverBackground); }
+  .workspace-matrix:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+  .workspace-actions {
+    display: flex;
+    gap: 0.35rem;
+    padding: 0 0.65rem 0.55rem;
+  }
+  .workspace-action {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--vscode-textLink-foreground);
+    font-size: 0.85em;
+  }
+  .workspace-action:hover, .workspace-action:focus {
+    background: transparent;
+    text-decoration: underline;
+  }
+  .workspace-title { font-weight: 600; }
+  .workspace-name { color: var(--vscode-textLink-foreground); margin-top: 0.15rem; }
+  .workspace-readonly, .workspace-counts, .workspace-profile {
+    margin-top: 0.2rem;
+    font-size: 0.85em;
+    color: var(--vscode-descriptionForeground);
+  }
+  .workspace-warning { margin: 0.25rem 0 0; font-size: 0.85em; }
   #extra p { margin: 0.4rem 0; }
   .warning-line { opacity: 0.9; }
 </style>
@@ -190,6 +280,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 <div id="dashboard">
 <h2>Profiles</h2>
 <ul id="profiles"></ul>
+<div id="workspace"></div>
 <div id="extra"></div>
 </div>
 <script nonce="${nonce}" src="${script}"></script>

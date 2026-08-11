@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { directInstallProfileIds, installEverywhereTargets, removeEverywhereTargets } from '../core/inventory';
 import { MutationError } from '../core/mutations';
-import type { HostToWebview, Inventory, WebviewToHost } from '../core/types';
+import type { HostToWebview, Inventory, WebviewToHost, WorkspaceInventory } from '../core/types';
 import type { Services } from '../servicesFactory';
 import { statFolder } from './fsStat';
 
@@ -63,6 +63,7 @@ export class MatrixPanel {
   }
 
   private lastInventory: Inventory | undefined;
+  private lastWorkspace: WorkspaceInventory | undefined;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -80,6 +81,7 @@ export class MatrixPanel {
   async refresh(): Promise<void> {
     if (!this.services) return; // unsupported mode — nothing to read; see onMessage's guard.
     this.lastInventory = await this.services.inventory.getInventory();
+    this.lastWorkspace = await this.services.workspace.getWorkspaceInventory(this.lastInventory);
     const icons: Record<string, string> = {};
     for (const ext of this.lastInventory.extensions) {
       if (ext.iconFsPath) {
@@ -89,6 +91,7 @@ export class MatrixPanel {
     this.post({
       type: 'inventory',
       inventory: this.lastInventory,
+      ...(this.lastWorkspace ? { workspace: this.lastWorkspace } : {}),
       toggleSupported: TOGGLE_ALL_PROFILES_COMMAND !== undefined,
       icons,
     });

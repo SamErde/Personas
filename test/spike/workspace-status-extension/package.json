@@ -1,0 +1,10 @@
+{
+  "name": "personas-workspace-status-spike",
+  "displayName": "Personas Workspace Status Spike",
+  "version": "0.0.1",
+  "publisher": "personas-tests",
+  "engines": { "vscode": "^1.90.0" },
+  "extensionKind": ["ui"],
+  "main": "./extension.js",
+  "activationEvents": ["*"]
+}
