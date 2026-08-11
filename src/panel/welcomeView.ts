@@ -22,6 +22,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private profiles: WelcomeProfileVm[] = [];
   private workspaceManifestPath: string | undefined;
+  private renderGeneration = 0;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -75,7 +76,9 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async renderDashboard(): Promise<void> {
+    const generation = ++this.renderGeneration;
     const setup = await getOrBuildServices(this.context);
+    if (generation !== this.renderGeneration) return;
     if ('error' in setup) {
       this.profiles = [];
       this.workspaceManifestPath = undefined;
@@ -84,7 +87,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     }
     const inventory = await setup.inventory.getInventory();
     const counts = profileExtensionCounts(inventory);
-    this.profiles = inventory.profiles.map((p) => ({
+    const profiles = inventory.profiles.map((p) => ({
       id: p.id,
       name: p.name,
       inheritsDefaultExtensions: p.inheritsDefaultExtensions,
@@ -94,6 +97,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     }));
     const orphanCount = inventory.extensions.filter((e) => e.orphaned).length;
     const workspaceInventory = await setup.workspace.getWorkspaceInventory(inventory);
+    if (generation !== this.renderGeneration) return;
     const workspace: WelcomeWorkspaceVm | undefined = workspaceInventory
       ? {
           name: workspaceInventory.descriptor.name,
@@ -108,10 +112,11 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           warnings: workspaceInventory.warnings,
         }
       : undefined;
+    this.profiles = profiles;
     this.workspaceManifestPath = workspace?.manifestFsPath;
     this.post({
       type: 'state',
-      profiles: this.profiles,
+      profiles,
       ...(workspace ? { workspace } : {}),
       orphanCount,
       warnings: inventory.warnings,
@@ -121,6 +126,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       // Sent as a follow-up patch, not blocking the state push above: the size walk is a real
       // disk scan and the count should render immediately.
       const orphans = await buildOrphanInfos(inventory, statFolder);
+      if (generation !== this.renderGeneration) return;
       const totalSizeBytes = orphans.reduce((sum, o) => sum + o.totalSizeBytes, 0);
       this.post({ type: 'orphanSize', totalSizeBytes });
     }
