@@ -60,8 +60,8 @@ New-Item -ItemType Directory -Force -Path $UserDataDir, $ExtensionsDir | Out-Nul
 $WorkspaceFixtureDir = Join-Path $TestRoot 'workspace-fixture'
 New-Item -ItemType Directory -Force -Path $WorkspaceFixtureDir | Out-Null
 Copy-Item -LiteralPath .\test\spike\workspace-status.code-workspace -Destination $WorkspaceFixtureDir
-Copy-Item -LiteralPath .\test\spike\workspace-root -Destination $WorkspaceFixtureDir -Recurse
-Copy-Item -LiteralPath .\test\spike\workspace-root-two -Destination $WorkspaceFixtureDir -Recurse
+Copy-Item -LiteralPath .\test\spike\workspace-root -Destination $WorkspaceFixtureDir -Recurse -Force
+Copy-Item -LiteralPath .\test\spike\workspace-root-two -Destination $WorkspaceFixtureDir -Recurse -Force
 $WorkspacePath = Join-Path $WorkspaceFixtureDir 'workspace-status.code-workspace'
 
 $CodeArgs = @(
@@ -116,9 +116,21 @@ UI iteration, keep the supported packaged sandbox open instead:
 npm run watch
 ```
 
-After each build, use the reinstall command above and run **Developer: Reload Window** in the
-sandbox. This keeps both the VS Code state and fixture workspace disposable while exercising the
-same production-host safety behavior that users receive.
+Keep the watch process running in a separate terminal. After each completed build, run the following
+in another terminal to package the new output, refresh `$Vsix`, and reinstall it in the sandbox:
+
+```powershell
+npm run package
+
+$Vsix = Get-ChildItem -LiteralPath .\releases -Filter 'personas-*.vsix' |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+& code @CodeArgs --install-extension $Vsix.FullName --force
+```
+
+Then run **Developer: Reload Window** in the sandbox. This keeps both the VS Code state and fixture
+workspace disposable while exercising the same production-host safety behavior that users receive.
 
 ## Manual test scenarios
 
