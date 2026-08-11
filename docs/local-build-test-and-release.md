@@ -211,3 +211,10 @@ When testing is complete, close every VS Code window launched with the disposabl
 entire sandbox is under the unique path stored in `$TestRoot`; inspect that value before removing
 the directory. The packaged VSIX files under `releases` are gitignored and may be retained for
 additional local testing.
+
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please) and driven by conventional commits: commits merged to `main` accumulate into a bot-managed release PR that maintains `CHANGELOG.md` and the version bump; merging that PR tags the release and publishes a GitHub Release with the packaged `.vsix` attached. No manual version edits or manual `vsce publish` are part of the normal flow.
+
+- Local packaging: `npm run package` builds a `.vsix` into `releases/` (gitignored, not committed).
+- Marketplace publishing runs automatically on each release via the `VSCE_PAT` repository secret (rotate before expiry — a failed publish step is the symptom). Manual fallback: `npx vsce publish --packagePath <released .vsix>`.
