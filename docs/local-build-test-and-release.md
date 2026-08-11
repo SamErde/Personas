@@ -57,6 +57,13 @@ $ExtensionsDir = Join-Path $TestRoot 'extensions'
 
 New-Item -ItemType Directory -Force -Path $UserDataDir, $ExtensionsDir | Out-Null
 
+$WorkspaceFixtureDir = Join-Path $TestRoot 'workspace-fixture'
+New-Item -ItemType Directory -Force -Path $WorkspaceFixtureDir | Out-Null
+Copy-Item -LiteralPath .\test\spike\workspace-status.code-workspace -Destination $WorkspaceFixtureDir
+Copy-Item -LiteralPath .\test\spike\workspace-root -Destination $WorkspaceFixtureDir -Recurse -Force
+Copy-Item -LiteralPath .\test\spike\workspace-root-two -Destination $WorkspaceFixtureDir -Recurse -Force
+$WorkspacePath = Join-Path $WorkspaceFixtureDir 'workspace-status.code-workspace'
+
 $CodeArgs = @(
     '--user-data-dir'
     $UserDataDir
@@ -66,9 +73,12 @@ $CodeArgs = @(
 
 & code @CodeArgs --install-extension $Vsix.FullName --force
 
-$WorkspacePath = (Resolve-Path '.\test\spike\workspace-status.code-workspace').Path
 & code @CodeArgs --new-window $WorkspacePath
 ```
+
+The copied fixture preserves the saved workspace's relative folder layout. Make every manual
+fixture change only under `$WorkspaceFixtureDir`; the tracked files under `test/spike` remain
+unchanged.
 
 Installing the same version again with `--force` replaces the sandbox copy, so ordinary local
 testing does not require a version bump. After making another build:
@@ -96,18 +106,31 @@ VS Code creates a named profile when a workspace is opened with a profile name t
 exist. All `code` commands used for the sandbox must retain the same `--user-data-dir` and
 `--extensions-dir` values.
 
-## Faster development-host loop
+## Repeatable UI iteration
 
-For quick UI iterations, build continuously in the repository:
+The **Run Extension** F5 configuration deliberately leaves Personas' development-host safety guard
+enabled. It is useful for verifying that guard, but it does not load the functional Personas UI. For
+UI iteration, keep the supported packaged sandbox open instead:
 
 ```powershell
 npm run watch
 ```
 
-Then open **Run and Debug**, select **Run Extension**, and press F5. The repository's launch
-configuration opens an Extension Development Host with the local source. Use the packaged sandbox
-for final acceptance because the development host retains Personas's safety guard and therefore is
-not representative of every profile mutation path.
+Keep the watch process running in a separate terminal. After each completed build, run the following
+in another terminal to package the new output, refresh `$Vsix`, and reinstall it in the sandbox:
+
+```powershell
+npm run package
+
+$Vsix = Get-ChildItem -LiteralPath .\releases -Filter 'personas-*.vsix' |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+& code @CodeArgs --install-extension $Vsix.FullName --force
+```
+
+Then run **Developer: Reload Window** in the sandbox. This keeps both the VS Code state and fixture
+workspace disposable while exercising the same production-host safety behavior that users receive.
 
 ## Manual test scenarios
 
@@ -118,8 +141,8 @@ and run **Personas: Show Extension Matrix** if the matrix does not open automati
    matrix column are absent.
 2. Open a single folder and verify one read-only Current workspace card and one visually separated
    final matrix column using the folder name.
-3. Open `test/spike/workspace-status.code-workspace` and verify that the saved multi-root workspace
-   produces one aggregate card and column.
+3. Open `$WorkspacePath` and verify that the saved multi-root workspace produces one aggregate card
+   and column.
 4. Verify that **Open manifest** opens the saved `.code-workspace` file read-only and **Edit
    manifest** opens the same host-owned file for editing.
 5. Install a normal extension in the active profile and verify `Enabled` when VS Code exposes it in
@@ -200,3 +223,10 @@ When testing is complete, close every VS Code window launched with the disposabl
 entire sandbox is under the unique path stored in `$TestRoot`; inspect that value before removing
 the directory. The packaged VSIX files under `releases` are gitignored and may be retained for
 additional local testing.
+
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please) and driven by conventional commits: commits merged to `main` accumulate into a bot-managed release PR that maintains `CHANGELOG.md` and the version bump; merging that PR tags the release and publishes a GitHub Release with the packaged `.vsix` attached. No manual version edits or manual `vsce publish` are part of the normal flow.
+
+- Local packaging: `npm run package` builds a `.vsix` into `releases/` (gitignored, not committed).
+- Marketplace publishing runs automatically on each release via the `VSCE_PAT` repository secret (rotate before expiry — a failed publish step is the symptom). Manual fallback: `npx vsce publish --packagePath <released .vsix>`.
