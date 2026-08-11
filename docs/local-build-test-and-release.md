@@ -130,7 +130,7 @@ and run **Personas: Show Extension Matrix** if the matrix does not open automati
 2. Open a single folder and verify one read-only Current workspace card and one visually separated
    final matrix column using the folder name.
 3. Open `$WorkspacePath` and verify that the saved multi-root workspace produces one aggregate card
-    and column.
+   and column.
 4. Verify that **Open manifest** opens the saved `.code-workspace` file read-only and **Edit
    manifest** opens the same host-owned file for editing.
 5. Install a normal extension in the active profile and verify `Enabled` when VS Code exposes it in
