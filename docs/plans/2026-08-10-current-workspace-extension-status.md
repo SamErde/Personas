@@ -386,10 +386,10 @@ git diff --check
 - Every shown workspace state is derived from documented evidence; ambiguous cases say `Unknown`.
 - Workspace-local extensions can add rows without becoming false profile installs or false orphans.
 - Workspace-only rows cannot trigger profile CLI installation or bulk actions.
-- No workspace action mutates extension enablement, profile manifests, workspace files, or VS Code SQLite state.
+- No workspace action mutates extension enablement, profile manifests, other workspace files, or VS Code SQLite state. The explicit `Edit manifest` action may open the saved local `.code-workspace` JSON for user edits.
 - No recommendations are presented as installed or enabled.
 - Existing profile install/uninstall and orphan cleanup behavior is unchanged.
-- All unit, build, lint, integration, and manual acceptance checks pass.
+- All unit, build, lint, and integration checks pass. The disposable-sandbox manual UI acceptance checklist must pass before release.
 
 ## Risks and mitigations
 

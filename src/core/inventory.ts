@@ -58,11 +58,16 @@ export function composeInventory(input: ComposeInput): Inventory {
 
   // extension id -> set of profile ids
   const membership = new Map<string, Set<string>>();
+  const profileVersions = new Map<string, Map<string, string>>();
   const appScoped = new Set<string>();
-  const add = (id: string, profileId: string) => {
-    let set = membership.get(id);
-    if (!set) membership.set(id, (set = new Set()));
+  const appScopedEntries = new Map<string, ManifestEntry>();
+  const add = (entry: ManifestEntry, profileId: string) => {
+    let set = membership.get(entry.id);
+    if (!set) membership.set(entry.id, (set = new Set()));
     set.add(profileId);
+    let versions = profileVersions.get(entry.id);
+    if (!versions) profileVersions.set(entry.id, (versions = new Map()));
+    if (!versions.has(profileId)) versions.set(profileId, entry.version);
   };
 
   // Metadata extras (publisherDisplayName/installedTimestamp) come from the first manifest entry
@@ -82,9 +87,12 @@ export function composeInventory(input: ComposeInput): Inventory {
 
   const inheritingIds = profiles.filter((p) => p.inheritsDefaultExtensions).map((p) => p.id);
   for (const e of defaultEntries) {
-    add(e.id, 'default');
-    for (const pid of inheritingIds) add(e.id, pid);
-    if (e.isApplicationScoped) appScoped.add(e.id);
+    add(e, 'default');
+    for (const pid of inheritingIds) add(e, pid);
+    if (e.isApplicationScoped) {
+      appScoped.add(e.id);
+      if (!appScopedEntries.has(e.id)) appScopedEntries.set(e.id, e);
+    }
     noteExtras(e);
   }
 
@@ -100,14 +108,20 @@ export function composeInventory(input: ComposeInput): Inventory {
       continue;
     }
     for (const e of manifest ?? []) {
-      add(e.id, p.location);
-      if (e.isApplicationScoped) appScoped.add(e.id);
+      add(e, p.location);
+      if (e.isApplicationScoped) {
+        appScoped.add(e.id);
+        if (!appScopedEntries.has(e.id)) appScopedEntries.set(e.id, e);
+      }
       noteExtras(e);
     }
   }
 
   // App-scoped extensions are active in every profile.
-  for (const id of appScoped) for (const p of profiles) add(id, p.id);
+  for (const id of appScoped) {
+    const entry = appScopedEntries.get(id);
+    if (entry) for (const p of profiles) add(entry, p.id);
+  }
 
   // Disk folders -> versions per id (skip obsolete).
   const obsolete = new Set(input.obsoleteFolderNames);
@@ -146,10 +160,15 @@ export function composeInventory(input: ComposeInput): Inventory {
       const publisher = input.publishers?.get(id);
       const publisherDisplayName = publisherDisplayNames.get(id);
       const installedTimestampMs = installedTimestamps.get(id);
+      const selectedVersions = profiles.flatMap((profile) => {
+        const version = profileVersions.get(id)?.get(profile.id);
+        return version ? [{ profileId: profile.id, version }] : [];
+      });
       return {
         id,
         displayName: input.displayNames.get(id) ?? id,
         versions: versionsById.get(id) ?? [],
+        ...(selectedVersions.length > 0 ? { profileVersions: selectedVersions } : {}),
         applyToAllProfiles: isAppScoped,
         installedIn,
         orphaned: installedIn.length === 0 && !isAppScoped,

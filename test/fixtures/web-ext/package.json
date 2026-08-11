@@ -9,5 +9,5 @@
   "categories": ["Other"],
   "browser": "./browser.js",
   "extensionKind": ["workspace"],
-  "activationEvents": ["*"]
+  "activationEvents": []
 }

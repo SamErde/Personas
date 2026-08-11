@@ -17,6 +17,9 @@ export interface ExtensionRecord {
   id: string; // publisher.name, lowercase
   displayName: string;
   versions: DiskVersion[];
+  /** Manifest-selected version for each profile. Unlike `versions`, this preserves which
+   *  coexisting disk version the profile actually references. */
+  profileVersions?: { profileId: string; version: string }[];
   applyToAllProfiles: boolean;
   installedIn: string[]; // Profile.id values (includes inheriting profiles)
   orphaned: boolean; // derived: installedIn.length === 0 && !applyToAllProfiles

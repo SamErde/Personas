@@ -8,6 +8,8 @@ import type {
 } from '../../src/core/types';
 import type { ParsedWorkspaceProfileAssociations } from '../../src/core/parsers';
 import {
+  MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
+  MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
   WorkspaceInventoryService,
   composeWorkspaceInventory,
   createWorkspaceDescriptor,
@@ -58,6 +60,10 @@ const inventory = (options?: {
           fsPath: 'C:\\sandbox\\extensions\\pub.ext-1.2.3',
         },
       ],
+      profileVersions: (options?.installedIn ?? ['abc123']).map((profileId) => ({
+        profileId,
+        version: '1.2.3',
+      })),
       applyToAllProfiles: false,
       installedIn: options?.installedIn ?? ['abc123'],
       orphaned: false,
@@ -184,6 +190,12 @@ describe('workspace URI and profile identity', () => {
     );
   });
 
+  it('normalizes Windows UNC authorities and paths case-insensitively', () => {
+    expect(normalizeUriIdentity('file://SERVER/Share/Repo/')).toBe(
+      normalizeUriIdentity('FILE://server/share/repo'),
+    );
+  });
+
   it('returns undefined for malformed identities', () => {
     expect(normalizeUriIdentity('not a uri')).toBeUndefined();
   });
@@ -260,7 +272,7 @@ describe('workspace-local candidate discovery', () => {
           { name: 'not-a-directory', isDirectory: false },
         ];
       },
-      readFile: async (requested) => {
+      readCandidateManifest: async (requested) => {
         expect(requested).toBe(`${root}\\Local-One\\package.json`);
         return JSON.stringify({
           publisher: 'Acme',
@@ -293,7 +305,7 @@ describe('workspace-local candidate discovery', () => {
         requested.startsWith('C:\\A')
           ? new Error('access denied')
           : ['missing', 'json', 'bad-id'].map((name) => ({ name, isDirectory: true })),
-      readFile: async (requested) => {
+      readCandidateManifest: async (requested) => {
         if (requested.includes('missing')) return undefined;
         if (requested.includes('json')) return '{nope';
         return JSON.stringify({ publisher: '../bad', name: 'name' });
@@ -307,7 +319,7 @@ describe('workspace-local candidate discovery', () => {
     const rootsDescriptor = { ...descriptor, rootFsPaths: ['C:\\Z', 'C:\\A'] };
     const result = await discoverWorkspaceLocalExtensions(rootsDescriptor, {
       listEntries: async () => [{ name: 'fixture', isDirectory: true }],
-      readFile: async () => JSON.stringify({ publisher: 'Pub', name: 'Duplicate' }),
+      readCandidateManifest: async () => JSON.stringify({ publisher: 'Pub', name: 'Duplicate' }),
     });
     expect(result.candidates.map((candidate) => candidate.fsPath)).toEqual([
       'C:\\A\\.vscode\\extensions\\fixture',
@@ -316,6 +328,40 @@ describe('workspace-local candidate discovery', () => {
     expect(result.warnings).toEqual([
       'Multiple workspace roots contain local extension pub.duplicate; the effective runtime location wins.',
     ]);
+  });
+
+  it('caps deterministic entry processing per root and reports truncation', async () => {
+    const entries = Array.from({ length: MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT + 1 }, (_, index) => ({
+      name: `candidate-${String(index).padStart(3, '0')}`,
+      isDirectory: true,
+    }));
+    let reads = 0;
+    const result = await discoverWorkspaceLocalExtensions(descriptor, {
+      listEntries: async () => entries,
+      readCandidateManifest: async (_manifestPath, extensionsRoot, maxBytes) => {
+        reads += 1;
+        expect(extensionsRoot).toBe('C:\\Code\\Example\\.vscode\\extensions');
+        expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES);
+        return JSON.stringify({ publisher: 'pub', name: `candidate-${reads}` });
+      },
+    });
+    expect(reads).toBe(MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT);
+    expect(result.candidates).toHaveLength(MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT);
+    expect(result.warnings.join(' ')).toContain('discovery was truncated');
+  });
+
+  it('rejects an over-limit manifest even if an injected adapter returns it', async () => {
+    const result = await discoverWorkspaceLocalExtensions(descriptor, {
+      listEntries: async () => [{ name: 'oversized', isDirectory: true }],
+      readCandidateManifest: async () =>
+        JSON.stringify({
+          publisher: 'pub',
+          name: 'oversized',
+          description: 'x'.repeat(MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES),
+        }),
+    });
+    expect(result.candidates).toEqual([]);
+    expect(result.warnings.join(' ')).toContain('manifest exceeds');
   });
 
   it('uses boundary-aware, platform-aware path containment', () => {
@@ -476,6 +522,51 @@ describe('workspace status composition', () => {
     expect(appScoped).toMatchObject({ state: 'notEnabled', installedInActiveProfile: true });
   });
 
+  it('treats an unreadable Default manifest as unreliable for an inheriting active profile', () => {
+    const result = compose({
+      inv: inventory({
+        installedIn: ['default', 'builtin/agents'],
+        warnings: [
+          {
+            file: 'extensions.json (default profile)',
+            message: 'bad JSON',
+            affectedProfileIds: ['default'],
+          },
+        ],
+      }),
+      associations: association('agents'),
+    });
+    expect(result.extensions[0]).toMatchObject({
+      state: 'unknown',
+      installedInActiveProfile: 'unknown',
+    });
+  });
+
+  it('uses the active profile manifest or effective runtime location for the displayed version', () => {
+    const inv = inventory();
+    const extension = inv.extensions[0];
+    if (!extension) throw new Error('missing fixture extension');
+    extension.versions = [
+      { version: '2.0.0', folderName: 'pub.ext-2.0.0', fsPath: 'C:\\sandbox\\extensions\\pub.ext-2.0.0' },
+      { version: '1.0.0', folderName: 'pub.ext-1.0.0', fsPath: 'C:\\sandbox\\extensions\\pub.ext-1.0.0' },
+    ];
+    extension.profileVersions = [{ profileId: 'abc123', version: '2.0.0' }];
+
+    expect(compose({ inv }).extensions[0]?.version).toBe('2.0.0');
+    expect(
+      compose({
+        inv,
+        runtimes: [runtime('C:\\sandbox\\extensions\\pub.ext-1.0.0')],
+      }).extensions[0]?.version,
+    ).toBe('1.0.0');
+    expect(
+      compose({
+        inv,
+        runtimes: [{ ...runtime('C:\\custom\\pub.ext'), version: '3.0.0' }],
+      }).extensions[0]?.version,
+    ).toBe('3.0.0');
+  });
+
   it('does not confuse a same-id runtime outside the candidate with a workspace-local install', () => {
     const candidate = {
       id: 'pub.ext',
@@ -539,6 +630,10 @@ describe('workspace activity counts and service failures', () => {
         touched = true;
         return [];
       },
+      readCandidateManifest: async () => {
+        touched = true;
+        return undefined;
+      },
       readFile: async () => {
         touched = true;
         return undefined;
@@ -556,6 +651,7 @@ describe('workspace activity counts and service failures', () => {
         throw new Error('host unavailable');
       },
       listEntries: async () => [],
+      readCandidateManifest: async () => undefined,
       readFile: async () => undefined,
     });
     const result = await service.getWorkspaceInventory(inventory());

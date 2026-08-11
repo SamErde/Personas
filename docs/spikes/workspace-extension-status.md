@@ -7,7 +7,7 @@
 
 ## Boundary and setup
 
-The probe used only stable `vscode.workspace` and `vscode.extensions` APIs, the documented VS Code CLI, and read-only inspection of `globalStorage/storage.json`. Each run created separate temporary `--user-data-dir` and `--extensions-dir` directories. It opened only the fixtures under `test/spike`; it did not read or change the user's VS Code data.
+The probe used only stable `vscode.workspace` and `vscode.extensions` APIs, the documented VS Code CLI, and read-only inspection of `globalStorage/storage.json`. Each run created separate temporary `--user-data-dir` and `--extensions-dir` directories. API/event checks ran in the extension test host; profile-association checks used a packaged probe installed into short-lived regular VS Code windows. It opened only the fixtures under `test/spike`; it did not read or change the user's VS Code data.
 
 Run:
 
@@ -19,7 +19,7 @@ The fixture set included:
 
 - an ordinary inert profile extension;
 - an inert browser-only extension with `extensionKind: ["workspace"]`;
-- a development extension with `extensionKind: ["ui"]` that captured API snapshots;
+- a development extension with `extensionKind: ["ui"]` that captured API snapshots, then the same probe packaged and installed into both disposable profiles for regular-window association checks;
 - an unpacked but uninstalled candidate under `.vscode/extensions`; and
 - a folder plus a saved two-root `.code-workspace` fixture.
 
@@ -35,14 +35,21 @@ The fixture set included:
 | Merely placing a valid unpacked extension under `.vscode/extensions` installs it | No; absent from the API snapshot | No; absent from the API snapshot | A candidate without a matching runtime URI is `Unknown`, never installed or disabled. |
 | Single-folder descriptor URI | `file:///c%3A/.../workspace-root` | Same normalized form | Use the folder URI as the association key. |
 | Saved multi-root descriptor URI | `.code-workspace` file URI | Same normalized form | Use `workspaceFile`, not one of its roots, as the association key. |
+| Regular-window folder and saved-workspace profile associations | Confirmed | Confirmed | The exact folder or `.code-workspace` URI maps to the selected profile ID; Default is stored as `__default__profile__`. |
 
 The uninstall/reinstall portion used the public CLI rather than workspace enablement controls. It therefore verifies the stable API's positive/negative visibility and change-event behavior, but it does not identify why an installed extension is absent. The UI must say `Not enabled`, not `Disabled (Workspace)` or any other exact disable reason.
 
 ## Profile association finding
 
-Extension-development and extension-test windows intentionally do not persist workspace/profile associations. Both versions therefore left `profileAssociations.workspaces` empty even when launched with `--profile`, while still creating the named profile. This is a property of the development host, not evidence that production windows omit associations.
+Extension-development and extension-test windows intentionally do not persist workspace/profile associations. The initial test-host phase left `profileAssociations.workspaces` empty, matching the VS Code source branch that skips `setProfileForWorkspace` when `extensionDevelopmentPath` is present.
 
-Current VS Code source makes the distinction explicit: normal windows call `setProfileForWorkspace`, whereas windows with `extensionDevelopmentPath` skip persistence. The persisted map uses the exact folder or `.code-workspace` URI string as its key and the profile ID as its value; the default ID is `__default__profile__`.
+The revised association phase packaged and installed the probe extension, launched regular windows with the same disposable directories, waited for the stable workspace API descriptor, and then read `storage.json` after that window exited. On both 1.90.2 and 1.132.0:
+
+- a saved multi-root workspace opened under Default mapped its exact `.code-workspace` URI to `__default__profile__`;
+- a folder opened under `SpikeNamed` mapped its exact folder URI to that profile's generated location ID; and
+- the same saved workspace opened under `SpikeNamed` replaced the Default mapping with that same generated profile ID.
+
+This confirms the source-level distinction with production-window evidence rather than treating the development-host absence as the result. The generated named-profile IDs differed between disposable runs, as expected, so the implementation resolves them through the profile registry rather than assuming a fixed value.
 
 Implementation consequence: parse the optional map defensively and resolve only an exact, URI-normalized association. Missing, malformed, or unknown associations remain `Unknown`; do not infer the Default profile. This also protects development hosts and any startup/write race.
 

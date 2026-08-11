@@ -71,7 +71,9 @@ export function buildViewModel(
     if (state.chip === 'allProfiles' && (!profileBacked || !applyToAllProfiles)) continue;
     if (filter && !id.includes(filter) && !displayName.toLowerCase().includes(filter)) continue;
 
-    const latestVersion = extension?.versions.at(-1)?.version ?? workspaceStatus?.version;
+    // In a loaded workspace, the workspace composer has resolved the active profile manifest or
+    // effective runtime location. Never overwrite that with arbitrary disk enumeration order.
+    const latestVersion = workspace ? workspaceStatus?.version : extension?.versions.at(-1)?.version;
     const sourceLabel = workspaceStatus
       ? workspaceStatus.workspaceLocal === 'installed'
         ? 'Workspace-local'

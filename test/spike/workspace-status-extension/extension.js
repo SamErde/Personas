@@ -20,8 +20,20 @@ function snapshot(label) {
   })}\n`);
 }
 
+function writeAssociationProbe() {
+  const resultPath = process.env.PERSONAS_ASSOCIATION_PROBE_RESULT;
+  if (!resultPath) return;
+  setTimeout(() => {
+    fs.writeFileSync(resultPath, JSON.stringify({
+      workspaceFile: vscode.workspace.workspaceFile?.toString(),
+      workspaceFolders: vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString()) ?? [],
+    }, null, 2));
+  }, 1500);
+}
+
 exports.activate = function activate(context) {
   snapshot('activate');
+  writeAssociationProbe();
   context.subscriptions.push(vscode.extensions.onDidChange(() => snapshot('onDidChange')));
 };
 

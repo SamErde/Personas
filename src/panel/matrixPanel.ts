@@ -5,6 +5,7 @@ import { MutationError } from '../core/mutations';
 import type { HostToWebview, Inventory, WebviewToHost, WorkspaceInventory } from '../core/types';
 import type { Services } from '../servicesFactory';
 import { statFolder } from './fsStat';
+import { matrixContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
 // Spike B verdict (docs/spikes/findings.md): TOGGLE_SUPPORTED = no. The command
 // `workbench.extensions.action.toggleApplyToAllProfiles` exists but requires VS Code's
@@ -376,8 +377,7 @@ export class MatrixPanel {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-  content="default-src 'none'; style-src ${w.cspSource}; script-src 'nonce-${nonce}'; img-src ${w.cspSource};">
+${renderContentSecurityPolicyMeta(matrixContentSecurityPolicy(w.cspSource, nonce))}
 <link rel="stylesheet" href="${style}">
 <title>Extension Matrix</title>
 </head>

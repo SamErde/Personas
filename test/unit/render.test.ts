@@ -110,6 +110,14 @@ describe('buildViewModel', () => {
     });
   });
 
+  it('uses the workspace-resolved active version instead of the last enumerated disk version', () => {
+    const workspace = workspaceWith([
+      status('pub.a', 'enabled', { version: '9.0.0' }),
+    ]);
+    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspace);
+    expect(vm.rows.find((row) => row.extId === 'pub.a')?.version).toBe('9.0.0');
+  });
+
   it('unions workspace-only rows and makes every profile cell read-only', () => {
     const workspace = workspaceWith([
       status('local.only', 'unknown', {

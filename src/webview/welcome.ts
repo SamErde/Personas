@@ -5,6 +5,7 @@ import type {
   WelcomeToHost,
   WelcomeWorkspaceVm,
 } from '../core/types';
+import { isTrustedHostMessageOrigin } from './messageSecurity';
 
 declare function acquireVsCodeApi(): { postMessage(m: WelcomeToHost): void };
 const vscode = acquireVsCodeApi();
@@ -26,7 +27,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWelcome>) => {
   // delivered same-origin in VS Code's webview architecture. Do NOT use
   // `event.source !== window` here — the sender is the host page, never this
   // window, so that guard would silently drop every legitimate message.
-  if (event.origin !== window.location.origin) return;
+  if (!isTrustedHostMessageOrigin(event.origin, window.location.origin)) return;
   const m = event.data;
   switch (m.type) {
     case 'state':

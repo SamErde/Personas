@@ -6,5 +6,5 @@
   "engines": { "vscode": "^1.90.0" },
   "extensionKind": ["ui"],
   "main": "./extension.js",
-  "activationEvents": ["*"]
+  "activationEvents": ["onStartupFinished"]
 }

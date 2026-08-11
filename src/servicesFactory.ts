@@ -5,6 +5,7 @@ import { createNodeCliRunner, MutationService } from './core/mutations';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths } from './core/paths';
 import {
   createWorkspaceDescriptor,
+  isFsPathContained,
   WorkspaceInventoryService,
   type WorkspaceInventoryIo,
 } from './core/workspace';
@@ -61,6 +62,46 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
       return e instanceof Error ? e : new Error(String(e));
     }
   };
+  const readCandidateManifest: WorkspaceInventoryIo['readCandidateManifest'] = async (
+    p,
+    extensionsRoot,
+    maxBytes,
+  ) => {
+    try {
+      const entry = await fsp.lstat(p);
+      if (!entry.isFile() || entry.isSymbolicLink()) return new Error('manifest is not a regular file.');
+
+      const [realRoot, realManifest] = await Promise.all([
+        fsp.realpath(extensionsRoot),
+        fsp.realpath(p),
+      ]);
+      if (!isFsPathContained(realRoot, realManifest)) {
+        return new Error(`manifest resolves outside ${extensionsRoot}.`);
+      }
+
+      const handle = await fsp.open(p, 'r');
+      try {
+        const opened = await handle.stat();
+        if (!opened.isFile()) return new Error('manifest is not a regular file.');
+        if (opened.size > maxBytes) return new Error(`manifest exceeds ${maxBytes} bytes.`);
+
+        const buffer = Buffer.alloc(maxBytes + 1);
+        let total = 0;
+        while (total < buffer.length) {
+          const next = await handle.read(buffer, total, buffer.length - total, null);
+          if (next.bytesRead === 0) break;
+          total += next.bytesRead;
+        }
+        if (total > maxBytes) return new Error(`manifest exceeds ${maxBytes} bytes.`);
+        return buffer.subarray(0, total).toString('utf8');
+      } finally {
+        await handle.close();
+      }
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      return e instanceof Error ? e : new Error(String(e));
+    }
+  };
   const listDirs = async (p: string): Promise<string[] | Error> => {
     try {
       return (await fsp.readdir(p, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
@@ -99,6 +140,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const inventory = new InventoryService(paths, io);
   const workspaceIo: WorkspaceInventoryIo = {
     readFile,
+    readCandidateManifest,
     listEntries: async (p) => {
       try {
         return (await fsp.readdir(p, { withFileTypes: true })).map((entry) => ({
@@ -129,6 +171,9 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
         id: extension.id.toLowerCase(),
         uri: extension.extensionUri.toString(),
         ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
+        ...(typeof extension.packageJSON['version'] === 'string'
+          ? { version: extension.packageJSON['version'] }
+          : {}),
       })),
   };
   const workspace = new WorkspaceInventoryService(paths.storageJson, workspaceIo);

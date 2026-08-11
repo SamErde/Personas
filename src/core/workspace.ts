@@ -15,6 +15,8 @@ import type {
 
 const DEFAULT_PROFILE_SENTINEL = '__default__profile__';
 const EXTENSION_PART_RE = /^[a-z0-9][a-z0-9-]*$/i;
+export const MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT = 200;
+export const MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES = 256 * 1024;
 
 export interface WorkspaceFolderInput {
   name: string;
@@ -34,14 +36,22 @@ export interface WorkspaceRuntimeExtension {
   id: string;
   uri: string;
   fsPath?: string;
+  version?: string;
 }
 
 export interface WorkspaceCandidateIo {
-  readFile(p: string): Promise<string | undefined | Error>;
+  /** Reads one untrusted workspace manifest only when it is a bounded regular file whose real
+   *  path remains inside `extensionsRoot`. */
+  readCandidateManifest(
+    p: string,
+    extensionsRoot: string,
+    maxBytes: number,
+  ): Promise<string | undefined | Error>;
   listEntries(p: string): Promise<{ name: string; isDirectory: boolean }[] | Error>;
 }
 
 export interface WorkspaceInventoryIo extends WorkspaceCandidateIo {
+  readFile(p: string): Promise<string | undefined | Error>;
   getDescriptor(): WorkspaceDescriptor | undefined;
   getRuntimeExtensions(): WorkspaceRuntimeExtension[] | Error;
 }
@@ -115,8 +125,11 @@ export function normalizeUriIdentity(value: string): string | undefined {
     const scheme = parsed.protocol.slice(0, -1).toLowerCase();
     const authority = parsed.host.toLowerCase();
     let pathname = decodeURIComponent(parsed.pathname).replaceAll('\\', '/');
-    // File URIs with a drive letter are Windows identities and therefore case-insensitive.
-    if (scheme === 'file' && /^\/[a-z]:/i.test(pathname)) pathname = pathname.toLowerCase();
+    // File URIs with a drive letter or UNC authority are Windows identities and therefore
+    // case-insensitive. Local POSIX file paths deliberately preserve case.
+    if (scheme === 'file' && (authority !== '' || /^\/[a-z]:/i.test(pathname))) {
+      pathname = pathname.toLowerCase();
+    }
     if (pathname.length > 1) pathname = pathname.replace(/\/+$/, '');
     return `${scheme}://${authority}${pathname}${parsed.search}${parsed.hash}`;
   } catch {
@@ -189,7 +202,13 @@ export async function discoverWorkspaceLocalExtensions(
       warnings.push(`Could not inspect ${extensionsRoot}: ${listed.message}`);
       continue;
     }
-    for (const entry of [...listed].sort((a, b) => a.name.localeCompare(b.name))) {
+    const sortedEntries = [...listed].sort((a, b) => a.name.localeCompare(b.name));
+    if (sortedEntries.length > MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT) {
+      warnings.push(
+        `Stopped scanning ${extensionsRoot} after ${MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT} entries; discovery was truncated.`,
+      );
+    }
+    for (const entry of sortedEntries.slice(0, MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT)) {
       const folderName = entry.name;
       if (!isSafeImmediateChild(folderName)) {
         warnings.push(`Ignored unsafe local extension folder name "${folderName}" in ${extensionsRoot}.`);
@@ -205,13 +224,23 @@ export async function discoverWorkspaceLocalExtensions(
         continue;
       }
       const manifestPath = joinFs(folderPath, 'package.json');
-      const text = await io.readFile(manifestPath);
+      const text = await io.readCandidateManifest(
+        manifestPath,
+        extensionsRoot,
+        MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
+      );
       if (text === undefined) {
         warnings.push(`Ignored ${folderPath}: package.json is missing.`);
         continue;
       }
       if (text instanceof Error) {
         warnings.push(`Could not read ${manifestPath}: ${text.message}`);
+        continue;
+      }
+      if (Buffer.byteLength(text, 'utf8') > MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES) {
+        warnings.push(
+          `Could not read ${manifestPath}: manifest exceeds ${MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES} bytes.`,
+        );
         continue;
       }
       let manifest: Record<string, unknown>;
@@ -293,6 +322,7 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
   const profileById = new Map(input.inventory.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...candidatesById.keys()]);
   const affectedProfiles = new Set(input.inventory.warnings.flatMap((warning) => warning.affectedProfileIds));
+  const defaultProfile = input.inventory.profiles.find((profile) => profile.isDefault);
   const statuses: WorkspaceExtensionStatus[] = [];
 
   for (const id of allIds) {
@@ -308,7 +338,14 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
         ? runtimes.find((item) => item.fsPath && isFsPathContained(localMatch.fsPath, item.fsPath))
         : undefined) ?? runtimes[0];
 
-    const manifestReliable = activeProfile ? !affectedProfiles.has(activeProfile.id) : false;
+    const manifestReliable = activeProfile
+      ? !affectedProfiles.has(activeProfile.id) &&
+        !(
+          activeProfile.inheritsDefaultExtensions &&
+          defaultProfile &&
+          affectedProfiles.has(defaultProfile.id)
+        )
+      : false;
     const installedInActiveProfile: boolean | 'unknown' =
       activeProfile && manifestReliable
         ? (profileExtension?.installedIn.includes(activeProfile.id) ?? false)
@@ -329,7 +366,24 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
       runtimeSnapshotFailed: input.runtimeExtensions instanceof Error,
     });
     const metadataCandidate = localMatch ?? localCandidates[0];
-    const latestProfileVersion = profileExtension?.versions.at(-1)?.version;
+    const runtimeFsPath = runtime?.fsPath;
+    const runtimeDiskVersion =
+      runtimeFsPath && profileExtension
+        ? profileExtension.versions.find(
+            (version) =>
+              isFsPathContained(version.fsPath, runtimeFsPath) ||
+              isFsPathContained(runtimeFsPath, version.fsPath),
+          )?.version
+        : undefined;
+    const activeProfileVersion = activeProfile
+      ? profileExtension?.profileVersions?.find((item) => item.profileId === activeProfile.id)?.version
+      : undefined;
+    const effectiveVersion =
+      runtime?.version ??
+      localMatch?.version ??
+      runtimeDiskVersion ??
+      (installedInActiveProfile === true ? activeProfileVersion : undefined) ??
+      metadataCandidate?.version;
     statuses.push({
       id,
       displayName: profileExtension?.displayName ?? metadataCandidate?.displayName ?? id,
@@ -345,9 +399,7 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
       ...(profileExtension?.publisher ?? metadataCandidate?.publisher
         ? { publisher: profileExtension?.publisher ?? metadataCandidate?.publisher }
         : {}),
-      ...(latestProfileVersion ?? metadataCandidate?.version
-        ? { version: latestProfileVersion ?? metadataCandidate?.version }
-        : {}),
+      ...(effectiveVersion ? { version: effectiveVersion } : {}),
       ...(runtime?.uri ? { runtimeUri: runtime.uri } : {}),
     });
   }

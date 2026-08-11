@@ -1,9 +1,11 @@
 // Supported-API probe for current-workspace extension status.
 // Uses only disposable VS Code user-data/extension directories and public extension APIs.
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   downloadAndUnzipVSCode,
   resolveCliArgsFromVSCodeExecutablePath,
@@ -16,6 +18,8 @@ const fixtureDir = path.join(root, 'test', 'fixtures', 'hello-ext');
 const vsixPath = path.join(fixtureDir, 'fixture.vsix');
 const webFixtureDir = path.join(root, 'test', 'fixtures', 'web-ext');
 const webVsixPath = path.join(webFixtureDir, 'fixture.vsix');
+const associationProbeDir = path.join(root, 'test', 'spike', 'workspace-status-extension');
+const associationProbeVsixPath = path.join(associationProbeDir, 'association-probe.vsix');
 const vsce = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'vsce.cmd' : 'vsce');
 
 execFileSync(vsce, ['package', '--allow-missing-repository', '--out', vsixPath], {
@@ -28,6 +32,100 @@ execFileSync(vsce, ['package', '--allow-missing-repository', '--out', webVsixPat
   shell: process.platform === 'win32',
   stdio: 'inherit',
 });
+execFileSync(vsce, ['package', '--allow-missing-repository', '--out', associationProbeVsixPath], {
+  cwd: associationProbeDir,
+  shell: process.platform === 'win32',
+  stdio: 'inherit',
+});
+
+async function waitForProbeResult(resultPath, child, timeoutMs = 45000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(resultPath)) {
+    if (child.exitCode !== null) throw new Error(`regular VS Code probe exited with ${child.exitCode}`);
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${resultPath}`);
+    await delay(100);
+  }
+}
+
+async function stopDisposableWindow(child) {
+  if (child.exitCode !== null || child.pid === undefined) return;
+  const exited = once(child, 'exit');
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+    } catch {
+      if (child.exitCode === null) child.kill();
+    }
+  } else {
+    child.kill('SIGTERM');
+  }
+  await Promise.race([exited, delay(5000)]);
+  if (child.exitCode === null) {
+    child.kill('SIGKILL');
+    await Promise.race([once(child, 'exit'), delay(5000)]);
+  }
+}
+
+async function runRegularWindowAssociationProbe({ executable, target, profile, userDataDir, extensionsDir, resultPath }) {
+  const args = [
+    target,
+    '--new-window',
+    '--user-data-dir', userDataDir,
+    '--extensions-dir', extensionsDir,
+    '--disable-workspace-trust',
+    '--disable-updates',
+    '--skip-welcome',
+    '--skip-release-notes',
+    '--no-sandbox',
+  ];
+  if (profile) args.push('--profile', profile);
+  const env = { ...process.env, PERSONAS_ASSOCIATION_PROBE_RESULT: resultPath };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const child = spawn(executable, args, { env, stdio: 'ignore' });
+  try {
+    await waitForProbeResult(resultPath, child);
+    // The installed probe writes after startup; leave a short flush window for storage.json.
+    await delay(1000);
+  } finally {
+    await stopDisposableWindow(child);
+  }
+}
+
+async function ensureNamedProfile({ executable, target, profile, userDataDir, extensionsDir, storagePath }) {
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const child = spawn(executable, [
+    target,
+    '--new-window',
+    '--user-data-dir', userDataDir,
+    '--extensions-dir', extensionsDir,
+    '--profile', profile,
+    '--disable-workspace-trust',
+    '--disable-updates',
+    '--skip-welcome',
+    '--skip-release-notes',
+    '--no-sandbox',
+  ], { env, stdio: 'ignore' });
+  const deadline = Date.now() + 45000;
+  try {
+    for (;;) {
+      if (child.exitCode !== null) throw new Error(`profile-creation window exited with ${child.exitCode}`);
+      if (existsSync(storagePath)) {
+        try {
+          const storage = JSON.parse(readFileSync(storagePath, 'utf8'));
+          if (storage.userDataProfiles?.some((item) => item.name === profile)) break;
+        } catch {
+          // storage.json may be between atomic updates; retry until the deadline.
+        }
+      }
+      if (Date.now() >= deadline) throw new Error(`timed out creating disposable profile ${profile}`);
+      await delay(100);
+    }
+    await delay(500);
+  } finally {
+    await stopDisposableWindow(child);
+  }
+}
 
 delete process.env.ELECTRON_RUN_AS_NODE;
 
@@ -77,6 +175,27 @@ for (const version of versions) {
 
   const result = JSON.parse(readFileSync(resultPath, 'utf8'));
   const storagePath = path.join(userDataDir, 'User', 'globalStorage', 'storage.json');
+  execFileSync(cli, [
+    ...cliPrefix,
+    '--user-data-dir', userDataDir,
+    '--extensions-dir', extensionsDir,
+    '--install-extension', associationProbeVsixPath,
+  ], { shell: process.platform === 'win32', stdio: 'inherit' });
+  await ensureNamedProfile({
+    executable,
+    target: path.join(root, 'test', 'spike', 'workspace-root'),
+    profile: 'SpikeNamed',
+    userDataDir,
+    extensionsDir,
+    storagePath,
+  });
+  execFileSync(cli, [
+    ...cliPrefix,
+    '--user-data-dir', userDataDir,
+    '--extensions-dir', extensionsDir,
+    '--profile', 'SpikeNamed',
+    '--install-extension', associationProbeVsixPath,
+  ], { shell: process.platform === 'win32', stdio: 'inherit' });
   const associationRuns = [];
   for (const associationCase of [
     {
@@ -86,29 +205,22 @@ for (const version of versions) {
     {
       label: 'named-folder',
       target: path.join(root, 'test', 'spike', 'workspace-root'),
-      profile: 'Spike Named',
+      profile: 'SpikeNamed',
     },
     {
       label: 'named-saved-workspace',
       target: path.join(root, 'test', 'spike', 'workspace-status.code-workspace'),
-      profile: 'Spike Named',
+      profile: 'SpikeNamed',
     },
   ]) {
     const associationResultPath = path.join(sandbox, `${associationCase.label}.json`);
-    const launchArgs = [
-      associationCase.target,
-      '--user-data-dir', userDataDir,
-      '--extensions-dir', extensionsDir,
-      '--disable-workspace-trust',
-      '--skip-welcome',
-    ];
-    if (associationCase.profile) launchArgs.push('--profile', associationCase.profile);
-    await runTests({
-      vscodeExecutablePath: executable,
-      extensionDevelopmentPath: path.join(root, 'test', 'spike', 'workspace-status-extension'),
-      extensionTestsPath: path.join(root, 'test', 'spike', 'workspace-association-suite', 'index.js'),
-      launchArgs,
-      extensionTestsEnv: { PERSONAS_SPIKE_RESULT: associationResultPath },
+    await runRegularWindowAssociationProbe({
+      executable,
+      target: associationCase.target,
+      profile: associationCase.profile,
+      userDataDir,
+      extensionsDir,
+      resultPath: associationResultPath,
     });
     const storage = JSON.parse(readFileSync(storagePath, 'utf8'));
     associationRuns.push({

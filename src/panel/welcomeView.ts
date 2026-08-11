@@ -7,6 +7,8 @@ import { getOrBuildServices } from '../servicesFactory';
 import { statFolder } from './fsStat';
 import { MatrixPanel } from './matrixPanel';
 import { openReadOnly } from './readOnlyProvider';
+import { resolveWorkspaceManifestAction } from './welcomeActions';
+import { renderContentSecurityPolicyMeta, welcomeContentSecurityPolicy } from './webviewSecurity';
 
 /**
  * Sidebar mini-dashboard for the activity-bar view. Owns no business logic of its own: counts,
@@ -125,6 +127,20 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async onMessage(m: WelcomeToHost): Promise<void> {
+    if (m.type === 'openWorkspaceReadOnly' || m.type === 'editWorkspaceFile') {
+      const action = resolveWorkspaceManifestAction(m, this.workspaceManifestPath);
+      if (!action) return;
+      if (action.mode === 'readOnly') {
+        await openReadOnly(
+          `${vscode.workspace.name ?? 'Workspace'} — .code-workspace (read-only)`,
+          action.filePath,
+          'jsonc',
+        );
+      } else {
+        await this.openEditableFile(action.filePath);
+      }
+      return;
+    }
     switch (m.type) {
       case 'ready':
         await this.renderDashboard();
@@ -142,20 +158,6 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         const profile = this.profiles.find((p) => p.id === m.profileId);
         if (!profile?.filePath) return;
         await this.openEditableFile(profile.filePath);
-        return;
-      }
-      case 'openWorkspaceReadOnly': {
-        if (!this.workspaceManifestPath) return;
-        await openReadOnly(
-          `${vscode.workspace.name ?? 'Workspace'} — .code-workspace (read-only)`,
-          this.workspaceManifestPath,
-          'jsonc',
-        );
-        return;
-      }
-      case 'editWorkspaceFile': {
-        if (!this.workspaceManifestPath) return;
-        await this.openEditableFile(this.workspaceManifestPath);
         return;
       }
       case 'reviewOrphans':
@@ -185,7 +187,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+${renderContentSecurityPolicyMeta(welcomeContentSecurityPolicy(nonce))}
 <title>Personas</title>
 <style nonce="${nonce}">
   body {

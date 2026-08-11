@@ -1,5 +1,6 @@
 import type { HostToWebview, Inventory, OrphanInfo, WebviewToHost, WorkspaceInventory } from '../core/types';
 import { buildViewModel, formatBytes, supportsProfileActions, type Chip, type RowVm } from './render';
+import { isTrustedHostMessageOrigin } from './messageSecurity';
 
 declare function acquireVsCodeApi(): { postMessage(m: WebviewToHost): void };
 const vscode = acquireVsCodeApi();
@@ -343,7 +344,7 @@ window.addEventListener(
 // ---------------------------------------------------------------------------------------------
 
 window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
-  if (event.origin !== window.location.origin) return;
+  if (!isTrustedHostMessageOrigin(event.origin, window.location.origin)) return;
 
   const m = event.data;
   switch (m.type) {
