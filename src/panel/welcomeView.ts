@@ -282,7 +282,6 @@ ${renderContentSecurityPolicyMeta(welcomeContentSecurityPolicy(nonce))}
 </head>
 <body>
 <div id="launcher">
-<p>The extension matrix opens as an editor tab.</p>
 <button id="open">Open Extension Matrix</button>
 </div>
 <div id="dashboard">
