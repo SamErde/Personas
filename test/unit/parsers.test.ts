@@ -72,6 +72,7 @@ describe('parseWorkspaceProfileAssociations', () => {
         profileAssociations: {
           workspaces: {
             '': 'profile-id',
+            '   ': 'profile-id',
             'file:///valid': '__default__profile__',
             'file:///number': 42,
             'file:///blank': '   ',
@@ -80,7 +81,8 @@ describe('parseWorkspaceProfileAssociations', () => {
       }),
     );
     expect([...parsed.workspaces]).toEqual([['file:///valid', '__default__profile__']]);
-    expect(parsed.warnings).toHaveLength(3);
+    expect(parsed.warnings).toHaveLength(4);
+    expect(parsed.warnings.filter((warning) => warning.endsWith('for <empty key>.'))).toHaveLength(2);
   });
 
   it('fails closed when the associations container or workspace map has the wrong shape', () => {

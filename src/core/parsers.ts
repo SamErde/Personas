@@ -83,8 +83,9 @@ export function parseWorkspaceProfileAssociations(text: string): ParsedWorkspace
   const workspaces = new Map<string, string>();
   const warnings: string[] = [];
   for (const [uri, profileId] of Object.entries(rawWorkspaces as Record<string, unknown>)) {
+    const displayUri = uri.trim() === '' ? '<empty key>' : uri;
     if (uri.trim() === '' || typeof profileId !== 'string' || profileId.trim() === '') {
-      warnings.push(`Ignored malformed workspace profile association for ${uri || '<empty key>'}.`);
+      warnings.push(`Ignored malformed workspace profile association for ${displayUri}.`);
       continue;
     }
     workspaces.set(uri, profileId);
