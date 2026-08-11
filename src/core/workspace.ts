@@ -494,7 +494,7 @@ export function workspaceWatchTargets(descriptor: WorkspaceDescriptor): Workspac
     pattern: '.vscode/extensions/**',
   }));
   if (descriptor.manifestFsPath) {
-    const windows = /^[a-z]:[\\/]/i.test(descriptor.manifestFsPath) || descriptor.manifestFsPath.includes('\\');
+    const windows = isWindowsFsPath(descriptor.manifestFsPath);
     const pathApi = windows ? path.win32 : path.posix;
     targets.push({
       baseFsPath: pathApi.dirname(descriptor.manifestFsPath),
@@ -559,15 +559,19 @@ export function isFsPathContained(parent: string, child: string): boolean {
 }
 
 function normalizeFsPath(value: string): string {
-  const windows = /^[a-z]:[\\/]/i.test(value) || value.includes('\\');
+  const windows = isWindowsFsPath(value);
   const resolved = windows ? path.win32.resolve(value) : path.posix.resolve(value);
-  const slashed = resolved.replaceAll('\\', '/').replace(/\/+$/, '');
+  const slashed = (windows ? resolved.replaceAll('\\', '/') : resolved).replace(/\/+$/, '');
   return windows ? slashed.toLowerCase() : slashed;
 }
 
 function joinFs(root: string, ...parts: string[]): string {
-  const windows = /^[a-z]:[\\/]/i.test(root) || root.includes('\\');
+  const windows = isWindowsFsPath(root);
   return (windows ? path.win32.join(root, ...parts) : path.posix.join(root, ...parts));
+}
+
+function isWindowsFsPath(value: string): boolean {
+  return /^[a-z]:[\\/]/i.test(value) || /^\\\\/.test(value);
 }
 
 function isSafeImmediateChild(value: string): boolean {

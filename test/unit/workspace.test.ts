@@ -379,6 +379,24 @@ describe('workspace-local candidate discovery', () => {
     ]);
   });
 
+  it('preserves a literal backslash in an absolute POSIX workspace path', () => {
+    const posixDescriptor = {
+      ...descriptor,
+      rootFsPaths: ['/home/me/repo\\archive'],
+      manifestFsPath: '/home/me/shared\\name.code-workspace',
+    };
+    expect(workspaceExtensionsRootPaths(posixDescriptor)).toEqual([
+      '/home/me/repo\\archive/.vscode/extensions',
+    ]);
+    expect(workspaceWatchTargets(posixDescriptor)).toEqual([
+      { baseFsPath: '/home/me/repo\\archive', pattern: '.vscode/extensions/**' },
+      { baseFsPath: '/home/me', pattern: 'shared\\name.code-workspace' },
+    ]);
+    expect(isFsPathContained('/home/me/repo\\archive', '/home/me/repo\\archive/child')).toBe(true);
+    expect(isFsPathContained('/home/me/repo\\archive', '/home/me/repo/archive/child')).toBe(false);
+    expect(isFsPathContained('/home/me/Repo\\archive', '/home/me/repo\\archive/child')).toBe(false);
+  });
+
   it('builds narrow patterns that catch candidate-root creation and saved-manifest changes', () => {
     expect(
       workspaceWatchTargets({
