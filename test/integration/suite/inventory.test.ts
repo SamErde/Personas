@@ -11,6 +11,7 @@ import {
   createWorkspaceDescriptor,
   type WorkspaceInventoryIo,
 } from '../../../src/core/workspace';
+import { readBoundedWorkspaceManifest } from '../../../src/workspaceFileIo';
 
 const SUITE_TIMEOUT_MS = 120000;
 
@@ -61,26 +62,7 @@ const workspaceIo: WorkspaceInventoryIo = {
       return error instanceof Error ? error : new Error(String(error));
     }
   },
-  readCandidateManifest: async (p, extensionsRoot, maxBytes) => {
-    try {
-      const item = fs.lstatSync(p);
-      if (!item.isFile() || item.isSymbolicLink()) return new Error('manifest is not a regular file.');
-      const realRoot = fs.realpathSync(extensionsRoot);
-      const realManifest = fs.realpathSync(p);
-      const relative = path.relative(realRoot, realManifest);
-      if (relative.startsWith('..') || path.isAbsolute(relative)) {
-        return new Error(`manifest resolves outside ${extensionsRoot}.`);
-      }
-      if (item.size > maxBytes) return new Error(`manifest exceeds ${maxBytes} bytes.`);
-      const text = fs.readFileSync(p, 'utf8');
-      return Buffer.byteLength(text, 'utf8') <= maxBytes
-        ? text
-        : new Error(`manifest exceeds ${maxBytes} bytes.`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      return error instanceof Error ? error : new Error(String(error));
-    }
-  },
+  readCandidateManifest: readBoundedWorkspaceManifest,
   listEntries: async (p) => {
     try {
       return fs.readdirSync(p, { withFileTypes: true }).map((entry) => ({
