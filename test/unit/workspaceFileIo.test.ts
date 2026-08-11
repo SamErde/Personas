@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readBoundedWorkspaceManifest } from '../../src/workspaceFileIo';
+import { listBoundedWorkspaceEntries, readBoundedWorkspaceManifest } from '../../src/workspaceFileIo';
 
 const temporaryRoots: string[] = [];
 
@@ -17,6 +17,32 @@ async function candidatePath(): Promise<{ root: string; manifest: string }> {
 
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe('listBoundedWorkspaceEntries', () => {
+  it('reads at most the cap plus one entry and closes the directory', async () => {
+    const source = ['one', 'two', 'three', 'four'];
+    let reads = 0;
+    let closed = false;
+    const result = await listBoundedWorkspaceEntries('workspace-controlled', 2, async () => ({
+      read: async () => {
+        const name = source[reads];
+        reads += 1;
+        return name ? { name, isDirectory: () => true } : null;
+      },
+      close: async () => {
+        closed = true;
+      },
+    }));
+
+    expect(result).toEqual([
+      { name: 'one', isDirectory: true },
+      { name: 'two', isDirectory: true },
+      { name: 'three', isDirectory: true },
+    ]);
+    expect(reads).toBe(3);
+    expect(closed).toBe(true);
+  });
 });
 
 describe('readBoundedWorkspaceManifest', () => {

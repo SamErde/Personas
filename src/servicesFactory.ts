@@ -4,11 +4,12 @@ import { InventoryService, type InventoryIo } from './core/inventory';
 import { createNodeCliRunner, MutationService } from './core/mutations';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths } from './core/paths';
 import {
+  MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
   createWorkspaceDescriptor,
   WorkspaceInventoryService,
   type WorkspaceInventoryIo,
 } from './core/workspace';
-import { readBoundedWorkspaceManifest } from './workspaceFileIo';
+import { listBoundedWorkspaceEntries, readBoundedWorkspaceManifest } from './workspaceFileIo';
 
 export type Services = {
   inventory: InventoryService;
@@ -101,17 +102,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const workspaceIo: WorkspaceInventoryIo = {
     readFile,
     readCandidateManifest: readBoundedWorkspaceManifest,
-    listEntries: async (p) => {
-      try {
-        return (await fsp.readdir(p, { withFileTypes: true })).map((entry) => ({
-          name: entry.name,
-          isDirectory: entry.isDirectory(),
-        }));
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
-        return e instanceof Error ? e : new Error(String(e));
-      }
-    },
+    listEntries: (p) => listBoundedWorkspaceEntries(p, MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT),
     getDescriptor: () =>
       createWorkspaceDescriptor({
         name: vscode.workspace.name,

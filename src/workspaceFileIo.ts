@@ -1,9 +1,51 @@
 import { constants } from 'node:fs';
-import { open, lstat, realpath, type FileHandle } from 'node:fs/promises';
+import { open, lstat, opendir, realpath, type FileHandle } from 'node:fs/promises';
 import { isFsPathContained } from './core/workspace';
+
+interface WorkspaceDirectoryEntry {
+  name: string;
+  isDirectory(): boolean;
+}
+
+interface WorkspaceDirectoryReader {
+  read(): Promise<WorkspaceDirectoryEntry | null>;
+  close(): Promise<void>;
+}
+
+type OpenWorkspaceDirectory = (p: string) => Promise<WorkspaceDirectoryReader>;
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+/** Enumerate only enough workspace-controlled entries to fill the cap and detect truncation. */
+export async function listBoundedWorkspaceEntries(
+  p: string,
+  maxEntries: number,
+  openDirectory: OpenWorkspaceDirectory = opendir,
+): Promise<{ name: string; isDirectory: boolean }[] | Error> {
+  let directory: WorkspaceDirectoryReader | undefined;
+  try {
+    directory = await openDirectory(p);
+    const entries: { name: string; isDirectory: boolean }[] = [];
+    while (entries.length <= maxEntries) {
+      const entry = await directory.read();
+      if (!entry) break;
+      entries.push({ name: entry.name, isDirectory: entry.isDirectory() });
+    }
+    return entries;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    return asError(error);
+  } finally {
+    if (directory) {
+      try {
+        await directory.close();
+      } catch {
+        // A failed close cannot make already bounded directory metadata unsafe to consume.
+      }
+    }
+  }
 }
 
 async function openManifest(p: string): Promise<FileHandle | undefined | Error> {

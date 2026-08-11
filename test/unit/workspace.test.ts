@@ -191,6 +191,34 @@ describe('workspace URI and profile identity', () => {
     );
   });
 
+  it('preserves literal backslashes in POSIX file URIs', () => {
+    expect(normalizeUriIdentity('file:///home/me/repo%5Carchive')).toBe('file:///home/me/repo\\archive');
+    expect(normalizeUriIdentity('file:///home/me/repo%5Carchive')).not.toBe(
+      normalizeUriIdentity('file:///home/me/repo/archive'),
+    );
+
+    const result = resolveActiveProfile(
+      { ...descriptor, associationUri: 'file:///home/me/repo%5Carchive' },
+      {
+        workspaces: new Map([
+          ['file:///home/me/repo%5Carchive', 'abc123'],
+          ['file:///home/me/repo/archive', '__default__profile__'],
+        ]),
+        warnings: [],
+        present: true,
+      },
+      profiles,
+    );
+    expect(result.profile?.id).toBe('abc123');
+    expect(result.warnings.join(' ')).not.toContain('Conflicting');
+  });
+
+  it('normalizes encoded Windows backslashes as separators', () => {
+    expect(normalizeUriIdentity('file:///C:/Code%5CExample')).toBe(
+      normalizeUriIdentity('file:///c:/code/example'),
+    );
+  });
+
   it('normalizes Windows UNC authorities and paths case-insensitively', () => {
     expect(normalizeUriIdentity('file://SERVER/Share/Repo/')).toBe(
       normalizeUriIdentity('FILE://server/share/repo'),

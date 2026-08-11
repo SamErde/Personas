@@ -118,7 +118,13 @@ function basenameFromUri(value: string | undefined): string | undefined {
   try {
     const parsed = new URL(value);
     const decoded = decodeURIComponent(parsed.pathname);
-    const base = decoded.replaceAll('\\', '/').split('/').filter(Boolean).at(-1);
+    const isWindowsFile =
+      parsed.protocol.toLowerCase() === 'file:' &&
+      (parsed.host !== '' || /^\/[a-z]:(?:[\\/]|$)/i.test(decoded));
+    const base = (isWindowsFile ? decoded.replaceAll('\\', '/') : decoded)
+      .split('/')
+      .filter(Boolean)
+      .at(-1);
     return base?.replace(/\.code-workspace$/i, '');
   } catch {
     return undefined;
@@ -131,11 +137,12 @@ export function normalizeUriIdentity(value: string): string | undefined {
     const parsed = new URL(value);
     const scheme = parsed.protocol.slice(0, -1).toLowerCase();
     const authority = parsed.host.toLowerCase();
-    let pathname = decodeURIComponent(parsed.pathname).replaceAll('\\', '/');
+    let pathname = decodeURIComponent(parsed.pathname);
     // File URIs with a drive letter or UNC authority are Windows identities and therefore
-    // case-insensitive. Local POSIX file paths deliberately preserve case.
-    if (scheme === 'file' && (authority !== '' || /^\/[a-z]:/i.test(pathname))) {
-      pathname = pathname.toLowerCase();
+    // case-insensitive and normalize either separator. Local POSIX file paths deliberately
+    // preserve case and literal backslashes because those are valid filename characters.
+    if (scheme === 'file' && (authority !== '' || /^\/[a-z]:(?:[\\/]|$)/i.test(pathname))) {
+      pathname = pathname.replaceAll('\\', '/').toLowerCase();
     }
     if (pathname.length > 1) pathname = pathname.replace(/\/+$/, '');
     return `${scheme}://${authority}${pathname}${parsed.search}${parsed.hash}`;
