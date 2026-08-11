@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.0.0](https://github.com/SamErde/Personas/compare/v0.8.6...v1.0.0) (2026-08-11)
+
+
+### Features
+
+* show current workspace extension status ([c063ac7](https://github.com/SamErde/Personas/commit/c063ac71e0b0c2ca4f4d52e1a88551155b246a39))
+
 ## [0.8.6](https://github.com/SamErde/Personas/compare/v0.8.5...v0.8.6) (2026-07-06)
 
 
