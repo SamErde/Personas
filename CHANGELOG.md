@@ -2,6 +2,61 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.0.0] - 2026-08-11
+
+Personas 1.0 is the first stable release. It adds current-workspace extension
+visibility alongside the existing profile extension matrix and orphan-cleanup
+tools. No configuration changes or migration steps are required.
+
+### Added
+
+- A read-only **Current workspace** card in the Primary Side Bar whenever a
+  folder or workspace is open. The card shows the workspace name, associated
+  VS Code profile when it can be determined, extension counts, and any
+  limitations affecting the reported status.
+- A visually separated **Current workspace** column in the Extension Matrix.
+- Workspace extension statuses of **Enabled**, **Not enabled**,
+  **Not installed in profile**, **Workspace-local**, and **Unknown**, based only
+  on evidence available through supported VS Code APIs and documented files.
+- Discovery of unpacked workspace-local extensions under
+  `.vscode/extensions`, including extensions that are not installed in any
+  VS Code profile.
+- Read-only **Open** and explicit **Edit** actions for a saved local
+  `.code-workspace` manifest.
+- Automatic workspace-status refreshes when extensions, workspace folders,
+  workspace trust, local extension manifests, or the saved workspace manifest
+  change.
+- A local build, packaging, isolated-sandbox testing, versioning, and release
+  guide for contributors.
+
+### Changed
+
+- Workspace-local extension rows are clearly identified with `✓ W` and remain
+  read-only for profile operations, preventing profile toggles or bulk actions
+  from being applied to potentially unpublished local extensions.
+- Workspace names are displayed without the redundant `(Workspace)` suffix.
+- The Current workspace card has clearer visual separation from the profile
+  list.
+- Pending matrix operations now use the Personas Cell Sky cyan treatment for
+  clearer and more consistent feedback.
+- Workspace recommendations remain distinct from installation state;
+  `.vscode/extensions.json` recommendations are not reported as installed or
+  enabled extensions.
+
+### Fixed
+
+- Overlapping matrix and Primary Side Bar refreshes can no longer publish
+  mismatched workspace and profile snapshots.
+- Workspace-to-profile association matching now preserves POSIX path semantics
+  while continuing to normalize Windows drive-letter and UNC paths correctly.
+- Workspace-local extension discovery is bounded by entry count and manifest
+  size, and safely handles missing files, malformed manifests, symbolic links,
+  non-regular files, path escapes, and duplicate extension identities.
+- Unavailable or contradictory workspace evidence now produces an explicit
+  **Unknown** status instead of a guessed result.
+
+[1.0.0]: https://github.com/SamErde/Personas/compare/v0.8.6...v1.0.0
+
 ## [0.8.6](https://github.com/SamErde/Personas/compare/v0.8.5...v0.8.6) (2026-07-06)
 
 
