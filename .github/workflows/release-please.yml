@@ -27,6 +27,7 @@ jobs:
   release:
     permissions:
       contents: write
+      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
