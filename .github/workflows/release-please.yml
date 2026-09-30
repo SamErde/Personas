@@ -6,8 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 # Serialize runs: a release-PR merge and a fast follow-up push must not
 # interleave their release/PR phases.
@@ -25,7 +24,11 @@ concurrency:
 jobs:
   # Phase 1: process a merged release PR -> create the DRAFT release.
   # Never creates/updates release PRs (skip-github-pull-request).
+  # release-please creates the release and comments on/updates labels on its source PR.
   release:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -33,7 +36,7 @@ jobs:
       # Draft releases have no git tag until published — job 2 checks out by SHA.
       sha: ${{ steps.release.outputs.sha }}
     steps:
-      - uses: googleapis/release-please-action@v5
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
         with:
           # Default GITHUB_TOKEN. Note: releases/tags created with the default
@@ -49,13 +52,16 @@ jobs:
   package-and-publish:
     needs: release
     if: ${{ needs.release.outputs.release_created }}
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # SHA, not tag: the draft release has no tag until published below.
           ref: ${{ needs.release.outputs.sha }}
-      - uses: actions/setup-node@v7
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 20
           cache: npm
@@ -87,9 +93,11 @@ jobs:
   publish-marketplace:
     needs: [release, package-and-publish]
     if: ${{ needs.release.outputs.release_created }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 20
       - name: Download released VSIX
@@ -112,9 +120,12 @@ jobs:
       ${{ !cancelled()
           && needs.release.result == 'success'
           && contains(fromJSON('["success", "skipped"]'), needs.package-and-publish.result) }}
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v5
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
