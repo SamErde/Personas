@@ -24,10 +24,11 @@ concurrency:
 jobs:
   # Phase 1: process a merged release PR -> create the DRAFT release.
   # Never creates/updates release PRs (skip-github-pull-request).
+  # release-please creates the release and comments on/updates labels on its source PR.
   release:
     permissions:
       contents: write
-      pull-requests: read
+      pull-requests: write
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
