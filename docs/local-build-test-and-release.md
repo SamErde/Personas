@@ -14,6 +14,13 @@ need a new version, while release-please owns every committed version change.
 
 The disposable commands below isolate both VS Code user data and installed extensions. They do not
 read or change the profiles or extensions in the normal VS Code installation.
+The required `engines.vscode: ^1.90.0` declares a minimum, not a cap on later 1.x
+releases. Keep `@types/vscode` on the 1.90 API line while this is the minimum:
+compiling against those types checks that extension code does not depend on newer
+VS Code APIs. A sandbox probe exercised workspace APIs on 1.90.2 (see
+`docs/spikes/workspace-extension-status.md`); that probe does not establish runtime
+compatibility with every later release. If the minimum changes, update the engine,
+types range, and Dependabot ignore rule together after testing.
 
 ## Build and package
 

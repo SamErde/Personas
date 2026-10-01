@@ -17,6 +17,11 @@ updates:
       npm-dev-dependencies:
         dependency-type: "development"
     ignore:
+      # VS Code API types must describe the minimum supported engine (1.90),
+      # not the newest editor. Upgrade both together after compatibility review;
+      # packaging rejects a newer @types/vscode than engines.vscode.
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       # @types/node tracks the VS Code extension-host runtime (Node 22 for the
       # supported engine range), NOT the newest Node. Newer types would let
       # code typecheck against APIs the host doesn't have. Bump the major here
