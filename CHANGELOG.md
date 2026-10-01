@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.0.1](https://github.com/SamErde/Personas/compare/v1.0.0...v1.0.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep VS Code API types aligned with supported engine ([#58](https://github.com/SamErde/Personas/issues/58)) ([9299de8](https://github.com/SamErde/Personas/commit/9299de897814a8a8a4ac3d779f2d2b75d1c25902))
+
 ## [1.0.0] - 2026-08-11
 
 Personas 1.0 is the first stable release. It adds current-workspace extension
