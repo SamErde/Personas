@@ -7,7 +7,7 @@ need a new version, while release-please owns every committed version change.
 
 ## Prerequisites
 
-- Node.js (managed via `/.nvmrc` and currently using the latest LTS release)
+- Node.js (managed via `.nvmrc` and currently using the latest LTS release)
 - npm
 - VS Code 1.90 or newer with the `code` command available in `PATH`
 - A PowerShell terminal opened at the repository root
