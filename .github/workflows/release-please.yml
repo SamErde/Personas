@@ -117,7 +117,7 @@ jobs:
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx --yes @vscode/vsce@3 publish --packagePath releases/*.vsix
+        run: npx --yes @vscode/vsce@4 publish --packagePath releases/*.vsix
 
   # Phase 3: create/update the NEXT release PR — only after the GitHub release
   # is sealed (phase 2), so the boundary lookup succeeds. Independent of the
