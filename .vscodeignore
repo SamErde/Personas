@@ -17,3 +17,6 @@ release-please-config.json
 assets/
 scripts/
 .vscode/
+.nvmrc
+CLAUDE.md
+vitest.config.*
