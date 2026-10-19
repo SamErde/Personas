@@ -42,3 +42,17 @@ renamed from "Profile Extension Manager" — earliest working name "Visex".)
 - `docs/project-memory/` — development history and release-workflow detail.
 - `docs/spikes/findings.md` — verified VS Code state-file / CLI facts.
 - `docs/superpowers/` — original design spec and implementation plan.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `SamErde/Personas` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/` (created lazily). See `docs/agents/domain.md`.
