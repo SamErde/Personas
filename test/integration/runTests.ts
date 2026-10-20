@@ -34,7 +34,10 @@ async function main(): Promise<void> {
   // This machine sets ELECTRON_RUN_AS_NODE=1 globally, which makes runTests() spawn Code.exe as a bare Node process instead of the real GUI (docs/spikes/findings.md, Spike B).
   delete process.env.ELECTRON_RUN_AS_NODE;
 
+  // PERSONAS_IT_VSCODE_VERSION pins the VS Code build under test (for example the 1.90.2
+  // engine minimum); unset means the latest stable release.
   await runTests({
+    version: process.env.PERSONAS_IT_VSCODE_VERSION || 'stable',
     extensionDevelopmentPath,
     extensionTestsPath,
     launchArgs: [

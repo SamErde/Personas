@@ -34,8 +34,7 @@ Inter (700 wordmark, 400 taglines). Fallback: Segoe UI, sans-serif.
 "name": "personas",
 "displayName": "Personas",
 "description": "Easily manage your dev personas: the different Git identities, VS Code profiles, and extensions that you need in different contexts.",
-"keywords": ["profile switcher", "git identity", "switch identity", "multiple accounts", "manage extensions", "profiles", "includeIf", "gitconfig", "persona"],
-"icon": "images/icon-256.png",
+"icon": "media/icon-256.png",
 "galleryBanner": { "color": "#16213E", "theme": "dark" }
 ```
 
@@ -47,7 +46,6 @@ Inter (700 wordmark, 400 taglines). Fallback: Segoe UI, sans-serif.
 - `social-preview.svg`, `social-preview.png` (1280×640) — GitHub social preview
 - `blog-hero.svg/png` (1600×840) — personas blog series hero
 - `marketplace-mockup`, `matrix-ui-mockup` — design previews (staged data)
-- `archive/` — earlier "Profile Extension Manager" and puzzle-matrix assets
 
 ## Usage rules
 

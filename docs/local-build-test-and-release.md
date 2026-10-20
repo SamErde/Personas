@@ -197,13 +197,15 @@ Do not use any of the following as part of normal development or release prepara
 
 ## Versioning and publishing
 
-Personas uses conventional commits and release-please:
+Releases are automated with [release-please](https://github.com/googleapis/release-please) and
+driven by conventional commits: commits merged to `main` accumulate into a bot-managed release PR
+that maintains `CHANGELOG.md` and the version bump.
 
 - `fix:` normally requests a patch release.
 - `feat:` normally requests a minor release.
 - a breaking conventional commit requests the corresponding breaking release.
 
-For example, a `feat:` release after version `0.8.6` normally becomes `0.9.0`, assuming no other
+For example, a `feat:` release after version `1.0.1` normally becomes `1.1.0`, assuming no other
 release-driving commits change the result. Do not apply that number on the feature branch.
 
 The normal publication sequence is:
@@ -216,13 +218,25 @@ The normal publication sequence is:
 4. Merge the release PR.
 5. The release workflow runs lint, build, unit tests, and disposable integration tests; packages the
    VSIX; attaches it to a draft GitHub release; and publishes the GitHub release.
-6. A separate job publishes that exact released VSIX to the VS Code Marketplace. A Marketplace
-   failure remains visible without changing the sealed GitHub release.
+6. A separate job publishes that exact released VSIX to the VS Code Marketplace using the
+   `VSCE_PAT` repository secret. A Marketplace failure remains visible without changing the sealed
+   GitHub release.
 
 To require a specific next release version, add a conventional commit containing a
-`Release-As: X.Y.Z` footer. Do not hand-edit the version files to force it. Use manual Marketplace
-publication only as the explicit recovery procedure documented in the release workflow after a
-Marketplace job failure; it is not the normal publishing path.
+`Release-As: X.Y.Z` footer. Do not hand-edit the version files to force it.
+
+### Recovering a failed Marketplace publish
+
+A failed `publish-marketplace` job is the usual symptom of an expired `VSCE_PAT`; rotate the secret
+before it expires. To recover, re-run that job from the GitHub Actions UI. This is the supported
+path, and it publishes the same sealed VSIX.
+
+If re-running the job is not possible, the maintainer may publish the already-released VSIX by hand
+as a last resort: download it from the GitHub release and run
+`npx @vscode/vsce publish --packagePath <file>`. This is the only exception to the "never run
+`vsce publish` manually" rule. It must use `--packagePath` with the released file (never a version
+argument such as `patch`, which bumps and publishes a version release-please does not know about),
+and an agent must not run it.
 
 ## Cleanup
 
@@ -230,10 +244,3 @@ When testing is complete, close every VS Code window launched with the disposabl
 entire sandbox is under the unique path stored in `$TestRoot`; inspect that value before removing
 the directory. The packaged VSIX files under `releases` are gitignored and may be retained for
 additional local testing.
-
-## Releasing
-
-Releases are automated with [release-please](https://github.com/googleapis/release-please) and driven by conventional commits: commits merged to `main` accumulate into a bot-managed release PR that maintains `CHANGELOG.md` and the version bump; merging that PR tags the release and publishes a GitHub Release with the packaged `.vsix` attached. No manual version edits or manual `vsce publish` are part of the normal flow.
-
-- Local packaging: `npm run package` builds a `.vsix` into `releases/` (gitignored, not committed).
-- Marketplace publishing runs automatically on each release via the `VSCE_PAT` repository secret (rotate before expiry — a failed publish step is the symptom). Manual fallback: `npx vsce publish --packagePath <released .vsix>`.

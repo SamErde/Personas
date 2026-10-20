@@ -34,6 +34,11 @@ jobs:
       - name: Integration tests (Linux under Xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:integration
+      - name: Integration tests on the minimum engine, VS Code 1.90.2 (Linux under Xvfb)
+        if: runner.os == 'Linux'
+        env:
+          PERSONAS_IT_VSCODE_VERSION: 1.90.2
+        run: xvfb-run -a npm run test:integration
       - name: Integration tests
         if: runner.os != 'Linux'
         run: npm run test:integration

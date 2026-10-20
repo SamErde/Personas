@@ -2,16 +2,18 @@
 
 VS Code extension: an **extensions × profiles matrix** with cross-profile
 install/uninstall (via the `code` CLI) and orphaned-extension cleanup. Published as
-`SamErde.personas`. (Repo folder is still `Profile-Extension-Manager`; the extension was
-renamed from "Profile Extension Manager" — earliest working name "Visex".)
+`SamErde.personas`. (The extension was renamed from "Profile Extension Manager" —
+earliest working name "Visex".)
 
 ## Workflow — important
 
 - **PRs only.** Never commit directly to `main`; branch + PR.
 - **release-please owns versioning.** Never hand-edit `version` in `package.json` /
   `package-lock.json` / `.release-please-manifest.json`, and never run `vsce publish`
-  manually. Merging a release PR tags the version and publishes. To force a version, use a
-  `Release-As: x.y.z` commit footer.
+  manually. (The one maintainer-only exception, recovering a failed Marketplace job, is in
+  `docs/local-build-test-and-release.md`; an agent never runs it.) Merging a release PR
+  tags the version and publishes. To force a version, use a `Release-As: x.y.z` commit
+  footer.
 - Marketplace publish runs as its **own** workflow job, so a publish failure is visible
   without blocking the next release PR (see `.github/workflows/release-please.yml`).
 

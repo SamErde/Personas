@@ -1,8 +1,19 @@
 # Personas: Design Spec
 
 **Date:** 2026-07-03
-**Status:** Approved design, pending implementation plan
+**Status:** Shipped / superseded (see the note below)
 **Naming note:** originally drafted under the working name "Visex"; the extension was subsequently renamed to **Personas** (identifier `personas`).
+
+> **Status: Shipped / superseded.** This document is the historical design spec for Personas
+> v1 and is no longer maintained. These claims in it are no longer true:
+>
+> - Integration tests use `node:test`, not mocha.
+> - The toolchain is pinned by `.nvmrc` (latest Node.js LTS), not "Node 20+". Separately,
+>   `@types/node` tracks the extension-host runtime of the minimum VS Code engine.
+> - "Apply to all profiles" cannot be toggled through VS Code's built-in command from an
+>   extension; Personas ships a guided fallback instead (`docs/spikes/findings.md`, Spike B).
+>
+> The current state lives in the code, `CLAUDE.md`, and `docs/spikes/findings.md`.
 
 ## Purpose
 
