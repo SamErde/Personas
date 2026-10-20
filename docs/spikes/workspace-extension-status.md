@@ -89,16 +89,15 @@ workspace, profile registry, and extension directory were not used.
 
 ## Manual follow-up
 
-**Status: passed.** The manual UI acceptance below was completed in a disposable sandbox and
-passed, as reported by the maintainer in issue #68. The original note follows for context.
-
-The following UI checks remain manual because the app-control helper was unavailable:
+**Status: passed.** The manual UI checks listed below were completed in a disposable sandbox
+and passed, as reported by the maintainer in issue #68:
 
 - Disable (Workspace), re-enable, and observe the refresh/restart flow;
 - install the local candidate from the Workspace Recommendations view and confirm the public runtime URI; and
 - exercise the final Personas activity card and matrix states after implementation.
 
-Until those checks are completed, the implementation fails closed exactly as described above and exposes `Unknown` for insufficient evidence.
+These checks were manual because the app-control helper was unavailable. The implementation still
+fails closed as described above, exposing `Unknown` wherever evidence is insufficient.
 
 ## References
 
