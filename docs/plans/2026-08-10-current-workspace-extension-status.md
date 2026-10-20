@@ -389,7 +389,7 @@ git diff --check
 - No workspace action mutates extension enablement, profile manifests, other workspace files, or VS Code SQLite state. The explicit `Edit manifest` action may open the saved local `.code-workspace` JSON for user edits.
 - No recommendations are presented as installed or enabled.
 - Existing profile install/uninstall and orphan cleanup behavior is unchanged.
-- All unit, build, lint, and integration checks pass. The disposable-sandbox manual UI acceptance checklist must pass before release. (Passed; recorded in #68.)
+- All unit, build, lint, and integration checks pass. The disposable-sandbox manual UI acceptance checklist must pass before release. (Passed, as reported by the maintainer in issue #68.)
 
 ## Risks and mitigations
 

@@ -90,7 +90,7 @@ workspace, profile registry, and extension directory were not used.
 ## Manual follow-up
 
 **Status: passed.** The manual UI acceptance below was completed in a disposable sandbox and
-passed (recorded in #68). The original note follows for context.
+passed, as reported by the maintainer in issue #68. The original note follows for context.
 
 The following UI checks remain manual because the app-control helper was unavailable:
 

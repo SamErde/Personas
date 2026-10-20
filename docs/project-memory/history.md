@@ -76,7 +76,7 @@
   card and matrix column with Enabled / Not enabled / Not installed in profile /
   Workspace-local / Unknown statuses. **PR #38** fixed the local sandbox testing guide.
 - **v1.0.0** released 2026-08-11 (**PR #34**), the first stable release. The disposable
-  sandbox UI acceptance for workspace status later passed (recorded in #68).
+  sandbox UI acceptance for workspace status later passed, as reported by the maintainer in issue #68.
 
 ## 2026-08 → 10 — Hardening and v1.0.1
 
