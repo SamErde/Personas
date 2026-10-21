@@ -47,6 +47,47 @@ describe('composeInventory', () => {
     expect(inv.profiles[2]?.inheritsDefaultExtensions).toBe(true);
   });
 
+  it('disables changes to every profile sharing a name, since the code CLI targets profiles by name', () => {
+    const input = baseInput();
+    input.rawProfiles.push(
+      { location: 'bbb', name: 'Work', inheritsDefaultExtensions: false },
+      { location: 'ccc', name: 'Home', inheritsDefaultExtensions: false },
+    );
+    const inv = composeInventory(input);
+    expect(inv.warnings).toEqual([
+      {
+        file: 'globalStorage/storage.json',
+        message:
+          'More than one profile is named "Work". The code CLI picks a profile by name, so Personas cannot ' +
+          'tell which one a change would reach. Rename one of them in VS Code',
+        affectedProfileIds: ['aaa', 'bbb'],
+        kind: 'duplicateName',
+      },
+    ]);
+    expect(installEverywhereTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['default', 'ccc']);
+  });
+
+  it('disables changes to a named profile called "Default", which --profile Default cannot reach', () => {
+    const input = baseInput();
+    input.rawProfiles.push(
+      { location: 'ddd', name: 'Default', inheritsDefaultExtensions: false },
+      // Names match case-sensitively, so these stay reachable.
+      { location: 'eee', name: 'default', inheritsDefaultExtensions: false },
+      { location: 'fff', name: 'work', inheritsDefaultExtensions: false },
+    );
+    const inv = composeInventory(input);
+    expect(inv.warnings).toEqual([
+      {
+        file: 'globalStorage/storage.json',
+        message:
+          'A profile is named "Default". The code CLI sends --profile Default to the built-in Default profile, ' +
+          'so a change to this one would land there instead. Rename it in VS Code',
+        affectedProfileIds: ['ddd'],
+        kind: 'duplicateName',
+      },
+    ]);
+  });
+
   it('marks app-scoped extensions installed in every profile', () => {
     const inv = composeInventory(baseInput());
     const everywhere = inv.extensions.find((e) => e.id === 'pub.everywhere');

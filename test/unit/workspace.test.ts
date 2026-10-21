@@ -623,6 +623,27 @@ describe('workspace status composition', () => {
     });
   });
 
+  it('keeps active membership known when the only warning is a shared profile name', () => {
+    const inv = inventory({
+      installedIn: ['default'],
+      warnings: [
+        {
+          file: 'globalStorage/storage.json',
+          message: 'More than one profile is named "Other".',
+          affectedProfileIds: ['other', 'other2'],
+          kind: 'duplicateName',
+        },
+      ],
+    });
+    inv.profiles = [
+      ...profiles,
+      { id: 'other', name: 'Other', isDefault: false, inheritsDefaultExtensions: false },
+      { id: 'other2', name: 'Other', isDefault: false, inheritsDefaultExtensions: false },
+    ];
+
+    expect(compose({ inv }).extensions[0]?.installedInActiveProfile).not.toBe('unknown');
+  });
+
   it('uses the active profile manifest or effective runtime location for the displayed version', () => {
     const inv = inventory();
     const extension = inv.extensions[0];

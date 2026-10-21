@@ -326,7 +326,11 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
   const candidatesById = groupById(candidates);
   const profileById = new Map(input.inventory.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...candidatesById.keys()]);
-  const affectedProfiles = new Set(input.inventory.warnings.flatMap((warning) => warning.affectedProfileIds));
+  const affectedProfiles = new Set(
+    input.inventory.warnings
+      .filter((warning) => warning.kind !== 'duplicateName') // readable data, only changes are blocked
+      .flatMap((warning) => warning.affectedProfileIds),
+  );
   // Any unreadable profile manifest can hide an application-scoped entry. Because such an entry
   // applies to every profile, membership in even a different readable active profile is uncertain
   // until all profile manifests that can carry the flag are readable.

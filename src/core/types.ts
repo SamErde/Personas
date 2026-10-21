@@ -45,6 +45,9 @@ export interface ParseWarning {
   message: string;
   /** Profiles whose data could not be read; mutations for these are disabled. */
   affectedProfileIds: string[];
+  /** 'duplicateName': the profiles' data is readable, but the code CLI can't tell them apart by
+   *  name, so changes are disabled. Absent: the affected profiles' data could not be read. */
+  kind?: 'duplicateName';
 }
 
 export interface Inventory {

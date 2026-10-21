@@ -182,6 +182,36 @@ existing profile's, with the error "A profile with the name X already exists" (X
 requested name). Profiles created through the VS Code UI therefore have unique names within one
 user-data directory.
 
+## How `--profile <name>` resolves a name
+
+**Machine:** Windows 11, VS Code 1.143.0 from `.vscode-test/`, against throwaway
+`--user-data-dir`/`--extensions-dir` sandboxes (never the real install). **Date:** 2026-10-21.
+**Method:** each scenario wrote its own `userDataProfiles` registry to the sandbox `storage.json`,
+ran `code --profile <name> --install-extension <fixture.vsix>`, and checked which manifest gained
+the fixture. A control run (`Work` → `--profile Work`) landed in that profile, so a hand-written
+registry is honoured. Hand-written registries are the representative case here: duplicates only
+arise outside the profile editor.
+
+| Registry (in order) | `--profile` | Result |
+| --- | --- | --- |
+| `Work` | `work` | `Profile 'work' not found.` (exit 1) |
+| `Work`, `work` | `work` | installed into `work` |
+| `Work`, `work` (either order) | `Work` | installed into `Work` |
+| `Work` (p1), `Work` (p2) | `Work` | installed into p1, the first in registry order |
+| `Work` (p2), `Work` (p1) | `Work` | installed into p2, the first in registry order |
+| `Default` (named) | `Default` | installed into the **built-in Default** profile's manifest |
+| `Work` | `Default` | installed into the built-in Default profile's manifest |
+| `Default` (named) | `default` | `Profile 'default' not found.` (exit 1) |
+
+Verified facts:
+
+- Names match **case-sensitively**; profiles differing only in case are each reachable.
+- With exact duplicates, the CLI silently targets the **first** match in registry order.
+- `--profile Default` always reaches the built-in Default profile, so a named profile called
+  exactly `Default` is unreachable by name, and a change aimed at it lands in Default instead.
+
+`composeInventory` disables changes for both hazards (`kind: 'duplicateName'` warnings).
+
 ---
 
 # Spike B — apply-to-all-profiles toggle invocability findings
