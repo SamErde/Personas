@@ -175,6 +175,13 @@ Schema is platform-independent (confirmed above); only paths need re-checking. C
 - [ ] `code --profile "<name>" --install-extension` / `--uninstall-extension` remain scoped to the named profile only (re-run the Step 2 sequence against a disposable profile — do not reuse a profile with real user data on a shared macOS/Linux test machine).
 - [ ] Folder naming convention `<publisher.name>-<version>[-<platform>]` — confirm the `-<platform>` suffix pattern (e.g. `-darwin-arm64`, `-linux-x64`) matches what Task 6's folder-name parser expects.
 
+## Profile names must be unique
+
+Verified fact: VS Code's profile editor rejects creating a profile whose name duplicates an
+existing profile's, with the error "A profile with the name X already exists" (X being the
+requested name). Profiles created through the VS Code UI therefore have unique names within one
+user-data directory.
+
 ---
 
 # Spike B — apply-to-all-profiles toggle invocability findings

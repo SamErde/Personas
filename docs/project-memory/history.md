@@ -67,3 +67,24 @@
   change); GitHub release history backfilled.
 - **PR #23**: decoupled the Marketplace publish into its own workflow job so a publish
   failure is visible without skipping the next release PR.
+
+## 2026-07 / 08 — Git identity design and v1.0.0
+
+- **PR #24** imported this project memory and history; **PR #25** added the Git identity
+  personas design (`docs/superpowers/specs/2026-07-09-git-identity-personas-design.md`).
+- Current-workspace extension status shipped (`c063ac7`): a read-only Current workspace
+  card and matrix column with Enabled / Not enabled / Not installed in profile /
+  Workspace-local / Unknown statuses. **PR #38** fixed the local sandbox testing guide.
+- **v1.0.0** released 2026-08-11 (**PR #34**), the first stable release. The disposable
+  sandbox UI acceptance for workspace status ran on 2026-10-20: scenarios 1–11 passed and
+  12–14 are not yet run ([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)).
+
+## 2026-08 → 10 — Hardening and v1.0.1
+
+- CI: workflows hardened (**PR #50**) and job execution time bounded (**PR #55**);
+  vitest 4 → 5 (**PR #44**).
+- **v1.0.1** released 2026-10-11 (**PR #59**): `@types/vscode` held to the 1.90 engine
+  minimum (**PR #58**). Node and dependencies updated (**PR #62**); Marketplace
+  publishing moved to vsce v4 (**PR #63**).
+- Test counts at v1.0.1: 151 unit tests passing (1 skipped) across 9 files, plus 2
+  integration tests.

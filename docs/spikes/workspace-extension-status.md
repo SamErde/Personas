@@ -89,13 +89,18 @@ workspace, profile registry, and extension directory were not used.
 
 ## Manual follow-up
 
-The following UI checks remain manual because the app-control helper was unavailable:
+**Status: passed.** The manual UI checks listed below were run in a disposable sandbox on
+2026-10-20 and passed, as scenarios 1–11 of the "Manual test scenarios" checklist in
+`docs/local-build-test-and-release.md` ([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)). Scenarios 12–14 (duplicate
+candidate IDs, malformed or unreadable data, and existing profile features unchanged) are not yet
+run.
 
 - Disable (Workspace), re-enable, and observe the refresh/restart flow;
 - install the local candidate from the Workspace Recommendations view and confirm the public runtime URI; and
 - exercise the final Personas activity card and matrix states after implementation.
 
-Until those checks are completed, the implementation fails closed exactly as described above and exposes `Unknown` for insufficient evidence.
+These checks were manual because the app-control helper was unavailable. The implementation still
+fails closed as described above, exposing `Unknown` wherever evidence is insufficient.
 
 ## References
 

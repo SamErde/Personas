@@ -1,6 +1,6 @@
 # Current workspace extension status plan
 
-**Status:** Implemented; automated validation complete, disposable UI acceptance pending
+**Status:** Implemented; automated validation complete; disposable UI acceptance items 1–9 passed, 10–12 not yet run (see Manual acceptance)
 
 **Date:** 2026-08-10
 
@@ -363,9 +363,13 @@ In a disposable VS Code sandbox, verify:
 11. malformed active-profile/candidate data: warning and `Unknown`, with no actions enabled;
 12. existing profile toggles, bulk actions, filters, hover card, and orphan cleanup remain unchanged.
 
-The computer-control backend was unavailable during implementation (`spawn EPERM` on three
-helper attempts, followed by no callable desktop-control tool), so these visible UI checks remain
-pending in the disposable sandbox. The supported-API spike and integration harness cover the
+**Result (2026-10-20):** items 1–9 passed and items 10–12 are not yet run. The run followed the
+release guide's "Manual test scenarios", where these are scenarios 1–11 and 12–14
+([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)).
+
+Historical implementation note: the computer-control backend was unavailable during
+implementation (`spawn EPERM` on three helper attempts, followed by no callable desktop-control
+tool), so these visible UI checks were left pending at that time. The supported-API spike and integration harness cover the
 underlying folder descriptor, candidate discovery, runtime status, and change-event paths without
 substituting private APIs or inferred results for the checklist above.
 
@@ -389,7 +393,7 @@ git diff --check
 - No workspace action mutates extension enablement, profile manifests, other workspace files, or VS Code SQLite state. The explicit `Edit manifest` action may open the saved local `.code-workspace` JSON for user edits.
 - No recommendations are presented as installed or enabled.
 - Existing profile install/uninstall and orphan cleanup behavior is unchanged.
-- All unit, build, lint, and integration checks pass. The disposable-sandbox manual UI acceptance checklist must pass before release.
+- All unit, build, lint, and integration checks pass. The disposable-sandbox manual UI acceptance checklist must pass before release. (Scenarios 1–11 of the release guide's checklist passed on 2026-10-20; 12–14 are not yet run. See the [results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767).)
 
 ## Risks and mitigations
 

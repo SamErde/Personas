@@ -22,10 +22,11 @@ updates:
       # packaging rejects a newer @types/vscode than engines.vscode.
       - dependency-name: "@types/vscode"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
-      # @types/node tracks the VS Code extension-host runtime (Node 22 for the
-      # supported engine range), NOT the newest Node. Newer types would let
-      # code typecheck against APIs the host doesn't have. Bump the major here
-      # deliberately when raising the minimum VS Code engine version.
+      # The extension host of the minimum supported engine runs Node.js 20.9.0
+      # (VS Code 1.90). @types/node stays on 22, not 20, because vitest 5 declares an
+      # optional peer of @types/node ^22.0.0 || >=24.0.0, and ^20 breaks `npm install`
+      # with ERESOLVE. So typechecking will not catch Node 22-only APIs; avoid them.
+      # Hold the major here and revisit when raising the minimum VS Code engine.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
