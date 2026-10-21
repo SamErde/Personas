@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.1.1](https://github.com/SamErde/Personas/compare/v1.1.0...v1.1.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* shared CLI runner with timeout and injected platform ([#84](https://github.com/SamErde/Personas/issues/84)) ([2b18807](https://github.com/SamErde/Personas/commit/2b188072d36f79a95f84bae088c9acd3d80d8e10))
+
 ## [1.1.0](https://github.com/SamErde/Personas/compare/v1.0.1...v1.1.0) (2026-10-21)
 
 
