@@ -1,6 +1,6 @@
 # Current workspace extension status plan
 
-**Status:** Implemented; automated validation complete; disposable UI acceptance scenarios 1–11 passed, 12–14 not yet run
+**Status:** Implemented; automated validation complete; disposable UI acceptance items 1–9 passed, 10–12 not yet run (see Manual acceptance)
 
 **Date:** 2026-08-10
 
@@ -363,9 +363,13 @@ In a disposable VS Code sandbox, verify:
 11. malformed active-profile/candidate data: warning and `Unknown`, with no actions enabled;
 12. existing profile toggles, bulk actions, filters, hover card, and orphan cleanup remain unchanged.
 
-The computer-control backend was unavailable during implementation (`spawn EPERM` on three
-helper attempts, followed by no callable desktop-control tool), so these visible UI checks remain
-pending in the disposable sandbox. The supported-API spike and integration harness cover the
+**Result (2026-10-20):** items 1–9 passed and items 10–12 are not yet run. The run followed the
+release guide's "Manual test scenarios", where these are scenarios 1–11 and 12–14
+([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)).
+
+Historical implementation note: the computer-control backend was unavailable during
+implementation (`spawn EPERM` on three helper attempts, followed by no callable desktop-control
+tool), so these visible UI checks were left pending at that time. The supported-API spike and integration harness cover the
 underlying folder descriptor, candidate discovery, runtime status, and change-event paths without
 substituting private APIs or inferred results for the checklist above.
 
