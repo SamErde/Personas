@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { CleanupService } from './core/cleanup';
 import { InventoryService, type InventoryIo } from './core/inventory';
-import { createNodeCliRunner, MutationService } from './core/mutations';
+import { createCliRunner } from './core/cliRunner';
+import { MutationService } from './core/mutations';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths } from './core/paths';
 import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
@@ -10,6 +11,10 @@ import {
   type WorkspaceInventoryIo,
 } from './core/workspace';
 import { listBoundedWorkspaceEntries, readBoundedWorkspaceManifest } from './workspaceFileIo';
+
+// Generous: a Marketplace install downloads the VSIX. Long enough for a slow network, short
+// enough that one hung `code` process cannot block the mutation queue for the whole session.
+const CODE_CLI_TIMEOUT_MS = 5 * 60_000;
 
 export type Services = {
   inventory: InventoryService;
@@ -38,15 +43,16 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const fsp = await import('node:fs/promises');
   const path = await import('node:path');
 
+  const platform = process.platform as Platform;
   const paths = resolvePaths({
     globalStorageFsPath: context.globalStorageUri.fsPath,
     extensionFsPath: context.extensionUri.fsPath,
-    platform: process.platform as Platform,
+    platform,
   });
   if (!fs.existsSync(paths.storageJson)) {
     return { error: `profile registry not found at ${paths.storageJson}.` };
   }
-  const cliPath = findCli(vscode.env.appRoot, process.platform as Platform, (p) => fs.existsSync(p));
+  const cliPath = findCli(vscode.env.appRoot, platform, (p) => fs.existsSync(p));
   if (!cliPath) return { error: `the "code" CLI was not found near ${vscode.env.appRoot}.` };
 
   const readFile: InventoryIo['readFile'] = async (p) => {
@@ -131,7 +137,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const mutations = new MutationService({
     cliPath,
     extraArgs: ['--user-data-dir', paths.userDataDir, '--extensions-dir', paths.extensionsDir],
-    run: createNodeCliRunner(),
+    run: createCliRunner({ platform, timeoutMs: CODE_CLI_TIMEOUT_MS }),
   });
   const cleanup = new CleanupService((fsPath) =>
     Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.file(fsPath), { recursive: true, useTrash: true })),

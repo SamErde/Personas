@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CliTimeoutError } from '../../src/core/cliRunner';
 import { MutationError, MutationService } from '../../src/core/mutations';
 
 const okRunner = () => {
@@ -62,6 +63,21 @@ describe('MutationService', () => {
       '--user-data-dir', '/ud', '--extensions-dir', '/ed',
       '--profile', 'Work', '--install-extension', 'pub.good',
     ]);
+  });
+
+  it('queue moves on after the runner times out', async () => {
+    const calls: string[][] = [];
+    const run = async (cli: string, args: string[]) => {
+      calls.push(args);
+      if (calls.length === 1) throw new CliTimeoutError(cli, 1000);
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    const s = svc(run);
+    const hung = s.install('pub.hung', 'Work');
+    const next = s.install('pub.next', 'Work');
+    await expect(hung).rejects.toThrowError(CliTimeoutError);
+    await expect(next).resolves.toBeUndefined();
+    expect(calls[1]?.at(-1)).toBe('pub.next');
   });
 
   it('falls back to stdout in MutationError when stderr is empty', async () => {
