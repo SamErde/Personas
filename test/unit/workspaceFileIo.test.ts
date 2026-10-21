@@ -77,7 +77,7 @@ describe('readBoundedWorkspaceManifest', () => {
   it('reads an unchanged manifest when the path lstat reports no device id', async () => {
     const paths = await candidatePath();
     await writeFile(paths.manifest, '{"publisher":"pub","name":"ext"}', 'utf8');
-    const lstatWithoutDevice = async (p: string) => Object.assign(await lstat(p), { dev: 0 });
+    const lstatWithoutDevice = async (p: string) => Object.assign(await lstat(p, { bigint: true }), { dev: 0n });
     expect(await readBoundedWorkspaceManifest(paths.manifest, paths.root, 1024, lstatWithoutDevice)).toBe(
       '{"publisher":"pub","name":"ext"}',
     );
@@ -87,8 +87,8 @@ describe('readBoundedWorkspaceManifest', () => {
     const paths = await candidatePath();
     await writeFile(paths.manifest, '{"publisher":"pub","name":"ext"}', 'utf8');
     const lstatOfReplacement = async (p: string) => {
-      const stats = await lstat(p);
-      return Object.assign(stats, { dev: 0, ino: stats.ino + 1 });
+      const stats = await lstat(p, { bigint: true });
+      return Object.assign(stats, { dev: 0n, ino: stats.ino + 1n });
     };
     const result = await readBoundedWorkspaceManifest(paths.manifest, paths.root, 1024, lstatOfReplacement);
     expect(result).toBeInstanceOf(Error);

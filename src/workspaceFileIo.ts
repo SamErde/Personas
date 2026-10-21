@@ -14,7 +14,11 @@ interface WorkspaceDirectoryReader {
 
 type OpenWorkspaceDirectory = (p: string) => Promise<WorkspaceDirectoryReader>;
 
-type StatManifestPath = (p: string) => Promise<{ dev: number; ino: number; isFile(): boolean; isSymbolicLink(): boolean }>;
+// Identity fields are bigint: NTFS file IDs can exceed 2^53, so numeric stats can round two
+// different files to the same ino.
+type StatManifestPath = (p: string) => Promise<{ dev: bigint; ino: bigint; isFile(): boolean; isSymbolicLink(): boolean }>;
+
+const lstatExact: StatManifestPath = (p) => lstat(p, { bigint: true });
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
@@ -74,15 +78,15 @@ export async function readBoundedWorkspaceManifest(
   p: string,
   extensionsRoot: string,
   maxBytes: number,
-  statPath: StatManifestPath = lstat,
+  statPath: StatManifestPath = lstatExact,
 ): Promise<string | undefined | Error> {
   const opened = await openManifest(p);
   if (opened === undefined || opened instanceof Error) return opened;
 
   try {
-    const openedStat = await opened.stat();
+    const openedStat = await opened.stat({ bigint: true });
     if (!openedStat.isFile()) return new Error('manifest is not a regular file.');
-    if (openedStat.size > maxBytes) return new Error(`manifest exceeds ${maxBytes} bytes.`);
+    if (openedStat.size > BigInt(maxBytes)) return new Error(`manifest exceeds ${maxBytes} bytes.`);
 
     const buffer = Buffer.alloc(maxBytes + 1);
     let total = 0;
@@ -104,7 +108,7 @@ export async function readBoundedWorkspaceManifest(
     // A path lstat can report dev 0 (Node 22.15.1 on Windows, as in VS Code 1.101) while the
     // handle reports the real device, so dev is compared only when the path stat supplies one.
     // On every platform, a dev-0 path stat leaves ino as the identity check.
-    const deviceChanged = pathStat.dev !== 0 && openedStat.dev !== pathStat.dev;
+    const deviceChanged = pathStat.dev !== 0n && openedStat.dev !== pathStat.dev;
     if (deviceChanged || openedStat.ino !== pathStat.ino) {
       return new Error('manifest changed while it was being read.');
     }
