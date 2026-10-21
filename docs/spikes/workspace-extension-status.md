@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Machine:** Windows 11 x64
-**VS Code lines:** 1.90.2 (minimum supported line) and 1.132.0 (current Stable)
+**VS Code lines:** 1.90.2 (minimum supported line at the time; since raised to 1.101) and 1.132.0 (current Stable)
 **Harness:** `scripts/spike-workspace-status.mjs`
 
 ## Boundary and setup

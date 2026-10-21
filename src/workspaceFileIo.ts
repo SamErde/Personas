@@ -103,6 +103,7 @@ export async function readBoundedWorkspaceManifest(
     }
     // A path lstat can report dev 0 (Node 22.15.1 on Windows, as in VS Code 1.101) while the
     // handle reports the real device, so dev is compared only when the path stat supplies one.
+    // On every platform, a dev-0 path stat leaves ino as the identity check.
     const deviceChanged = pathStat.dev !== 0 && openedStat.dev !== pathStat.dev;
     if (deviceChanged || openedStat.ino !== pathStat.ino) {
       return new Error('manifest changed while it was being read.');

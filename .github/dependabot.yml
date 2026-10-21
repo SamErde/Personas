@@ -23,7 +23,8 @@ updates:
       - dependency-name: "@types/vscode"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       # @types/node tracks the extension-host runtime of the minimum supported
-      # engine: VS Code 1.101 moved the extension host to Node.js 22. Newer types
+      # engine: VS Code 1.101 runs its extension host on Node.js 22
+      # (https://code.visualstudio.com/updates/v1_101). Newer types
       # would let code typecheck against Node APIs the host doesn't have. Bump the
       # major only when raising the minimum VS Code engine to a release on a newer
       # Node major.

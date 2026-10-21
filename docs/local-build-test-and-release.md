@@ -18,8 +18,9 @@ The required `engines.vscode: ^1.101.0` declares a minimum, not a cap on later 1
 releases. Keep `@types/vscode` on the 1.101 API line while this is the minimum:
 compiling against those types checks that extension code does not depend on newer
 VS Code APIs. VS Code 1.101 runs its extension host on Node.js 22, so `@types/node`
-stays on the 22 line. CI runs the integration suite on both 1.101.0 and the latest stable
-release, which does not establish runtime compatibility with every release in between.
+stays on the 22 line. CI runs the integration suite on the latest stable release on Linux,
+Windows, and macOS, and on 1.101.0 on Linux and Windows. That does not establish runtime
+compatibility with every release in between.
 If the minimum changes, update the engine, both types ranges, the CI minimum-engine job,
 and the Dependabot ignore rules together after testing.
 
