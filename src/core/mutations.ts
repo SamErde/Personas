@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import type { CliRunner } from './cliRunner';
 
 export class MutationError extends Error {
   constructor(
@@ -9,11 +9,6 @@ export class MutationError extends Error {
     this.name = 'MutationError';
   }
 }
-
-export type CliRunner = (
-  cliPath: string,
-  args: string[],
-) => Promise<{ code: number; stdout: string; stderr: string }>;
 
 export class MutationService {
   private queue: Promise<unknown> = Promise.resolve();
@@ -44,7 +39,7 @@ export class MutationService {
 
   private enqueue(errorLabel: string, profileName: string | undefined, args: string[]): Promise<void> {
     const task = this.queue.then(async () => {
-      // Windows quoting in createNodeCliRunner escapes embedded quotes via CSV-style
+      // Windows quoting in buildSpawnCommand escapes embedded quotes via CSV-style
       // doubling, which is unproven against CommandLineToArgvW's backslash-escaping rules.
       // Reject up front rather than risk silently targeting the wrong (or a malformed) profile.
       if (profileName?.includes('"')) {
@@ -58,25 +53,4 @@ export class MutationService {
     this.queue = task.catch(() => undefined);
     return task;
   }
-}
-
-/**
- * Real CLI runner. On Windows the CLI is a .cmd batch shim, which Node can only
- * spawn through a shell; every arg is quoted to survive spaces in profile names.
- */
-export function createNodeCliRunner(): CliRunner {
-  return (cliPath, args) =>
-    new Promise((resolve, reject) => {
-      const isWin = process.platform === 'win32';
-      const quote = (s: string) => `"${s.replaceAll('"', '""')}"`;
-      const child = isWin
-        ? spawn(quote(cliPath), args.map(quote), { shell: true, windowsHide: true })
-        : spawn(cliPath, args, { shell: false });
-      let stdout = '';
-      let stderr = '';
-      child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
-      child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
-      child.on('error', reject);
-      child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
-    });
 }

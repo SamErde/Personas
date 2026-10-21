@@ -4,7 +4,8 @@ import * as path from 'node:path';
 import { after, describe, it } from 'node:test';
 import * as vscode from 'vscode';
 import { InventoryService, type InventoryIo } from '../../../src/core/inventory';
-import { createNodeCliRunner, MutationService } from '../../../src/core/mutations';
+import { createCliRunner } from '../../../src/core/cliRunner';
+import { MutationService } from '../../../src/core/mutations';
 import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/paths';
 import {
   WorkspaceInventoryService,
@@ -164,7 +165,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       const mutations = new MutationService({
         cliPath,
         extraArgs: ['--user-data-dir', userDataDir, '--extensions-dir', extensionsDir],
-        run: createNodeCliRunner(),
+        run: createCliRunner({ platform: process.platform as Platform, timeoutMs: SUITE_TIMEOUT_MS }),
       });
 
       const installedEvent = nextExtensionsChange();
