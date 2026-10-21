@@ -39,8 +39,7 @@ export class MutationService {
 
   private enqueue(errorLabel: string, profileName: string | undefined, args: string[]): Promise<void> {
     const task = this.queue.then(async () => {
-      // Windows quoting in buildSpawnCommand escapes embedded quotes via CSV-style
-      // doubling, which is unproven against CommandLineToArgvW's backslash-escaping rules.
+      // The Windows shim quoting can't safely carry embedded quotes (see buildSpawnCommand).
       // Reject up front rather than risk silently targeting the wrong (or a malformed) profile.
       if (profileName?.includes('"')) {
         throw new MutationError('unsupported profile name (contains ")', '');
