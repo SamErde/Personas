@@ -11,11 +11,9 @@ import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
   MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
   WorkspaceInventoryService,
-  areFsPathsEqual,
   composeWorkspaceInventory,
   createWorkspaceDescriptor,
   discoverWorkspaceLocalExtensions,
-  isFsPathContained,
   normalizeUriIdentity,
   resolveActiveProfile,
   workspaceExtensionCounts,
@@ -24,6 +22,7 @@ import {
   type WorkspaceDiscoveryResult,
   type WorkspaceRuntimeExtension,
 } from '../../src/core/workspace';
+import { areFsPathsEqual, isFsPathContained } from '../../src/core/paths';
 
 const profiles: Profile[] = [
   { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },

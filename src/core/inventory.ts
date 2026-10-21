@@ -1,4 +1,4 @@
-import type { ResolvedPaths } from './paths';
+import { pathFor, type Platform, type ResolvedPaths, type WatchTarget } from './paths';
 import {
   type ManifestEntry,
   type RawProfile,
@@ -27,6 +27,7 @@ export interface ComposeInput {
    *  package.json carries one (each field is resolved independently, like displayNames) */
   publishers?: Map<string, string>;
   extensionsDir: string;
+  platform: Platform;
   /**
    * Set when orphan knowledge is unreliable for reasons compose cannot see itself
    * (e.g. a corrupt .obsolete file). Suppresses disk-only records instead of guessing orphans.
@@ -124,6 +125,7 @@ export function composeInventory(input: ComposeInput): Inventory {
   }
 
   // Disk folders -> versions per id (skip obsolete).
+  const { join } = pathFor(input.platform);
   const obsolete = new Set(input.obsoleteFolderNames);
   const versionsById = new Map<string, DiskVersion[]>();
   for (const folderName of input.diskFolders) {
@@ -135,7 +137,7 @@ export function composeInventory(input: ComposeInput): Inventory {
     list.push({
       version: parsed.version,
       folderName,
-      fsPath: `${input.extensionsDir}/${folderName}`.replaceAll('/', sep(input.extensionsDir)),
+      fsPath: join(input.extensionsDir, folderName),
     });
   }
 
@@ -182,10 +184,6 @@ export function composeInventory(input: ComposeInput): Inventory {
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
 
   return { profiles, extensions, warnings };
-}
-
-function sep(referencePath: string): string {
-  return referencePath.includes('\\') ? '\\' : '/';
 }
 
 /**
@@ -280,8 +278,7 @@ export function profileExtensionCounts(inventory: Inventory): Map<string, { dire
 export function profileManifestPath(paths: ResolvedPaths, profile: Profile): string | undefined {
   if (profile.inheritsDefaultExtensions) return undefined;
   if (profile.isDefault) return paths.globalExtensionsJson;
-  const join = (a: string, b: string) => (a.includes('\\') ? `${a}\\${b}` : `${a}/${b}`);
-  return join(join(paths.profilesDir, profile.id), 'extensions.json');
+  return pathFor(paths.platform).join(paths.profilesDir, profile.id, 'extensions.json');
 }
 
 // ---------- IO wrapper ----------
@@ -309,13 +306,21 @@ export class InventoryService {
     private readonly io: InventoryIo,
   ) {}
 
-  /** Files the host should watch to refresh the matrix. */
-  watchedFiles(): string[] {
-    return [this.paths.storageJson, this.paths.globalExtensionsJson, this.paths.profilesDir];
+  /** What the host should watch to refresh the matrix. */
+  watchedTargets(): WatchTarget[] {
+    const { basename, dirname } = pathFor(this.paths.platform);
+    return [
+      { baseFsPath: dirname(this.paths.storageJson), pattern: basename(this.paths.storageJson) },
+      // Top level only: extensions.json, .obsolete, and version folders appearing or disappearing
+      // (installs, orphan cleanup). Nothing inside an extension's folder affects the inventory.
+      { baseFsPath: this.paths.extensionsDir, pattern: '*' },
+      // Any depth: a profile location can contain '/', e.g. builtin/agents (docs/spikes/findings.md).
+      { baseFsPath: this.paths.profilesDir, pattern: '**/extensions.json' },
+    ];
   }
 
   async getInventory(): Promise<Inventory> {
-    const joinP = (a: string, b: string) => (a.includes('\\') ? `${a}\\${b}` : `${a}/${b}`);
+    const { join } = pathFor(this.paths.platform);
 
     let rawProfiles: RawProfile[] = [];
     let registryError: Error | undefined;
@@ -347,7 +352,7 @@ export class InventoryService {
       if (p.inheritsDefaultExtensions) continue;
       profileManifests.set(
         p.location,
-        await readManifest(joinP(joinP(this.paths.profilesDir, p.location), 'extensions.json')),
+        await readManifest(join(this.paths.profilesDir, p.location, 'extensions.json')),
       );
     }
 
@@ -377,12 +382,11 @@ export class InventoryService {
       const needDescription = !descriptions.has(parsed.id);
       const needPublisher = !publishers.has(parsed.id);
       if (!needDisplayName && !needIcon && !needDescription && !needPublisher) continue;
-      const meta = await this.io.readPackageMeta(joinP(this.paths.extensionsDir, folderName));
+      const meta = await this.io.readPackageMeta(join(this.paths.extensionsDir, folderName));
       if (!meta) continue;
       if (needDisplayName && meta.displayName) displayNames.set(parsed.id, meta.displayName);
       if (needIcon && meta.icon && isSafeIconRelPath(meta.icon)) {
-        const raw = `${this.paths.extensionsDir}/${folderName}/${meta.icon}`;
-        iconFsPaths.set(parsed.id, raw.replaceAll('/', sep(this.paths.extensionsDir)));
+        iconFsPaths.set(parsed.id, join(this.paths.extensionsDir, folderName, meta.icon));
       }
       if (needDescription && meta.description) descriptions.set(parsed.id, meta.description);
       if (needPublisher && meta.publisher) publishers.set(parsed.id, meta.publisher);
@@ -399,6 +403,7 @@ export class InventoryService {
       descriptions,
       publishers,
       extensionsDir: this.paths.extensionsDir,
+      platform: this.paths.platform,
       // Without the registry, named profiles (and their manifests) are invisible; without
       // .obsolete we cannot tell stale folders from orphans. Suppress rather than guess.
       orphanKnowledgeUnreliable: obsoleteError !== undefined || registryError !== undefined,

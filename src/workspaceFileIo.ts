@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { open, lstat, opendir, realpath, type FileHandle } from 'node:fs/promises';
-import { isFsPathContained } from './core/workspace';
+import { isFsPathContained } from './core/paths';
 
 interface WorkspaceDirectoryEntry {
   name: string;

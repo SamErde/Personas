@@ -36,6 +36,7 @@ const baseInput = () => ({
   obsoleteFolderNames: [] as string[],
   displayNames: new Map<string, string>([['pub.everywhere', 'Everywhere!']]),
   extensionsDir: '/x',
+  platform: 'linux' as const,
 });
 
 describe('composeInventory', () => {
@@ -179,6 +180,7 @@ describe('InventoryService', () => {
     extensionsDir: '/ext',
     globalExtensionsJson: '/ext/extensions.json',
     obsoleteFile: '/ext/.obsolete',
+    platform: 'linux',
   };
 
   const makeIo = (
@@ -233,6 +235,68 @@ describe('InventoryService', () => {
     // No icon declared for beta — the field is absent, not an empty string.
     expect(beta?.iconFsPath).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+
+  it('watches the registry file, the extensions pool and profile manifests — not whole trees', () => {
+    expect(new InventoryService(PATHS, makeIo({})).watchedTargets()).toEqual([
+      { baseFsPath: '/data/User/globalStorage', pattern: 'storage.json' },
+      // Top level only: extensions.json, .obsolete, and version folders appearing or disappearing.
+      { baseFsPath: '/ext', pattern: '*' },
+      // Profile locations can nest (builtin/agents), so manifests are matched at any depth.
+      { baseFsPath: '/data/User/profiles', pattern: '**/extensions.json' },
+    ]);
+  });
+
+  it('builds every path with the platform separator on Windows', async () => {
+    const WIN: ResolvedPaths = {
+      userDataDir: 'C:\\Data',
+      userDir: 'C:\\Data\\User',
+      storageJson: 'C:\\Data\\User\\globalStorage\\storage.json',
+      profilesDir: 'C:\\Data\\User\\profiles',
+      extensionsDir: 'C:\\Ext',
+      globalExtensionsJson: 'C:\\Ext\\extensions.json',
+      obsoleteFile: 'C:\\Ext\\.obsolete',
+      platform: 'win32',
+    };
+    const io = makeIo(
+      {
+        [WIN.storageJson]: storageJson,
+        [WIN.globalExtensionsJson]: defaultManifest,
+        'C:\\Data\\User\\profiles\\aaa\\extensions.json': profileManifest,
+      },
+      ['pub.alpha-1.0.0', 'pub.beta-2.0.0'],
+      {},
+      { 'C:\\Ext\\pub.alpha-1.0.0': 'media/icon.png' },
+    );
+    const inv = await new InventoryService(WIN, io).getInventory();
+    expect(inv.extensions.find((e) => e.id === 'pub.beta')?.installedIn).toEqual(['aaa']);
+    const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
+    expect(alpha?.versions[0]?.fsPath).toBe('C:\\Ext\\pub.alpha-1.0.0');
+    expect(alpha?.iconFsPath).toBe('C:\\Ext\\pub.alpha-1.0.0\\media\\icon.png');
+  });
+
+  it('keeps a backslash in a POSIX directory name as part of the name', async () => {
+    const odd: ResolvedPaths = {
+      ...PATHS,
+      profilesDir: '/data/odd\\name',
+      extensionsDir: '/ext/odd\\name',
+      globalExtensionsJson: '/ext/odd\\name/extensions.json',
+    };
+    const io = makeIo(
+      {
+        [odd.storageJson]: storageJson,
+        [odd.globalExtensionsJson]: defaultManifest,
+        '/data/odd\\name/aaa/extensions.json': profileManifest,
+      },
+      ['pub.alpha-1.0.0'],
+      {},
+      { '/ext/odd\\name/pub.alpha-1.0.0': 'media/icon.png' },
+    );
+    const inv = await new InventoryService(odd, io).getInventory();
+    expect(inv.extensions.find((e) => e.id === 'pub.beta')?.installedIn).toEqual(['aaa']);
+    const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
+    expect(alpha?.versions[0]?.fsPath).toBe('/ext/odd\\name/pub.alpha-1.0.0');
+    expect(alpha?.iconFsPath).toBe('/ext/odd\\name/pub.alpha-1.0.0/media/icon.png');
   });
 
   it('wires description and publisher from readPackageMeta through to the extension record', async () => {
@@ -426,6 +490,7 @@ describe('directInstallProfileIds', () => {
       obsoleteFolderNames: [] as string[],
       displayNames: new Map<string, string>(),
       extensionsDir: '/x',
+      platform: 'linux',
     });
     expect(directInstallProfileIds(inv, 'pub.shared')).toEqual(['p1', 'p2']);
   });
@@ -568,6 +633,7 @@ describe('profileExtensionCounts', () => {
       obsoleteFolderNames: [] as string[],
       displayNames: new Map<string, string>(),
       extensionsDir: '/x',
+      platform: 'linux',
     });
     expect(profileExtensionCounts(inv).get('p1')).toEqual({ direct: 0, shared: 0 });
     expect(profileExtensionCounts(inv).get('default')).toEqual({ direct: 0, shared: 0 });
@@ -583,6 +649,7 @@ describe('profileManifestPath', () => {
     extensionsDir: '/ext',
     globalExtensionsJson: '/ext/extensions.json',
     obsoleteFile: '/ext/.obsolete',
+    platform: 'linux',
   };
 
   it('resolves the default profile to the global extensions.json', () => {
@@ -600,8 +667,8 @@ describe('profileManifestPath', () => {
     expect(profileManifestPath(paths, p)).toBeUndefined();
   });
 
-  it('joins with a backslash when profilesDir is Windows-style', () => {
-    const winPaths: ResolvedPaths = { ...paths, profilesDir: 'C:\\Users\\me\\profiles' };
+  it('joins with the platform separator', () => {
+    const winPaths: ResolvedPaths = { ...paths, profilesDir: 'C:\\Users\\me\\profiles', platform: 'win32' };
     const p: Profile = { id: 'aaa', name: 'Work', isDefault: false, inheritsDefaultExtensions: false };
     expect(profileManifestPath(winPaths, p)).toBe('C:\\Users\\me\\profiles\\aaa\\extensions.json');
   });
