@@ -2,6 +2,19 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.1.0](https://github.com/SamErde/Personas/compare/v1.0.1...v1.1.0) (2026-10-21)
+
+
+### Features
+
+* require VS Code 1.101 or later ([ac901bc](https://github.com/SamErde/Personas/commit/ac901bc604783f9b850658ac33efe3f2937c37cc)), closes [#81](https://github.com/SamErde/Personas/issues/81)
+
+
+### Bug Fixes
+
+* compare manifest file identity with exact bigint stats ([3d60b8c](https://github.com/SamErde/Personas/commit/3d60b8c4ae1fee526d2534367cc0ddc4f477aa16)), closes [#81](https://github.com/SamErde/Personas/issues/81)
+* read workspace-local extensions on Windows under Node 22 hosts ([3dc5002](https://github.com/SamErde/Personas/commit/3dc5002bd3e404ed3727162b5a49f8af52e93360)), closes [#81](https://github.com/SamErde/Personas/issues/81)
+
 ## [1.0.1](https://github.com/SamErde/Personas/compare/v1.0.0...v1.0.1) (2026-10-11)
 
 
