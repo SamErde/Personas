@@ -3,7 +3,7 @@ import { CleanupService } from './core/cleanup';
 import { InventoryService, type InventoryIo } from './core/inventory';
 import { createCliRunner } from './core/cliRunner';
 import { MutationService } from './core/mutations';
-import { findCli, resolvePaths, type Platform, type ResolvedPaths } from './core/paths';
+import { findCli, resolvePaths, type Platform, type ResolvedPaths, type WatchTarget } from './core/paths';
 import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
   createWorkspaceDescriptor,
@@ -22,7 +22,7 @@ export type Services = {
   mutations: MutationService;
   cleanup: CleanupService;
   paths: ResolvedPaths;
-  watched: string[];
+  watched: WatchTarget[];
 };
 
 async function buildServices(context: vscode.ExtensionContext): Promise<Services | { error: string }> {
@@ -142,7 +142,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const cleanup = new CleanupService((fsPath) =>
     Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.file(fsPath), { recursive: true, useTrash: true })),
   );
-  return { inventory, workspace, mutations, cleanup, paths, watched: inventory.watchedFiles() };
+  return { inventory, workspace, mutations, cleanup, paths, watched: inventory.watchedTargets() };
 }
 
 let servicesPromise: Promise<Services | { error: string }> | undefined;

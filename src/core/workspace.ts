@@ -1,4 +1,4 @@
-import * as path from 'node:path';
+import { dirnameFsPath, fsPathKey, isFsPathContained, joinFsPath, type WatchTarget } from './paths';
 import {
   parseWorkspaceProfileAssociations,
   type ParsedWorkspaceProfileAssociations,
@@ -59,15 +59,6 @@ export interface WorkspaceInventoryIo extends WorkspaceCandidateIo {
 export interface WorkspaceDiscoveryResult {
   candidates: WorkspaceLocalExtension[];
   warnings: string[];
-}
-
-export interface WorkspaceWatchTarget {
-  baseFsPath: string;
-  pattern: string;
-  /** When set, the broad pattern is only a transport for file events; callers must refresh only
-   *  when the changed path equals this literal path. This avoids treating manifest filenames as
-   *  glob syntax. */
-  exactFsPath?: string;
 }
 
 export interface ComposeWorkspaceInventoryInput {
@@ -210,7 +201,7 @@ export async function discoverWorkspaceLocalExtensions(
   const roots = [...descriptor.rootFsPaths].sort(comparePaths);
 
   for (const root of roots) {
-    const extensionsRoot = joinFs(root, '.vscode', 'extensions');
+    const extensionsRoot = joinFsPath(root, '.vscode', 'extensions');
     const listed = await io.listEntries(extensionsRoot);
     if (listed instanceof Error) {
       warnings.push(`Could not inspect ${extensionsRoot}: ${listed.message}`);
@@ -232,12 +223,12 @@ export async function discoverWorkspaceLocalExtensions(
         warnings.push(`Ignored non-directory entry "${folderName}" in ${extensionsRoot}.`);
         continue;
       }
-      const folderPath = joinFs(extensionsRoot, folderName);
+      const folderPath = joinFsPath(extensionsRoot, folderName);
       if (!isFsPathContained(extensionsRoot, folderPath)) {
         warnings.push(`Ignored local extension path outside ${extensionsRoot}.`);
         continue;
       }
-      const manifestPath = joinFs(folderPath, 'package.json');
+      const manifestPath = joinFsPath(folderPath, 'package.json');
       const text = await io.readCandidateManifest(
         manifestPath,
         extensionsRoot,
@@ -494,20 +485,18 @@ export function workspaceExtensionCounts(workspace: WorkspaceInventory): Workspa
 }
 
 export function workspaceExtensionsRootPaths(descriptor: WorkspaceDescriptor): string[] {
-  return descriptor.rootFsPaths.map((root) => joinFs(root, '.vscode', 'extensions'));
+  return descriptor.rootFsPaths.map((root) => joinFsPath(root, '.vscode', 'extensions'));
 }
 
 /** Narrow watcher targets that also work before .vscode/extensions exists. */
-export function workspaceWatchTargets(descriptor: WorkspaceDescriptor): WorkspaceWatchTarget[] {
-  const targets: WorkspaceWatchTarget[] = descriptor.rootFsPaths.map((root) => ({
+export function workspaceWatchTargets(descriptor: WorkspaceDescriptor): WatchTarget[] {
+  const targets: WatchTarget[] = descriptor.rootFsPaths.map((root) => ({
     baseFsPath: root,
     pattern: '.vscode/extensions/**',
   }));
   if (descriptor.manifestFsPath) {
-    const windows = isWindowsFsPath(descriptor.manifestFsPath);
-    const pathApi = windows ? path.win32 : path.posix;
     targets.push({
-      baseFsPath: pathApi.dirname(descriptor.manifestFsPath),
+      baseFsPath: dirnameFsPath(descriptor.manifestFsPath),
       pattern: '*',
       exactFsPath: descriptor.manifestFsPath,
     });
@@ -521,7 +510,7 @@ export class WorkspaceInventoryService {
     private readonly io: WorkspaceInventoryIo,
   ) {}
 
-  watchedTargets(): WorkspaceWatchTarget[] {
+  watchedTargets(): WatchTarget[] {
     const descriptor = this.io.getDescriptor();
     return descriptor ? workspaceWatchTargets(descriptor) : [];
   }
@@ -563,38 +552,12 @@ export class WorkspaceInventoryService {
   }
 }
 
-export function areFsPathsEqual(a: string, b: string): boolean {
-  return normalizeFsPath(a) === normalizeFsPath(b);
-}
-
-export function isFsPathContained(parent: string, child: string): boolean {
-  const normalizedParent = normalizeFsPath(parent);
-  const normalizedChild = normalizeFsPath(child);
-  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
-}
-
-function normalizeFsPath(value: string): string {
-  const windows = isWindowsFsPath(value);
-  const resolved = windows ? path.win32.resolve(value) : path.posix.resolve(value);
-  const slashed = (windows ? resolved.replaceAll('\\', '/') : resolved).replace(/\/+$/, '');
-  return windows ? slashed.toLowerCase() : slashed;
-}
-
-function joinFs(root: string, ...parts: string[]): string {
-  const windows = isWindowsFsPath(root);
-  return (windows ? path.win32.join(root, ...parts) : path.posix.join(root, ...parts));
-}
-
-function isWindowsFsPath(value: string): boolean {
-  return /^[a-z]:[\\/]/i.test(value) || /^\\\\/.test(value);
-}
-
 function isSafeImmediateChild(value: string): boolean {
   return value !== '' && value !== '.' && value !== '..' && !value.includes('/') && !value.includes('\\');
 }
 
 function comparePaths(a: string, b: string): number {
-  return normalizeFsPath(a).localeCompare(normalizeFsPath(b));
+  return fsPathKey(a).localeCompare(fsPathKey(b));
 }
 
 function groupById<T extends { id: string }>(items: T[]): Map<string, T[]> {

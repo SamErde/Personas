@@ -33,6 +33,7 @@ function testPaths(): ResolvedPaths {
     extensionsDir,
     globalExtensionsJson: path.join(extensionsDir, 'extensions.json'),
     obsoleteFile: path.join(extensionsDir, '.obsolete'),
+    platform: process.platform as Platform,
   };
 }
 

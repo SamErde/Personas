@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { findCli, resolvePaths } from '../../src/core/paths';
+import {
+  areFsPathsEqual,
+  findCli,
+  fsPathKey,
+  isFsPathContained,
+  normalizeRepoRoot,
+  resolvePaths,
+} from '../../src/core/paths';
 
 describe('resolvePaths', () => {
   it('derives user data layout from globalStorage path (win32)', () => {
@@ -61,5 +68,61 @@ describe('findCli', () => {
 
   it('returns undefined when nothing exists', () => {
     expect(findCli('/nowhere/resources/app', 'linux', () => false)).toBeUndefined();
+  });
+});
+
+describe('fsPath comparison', () => {
+  it('treats a filesystem root as containing everything beneath it', () => {
+    expect(isFsPathContained('/', '/etc/hosts')).toBe(true);
+    expect(isFsPathContained('C:\\', 'c:\\Windows')).toBe(true);
+  });
+
+  it('does not treat a sibling sharing a name prefix as contained', () => {
+    expect(isFsPathContained('/repo/app', '/repo/app-two')).toBe(false);
+  });
+
+  it('honours an explicit platform over the path shape', () => {
+    expect(areFsPathsEqual('/Users/Me/App', '/users/me/app')).toBe(false);
+    expect(areFsPathsEqual('/Users/Me/App', '/users/me/app', 'darwin')).toBe(true);
+  });
+
+  it('keys Windows paths with forward slashes and lower case', () => {
+    expect(fsPathKey('C:\\Code\\.\\App\\')).toBe('c:/code/app');
+    expect(fsPathKey('\\\\Server\\Share\\Dir')).toBe('//server/share/dir');
+  });
+});
+
+describe('normalizeRepoRoot', () => {
+  const identity = async (p: string) => p;
+
+  it('keys the real path, not the path Git or the workspace reported', async () => {
+    const realpath = async (p: string) => (p === '/home/me/link' ? '/srv/repos/app' : p);
+    expect(await normalizeRepoRoot('/home/me/link', 'linux', realpath)).toBe('/srv/repos/app');
+  });
+
+  it('uses forward slashes, drops trailing separators, and folds case on Windows', async () => {
+    expect(await normalizeRepoRoot('C:\\Code\\App\\', 'win32', identity)).toBe('c:/code/app');
+    expect(await normalizeRepoRoot('c:/code/APP', 'win32', identity)).toBe('c:/code/app');
+  });
+
+  it('folds case on macOS, whose default volumes are case-insensitive', async () => {
+    expect(await normalizeRepoRoot('/Users/Me/Code/App/', 'darwin', identity)).toBe('/users/me/code/app');
+  });
+
+  it('preserves case on Linux and keeps a backslash as a file-name character', async () => {
+    expect(await normalizeRepoRoot('/home/Me/a\\b/', 'linux', identity)).toBe('/home/Me/a\\b');
+  });
+
+  it('keeps a filesystem root as the root', async () => {
+    expect(await normalizeRepoRoot('/', 'linux', identity)).toBe('/');
+    expect(await normalizeRepoRoot('D:\\', 'win32', identity)).toBe('d:/');
+  });
+
+  it('normalizes dot segments the real path still carries', async () => {
+    expect(await normalizeRepoRoot('/repo/./a/../b', 'linux', identity)).toBe('/repo/b');
+  });
+
+  it('rejects a relative path instead of resolving it against the process cwd', async () => {
+    await expect(normalizeRepoRoot('repo', 'linux', identity)).rejects.toThrow(/absolute/);
   });
 });

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { areFsPathsEqual } from './core/workspace';
+import { areFsPathsEqual, type Platform, type WatchTarget } from './core/paths';
 import { MatrixPanel } from './panel/matrixPanel';
 import { registerPersonasReadOnlyProvider, type PersonasReadOnlyContentProvider } from './panel/readOnlyProvider';
 import { WelcomeViewProvider } from './panel/welcomeView';
@@ -42,7 +42,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {}
 
-const watchedDirs = new Set<string>();
 let workspaceWatchers: vscode.FileSystemWatcher[] = [];
 let watchTimer: NodeJS.Timeout | undefined;
 function scheduleRefresh(): void {
@@ -55,33 +54,26 @@ function scheduleRefresh(): void {
   }, 300);
 }
 
+function createWatcher(target: WatchTarget, platform: Platform): vscode.FileSystemWatcher {
+  const watcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(vscode.Uri.file(target.baseFsPath), target.pattern),
+  );
+  const refreshIfMatched = (uri: vscode.Uri) => {
+    if (!target.exactFsPath || areFsPathsEqual(target.exactFsPath, uri.fsPath, platform)) scheduleRefresh();
+  };
+  watcher.onDidChange(refreshIfMatched);
+  watcher.onDidCreate(refreshIfMatched);
+  watcher.onDidDelete(refreshIfMatched);
+  return watcher;
+}
+
 function watchForChanges(context: vscode.ExtensionContext, services: Services): void {
-  for (const p of services.watched) {
-    const dir = dirOf(p);
-    if (watchedDirs.has(dir)) continue;
-    watchedDirs.add(dir);
-    const pattern = new vscode.RelativePattern(vscode.Uri.file(p).with({ path: dir }), '**');
-    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-    watcher.onDidChange(scheduleRefresh);
-    watcher.onDidCreate(scheduleRefresh);
-    watcher.onDidDelete(scheduleRefresh);
-    context.subscriptions.push(watcher);
-  }
+  const { platform } = services.paths;
+  for (const target of services.watched) context.subscriptions.push(createWatcher(target, platform));
 
   const rebuildWorkspaceWatchers = () => {
     for (const watcher of workspaceWatchers) watcher.dispose();
-    workspaceWatchers = services.workspace.watchedTargets().map((target) => {
-      const watcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(vscode.Uri.file(target.baseFsPath), target.pattern),
-      );
-      const refreshIfMatched = (uri: vscode.Uri) => {
-        if (!target.exactFsPath || areFsPathsEqual(target.exactFsPath, uri.fsPath)) scheduleRefresh();
-      };
-      watcher.onDidChange(refreshIfMatched);
-      watcher.onDidCreate(refreshIfMatched);
-      watcher.onDidDelete(refreshIfMatched);
-      return watcher;
-    });
+    workspaceWatchers = services.workspace.watchedTargets().map((target) => createWatcher(target, platform));
   };
   rebuildWorkspaceWatchers();
   context.subscriptions.push(
@@ -99,9 +91,4 @@ function watchForChanges(context: vscode.ExtensionContext, services: Services): 
       },
     },
   );
-}
-
-function dirOf(p: string): string {
-  const norm = p.replaceAll('\\', '/');
-  return norm.endsWith('.json') || norm.endsWith('.obsolete') ? norm.slice(0, norm.lastIndexOf('/')) : norm;
 }
