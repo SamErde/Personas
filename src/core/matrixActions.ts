@@ -44,13 +44,19 @@ export class MatrixActions {
 
     // installedIn includes profiles that merely inherit Default's extensions, so it overcounts
     // who would lose the extension — count direct installs only to find the last-profile case.
-    const direct = directInstallProfileIds(inv, extId);
-    if (!install && direct.length === 1 && direct[0] === profileId) {
-      const confirmed = await this.deps.ui.confirm(
-        `"${ext.displayName}" is installed only in the "${profile.name}" profile. Uninstall it from your last profile?${cascadeWarning(inv, profile.isDefault)}`,
-        'Uninstall',
-      );
-      if (!confirmed) return this.deps.refresh();
+    // Removing from Default also asks whenever inheriting profiles would lose it, even while
+    // another profile keeps a direct install.
+    if (!install) {
+      const direct = directInstallProfileIds(inv, extId);
+      const lastProfile = direct.length === 1 && direct[0] === profileId;
+      const cascade = cascadeWarning(inv, profile.isDefault);
+      if (lastProfile || cascade) {
+        const question = lastProfile
+          ? `"${ext.displayName}" is installed only in the "${profile.name}" profile. Uninstall it from your last profile?`
+          : `Uninstall "${ext.displayName}" from the "${profile.name}" profile?`;
+        const confirmed = await this.deps.ui.confirm(cascade ? `${question} ${cascade}` : question, 'Uninstall');
+        if (!confirmed) return this.deps.refresh();
+      }
     }
 
     this.deps.ui.markPending(extId, profileId);
@@ -73,7 +79,7 @@ export class MatrixActions {
     // Removal warns like the last-profile path in toggleCell whenever Default is a target.
     const cascade = op === 'remove' ? cascadeWarning(inv, targets.some((p) => p.isDefault)) : '';
     const confirmed = await this.deps.ui.confirm(
-      `${flow.verb} "${ext.displayName}" ${flow.preposition} ${targets.length} profile(s)?\n\n${targets.map((p) => p.name).join('\n')}${cascade}`,
+      `${flow.verb} "${ext.displayName}" ${flow.preposition} ${targets.length} profile(s)?\n\n${targets.map((p) => p.name).join('\n')}${cascade ? `\n\n${cascade}` : ''}`,
       flow.verb,
     );
     if (!confirmed) return this.deps.refresh();
@@ -134,13 +140,13 @@ const EVERY_PROFILE = {
 } as const;
 
 /**
- * Sentence appended to uninstall confirmations when the Default profile is affected and other
+ * Sentence added to uninstall confirmations when the Default profile is affected and other
  * profiles inherit its extensions — they lose the extension too. Empty when not applicable.
  */
 function cascadeWarning(inv: Inventory, defaultIsAffected: boolean): string {
   const inheriting = defaultIsAffected ? inv.profiles.filter((p) => p.inheritsDefaultExtensions) : [];
   return inheriting.length > 0
-    ? ` Profiles that inherit the Default profile's extensions (${inheriting.map((p) => p.name).join(', ')}) will also lose it.`
+    ? `Profiles that inherit the Default profile's extensions (${inheriting.map((p) => p.name).join(', ')}) will also lose it.`
     : '';
 }
 

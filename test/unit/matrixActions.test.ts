@@ -137,6 +137,24 @@ describe('MatrixActions.toggleCell', () => {
     ]);
   });
 
+  it('asks before uninstalling from Default when profiles that inherit it would lose it, even if another profile keeps it', async () => {
+    const { actions, log } = harness({ confirm: false });
+    const inv = inventory(
+      [
+        profile('default', 'Default'),
+        profile('w1', 'Work'),
+        profile('i1', 'Shared', { inheritsDefaultExtensions: true }),
+      ],
+      [ext('pub.a', ['default', 'w1', 'i1'], { displayName: 'Alpha' })],
+    );
+    await actions.toggleCell(inv, 'pub.a', 'default', false);
+    expect(log).toEqual([
+      'confirm[Uninstall] Uninstall "Alpha" from the "Default" profile?' +
+        " Profiles that inherit the Default profile's extensions (Shared) will also lose it.",
+      'refresh',
+    ]);
+  });
+
   it('uninstalls without asking while another profile still has a direct install', async () => {
     const { actions, log } = harness();
     const inv = inventory([profile('default', 'Default'), profile('w1', 'Work')], [ext('pub.a', ['default', 'w1'])]);
@@ -172,8 +190,8 @@ describe('MatrixActions.everyProfile', () => {
     const inv = inventory(profiles(), [ext('pub.a', ['default', 'w1', 'i1'], { displayName: 'Alpha' })]);
     await actions.everyProfile(inv, 'pub.a', 'remove');
     expect(log).toEqual([
-      'confirm[Remove] Remove "Alpha" from 2 profile(s)?\n\nDefault\nWork' +
-        " Profiles that inherit the Default profile's extensions (Shared) will also lose it.",
+      'confirm[Remove] Remove "Alpha" from 2 profile(s)?\n\nDefault\nWork\n\n' +
+        "Profiles that inherit the Default profile's extensions (Shared) will also lose it.",
       'pending pub.a default',
       'pending pub.a w1',
       'uninstall pub.a <default>',
