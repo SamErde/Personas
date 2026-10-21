@@ -58,8 +58,9 @@ export function composeInventory(input: ComposeInput): Inventory {
       file: 'globalStorage/storage.json',
       message:
         `More than one profile is named "${name}". The code CLI picks a profile by name, so Personas cannot ` +
-        'tell which one a change would reach; changes to them are disabled until one is renamed.',
+        'tell which one a change would reach. Rename one of them in VS Code',
       affectedProfileIds: ids,
+      kind: 'duplicateName',
     });
   }
 

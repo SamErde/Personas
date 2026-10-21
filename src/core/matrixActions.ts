@@ -54,8 +54,7 @@ export class MatrixActions {
     }
 
     this.deps.ui.markPending(extId, profileId);
-    if (install) await this.deps.mutations.install(extId, cliProfileName(profile));
-    else await this.deps.mutations.uninstall(extId, cliProfileName(profile));
+    await this.mutate(install, extId, profile);
     await this.deps.refresh();
   }
 
@@ -83,8 +82,7 @@ export class MatrixActions {
     // Sequential and awaited so a mid-run failure stops the remaining calls instead of racing
     // ahead. MutationService already serializes the CLI calls; this loop owns stop-on-error.
     for (const p of targets) {
-      if (op === 'install') await this.deps.mutations.install(extId, cliProfileName(p));
-      else await this.deps.mutations.uninstall(extId, cliProfileName(p));
+      await this.mutate(op === 'install', extId, p);
     }
     await this.deps.refresh();
   }
@@ -109,6 +107,14 @@ export class MatrixActions {
     if (!confirmed) return this.deps.refresh();
     this.deps.ui.showCleanupResult(await this.deps.cleanup.deleteFolders(targets));
     await this.deps.refresh();
+  }
+
+  /** The `code` CLI targets the Default profile by omitting `--profile`. */
+  private mutate(install: boolean, extId: string, profile: Profile): Promise<void> {
+    const profileName = profile.isDefault ? undefined : profile.name;
+    return install
+      ? this.deps.mutations.install(extId, profileName)
+      : this.deps.mutations.uninstall(extId, profileName);
   }
 }
 
@@ -138,12 +144,7 @@ function cascadeWarning(inv: Inventory, defaultIsAffected: boolean): string {
     : '';
 }
 
-/** Profiles whose data could not be read safely; changes to them stay disabled. */
+/** Profiles a warning disabled: unreadable data, or a name the code CLI cannot tell apart. */
 function disabledProfileIds(inv: Inventory): Set<string> {
   return new Set(inv.warnings.flatMap((w) => w.affectedProfileIds));
-}
-
-/** The `code` CLI targets the Default profile by omitting `--profile`. */
-function cliProfileName(profile: Profile): string | undefined {
-  return profile.isDefault ? undefined : profile.name;
 }

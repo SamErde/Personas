@@ -59,8 +59,9 @@ describe('composeInventory', () => {
         file: 'globalStorage/storage.json',
         message:
           'More than one profile is named "Work". The code CLI picks a profile by name, so Personas cannot ' +
-          'tell which one a change would reach; changes to them are disabled until one is renamed.',
+          'tell which one a change would reach. Rename one of them in VS Code',
         affectedProfileIds: ['aaa', 'bbb'],
+        kind: 'duplicateName',
       },
     ]);
     expect(installEverywhereTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['default', 'ccc']);
