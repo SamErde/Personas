@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -70,6 +70,29 @@ describe('readBoundedWorkspaceManifest', () => {
     const result = await readBoundedWorkspaceManifest(paths.manifest, paths.root, 1024);
     expect(result).toBeInstanceOf(Error);
     expect((result as Error).message).toContain('not a regular file');
+  });
+
+  // Node 22.15.1 on Windows (the VS Code 1.101 extension host) reports dev 0 from a path lstat
+  // while the open handle reports the real volume serial, so dev alone cannot prove a swap.
+  it('reads an unchanged manifest when the path lstat reports no device id', async () => {
+    const paths = await candidatePath();
+    await writeFile(paths.manifest, '{"publisher":"pub","name":"ext"}', 'utf8');
+    const lstatWithoutDevice = async (p: string) => Object.assign(await lstat(p), { dev: 0 });
+    expect(await readBoundedWorkspaceManifest(paths.manifest, paths.root, 1024, lstatWithoutDevice)).toBe(
+      '{"publisher":"pub","name":"ext"}',
+    );
+  });
+
+  it('still rejects a replaced manifest when the path lstat reports no device id', async () => {
+    const paths = await candidatePath();
+    await writeFile(paths.manifest, '{"publisher":"pub","name":"ext"}', 'utf8');
+    const lstatOfReplacement = async (p: string) => {
+      const stats = await lstat(p);
+      return Object.assign(stats, { dev: 0, ino: stats.ino + 1 });
+    };
+    const result = await readBoundedWorkspaceManifest(paths.manifest, paths.root, 1024, lstatOfReplacement);
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toContain('changed while it was being read');
   });
 
   it.skipIf(process.platform === 'win32')('rejects a manifest symlink, including one escaping the root', async () => {
