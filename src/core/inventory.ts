@@ -314,7 +314,8 @@ export class InventoryService {
       // Top level only: extensions.json, .obsolete, and version folders appearing or disappearing
       // (installs, orphan cleanup). Nothing inside an extension's folder affects the inventory.
       { baseFsPath: this.paths.extensionsDir, pattern: '*' },
-      { baseFsPath: this.paths.profilesDir, pattern: '*/extensions.json' },
+      // Any depth: a profile location can contain '/', e.g. builtin/agents (docs/spikes/findings.md).
+      { baseFsPath: this.paths.profilesDir, pattern: '**/extensions.json' },
     ];
   }
 

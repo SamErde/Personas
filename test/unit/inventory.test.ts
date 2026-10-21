@@ -242,7 +242,8 @@ describe('InventoryService', () => {
       { baseFsPath: '/data/User/globalStorage', pattern: 'storage.json' },
       // Top level only: extensions.json, .obsolete, and version folders appearing or disappearing.
       { baseFsPath: '/ext', pattern: '*' },
-      { baseFsPath: '/data/User/profiles', pattern: '*/extensions.json' },
+      // Profile locations can nest (builtin/agents), so manifests are matched at any depth.
+      { baseFsPath: '/data/User/profiles', pattern: '**/extensions.json' },
     ]);
   });
 
