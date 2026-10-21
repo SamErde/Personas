@@ -12,7 +12,14 @@ export class CliTimeoutError extends Error {
   }
 }
 
-export type SpawnCommand = { command: string; args: string[]; shell: boolean };
+export class CliArgumentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CliArgumentError';
+  }
+}
+
+export type SpawnCommand ={ command: string; args: string[]; shell: boolean };
 
 /** The slice of a spawned child process the runner depends on. */
 export type CliChild = {
@@ -35,10 +42,14 @@ export type CliSpawn = (
  * which Node can only spawn through a shell; every arg is quoted to survive spaces in
  * profile names. Embedded quotes are CSV-style doubled, which is unproven against
  * CommandLineToArgvW's backslash rules, so callers must reject quote-bearing input for a
- * shim. A real executable (git.exe) is spawned directly and needs neither.
+ * shim. cmd.exe also expands %VAR% inside double quotes, so a `%` is refused outright
+ * rather than risk targeting a different profile. A real executable (git.exe) is spawned
+ * directly and needs none of this.
  */
 export function buildSpawnCommand(platform: Platform, cliPath: string, args: string[]): SpawnCommand {
   if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(cliPath)) return { command: cliPath, args, shell: false };
+  const unsafe = [cliPath, ...args].find((s) => s.includes('%'));
+  if (unsafe !== undefined) throw new CliArgumentError(`unsupported value for a Windows CLI shim (contains %): ${unsafe}`);
   const quote = (s: string) => `"${s.replaceAll('"', '""')}"`;
   return { command: quote(cliPath), args: args.map(quote), shell: true };
 }

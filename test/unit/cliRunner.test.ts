@@ -1,6 +1,35 @@
+import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildSpawnCommand, CliTimeoutError, createCliRunner } from '../../src/core/cliRunner';
+import { buildSpawnCommand, CliArgumentError, CliTimeoutError, createCliRunner } from '../../src/core/cliRunner';
+import type { Platform } from '../../src/core/paths';
+
+/** True once `pid` no longer exists or is only a zombie awaiting reaping. */
+const isGone = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ESRCH') return true;
+    throw e;
+  }
+  try {
+    return execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).trim().startsWith('Z');
+  } catch {
+    return true; // ps exits nonzero when the pid vanished between the two checks
+  }
+};
+
+const waitUntilGone = async (pid: number, withinMs: number): Promise<boolean> => {
+  const deadline = Date.now() + withinMs;
+  while (Date.now() < deadline) {
+    if (isGone(pid)) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return isGone(pid);
+};
 
 describe('buildSpawnCommand', () => {
   it('spawns the CLI directly, without a shell, on non-Windows platforms', () => {
@@ -44,6 +73,17 @@ describe('buildSpawnCommand', () => {
   it('treats .bat shims and upper-case extensions like .cmd', () => {
     expect(buildSpawnCommand('win32', 'C:\\tools\\CODE.CMD', []).shell).toBe(true);
     expect(buildSpawnCommand('win32', 'C:\\tools\\run.bat', []).shell).toBe(true);
+  });
+
+  it('refuses a percent sign for a Windows shim, since cmd.exe expands %VAR% inside quotes', () => {
+    expect(() => buildSpawnCommand('win32', 'code.cmd', ['--profile', '%USERNAME%'])).toThrowError(
+      CliArgumentError,
+    );
+    expect(() => buildSpawnCommand('win32', 'C:\\100%\\code.cmd', [])).toThrowError(CliArgumentError);
+  });
+
+  it('passes a percent sign through where no shell is involved', () => {
+    expect(buildSpawnCommand('linux', '/usr/bin/code', ['%USERNAME%']).args).toEqual(['%USERNAME%']);
   });
 });
 
@@ -106,6 +146,23 @@ describe('createCliRunner', () => {
       await assertion;
       expect(calls[0]!.options.detached).toBe(true);
       expect(killed).toEqual([[-4242, 'SIGKILL']]);
+    });
+
+    it.skipIf(process.platform === 'win32')('kills a real background descendant on timeout (POSIX)', async () => {
+      // A shell that backgrounds `sleep` stands in for the `code` launcher script. Signalling
+      // only the shell would leave `sleep` running; the process-group kill must take it down.
+      const dir = mkdtempSync(join(tmpdir(), 'personas-cli-'));
+      const pidFile = join(dir, 'pid');
+      try {
+        const run = createCliRunner({ platform: process.platform as Platform, timeoutMs: 2000 });
+        const result = run('/bin/sh', ['-c', `sleep 60 & echo $! > '${pidFile}'; wait`]);
+        await expect(result).rejects.toThrowError(CliTimeoutError);
+        const pid = Number(readFileSync(pidFile, 'utf8').trim());
+        expect(pid).toBeGreaterThan(0);
+        expect(await waitUntilGone(pid, 5000)).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it('does not time out a process that exits in time', async () => {
