@@ -63,6 +63,19 @@ export function composeInventory(input: ComposeInput): Inventory {
       kind: 'duplicateName',
     });
   }
+  // `--profile Default` always reaches the built-in Default profile (verified in
+  // docs/spikes/findings.md), so a named profile called exactly "Default" is unreachable.
+  const shadowed = idsByName.get('Default');
+  if (shadowed) {
+    warnings.push({
+      file: 'globalStorage/storage.json',
+      message:
+        'A profile is named "Default". The code CLI sends --profile Default to the built-in Default profile, ' +
+        'so a change to this one would land there instead. Rename it in VS Code',
+      affectedProfileIds: shadowed,
+      kind: 'duplicateName',
+    });
+  }
 
   const defaultEntries = input.defaultManifest instanceof Error ? [] : input.defaultManifest;
   if (input.defaultManifest instanceof Error) {

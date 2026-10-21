@@ -67,6 +67,27 @@ describe('composeInventory', () => {
     expect(installEverywhereTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['default', 'ccc']);
   });
 
+  it('disables changes to a named profile called "Default", which --profile Default cannot reach', () => {
+    const input = baseInput();
+    input.rawProfiles.push(
+      { location: 'ddd', name: 'Default', inheritsDefaultExtensions: false },
+      // Names match case-sensitively, so these stay reachable.
+      { location: 'eee', name: 'default', inheritsDefaultExtensions: false },
+      { location: 'fff', name: 'work', inheritsDefaultExtensions: false },
+    );
+    const inv = composeInventory(input);
+    expect(inv.warnings).toEqual([
+      {
+        file: 'globalStorage/storage.json',
+        message:
+          'A profile is named "Default". The code CLI sends --profile Default to the built-in Default profile, ' +
+          'so a change to this one would land there instead. Rename it in VS Code',
+        affectedProfileIds: ['ddd'],
+        kind: 'duplicateName',
+      },
+    ]);
+  });
+
   it('marks app-scoped extensions installed in every profile', () => {
     const inv = composeInventory(baseInput());
     const everywhere = inv.extensions.find((e) => e.id === 'pub.everywhere');
