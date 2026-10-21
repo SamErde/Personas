@@ -48,6 +48,21 @@ export function composeInventory(input: ComposeInput): Inventory {
     })),
   ];
 
+  // Fail closed on shared names. VS Code's profile editor rejects duplicates
+  // (docs/spikes/findings.md), so this is a safety net for registries edited some other way.
+  const idsByName = new Map<string, string[]>();
+  for (const p of input.rawProfiles) idsByName.set(p.name, [...(idsByName.get(p.name) ?? []), p.location]);
+  for (const [name, ids] of idsByName) {
+    if (ids.length < 2) continue;
+    warnings.push({
+      file: 'globalStorage/storage.json',
+      message:
+        `More than one profile is named "${name}". The code CLI picks a profile by name, so Personas cannot ` +
+        'tell which one a change would reach; changes to them are disabled until one is renamed.',
+      affectedProfileIds: ids,
+    });
+  }
+
   const defaultEntries = input.defaultManifest instanceof Error ? [] : input.defaultManifest;
   if (input.defaultManifest instanceof Error) {
     warnings.push({

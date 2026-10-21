@@ -47,6 +47,25 @@ describe('composeInventory', () => {
     expect(inv.profiles[2]?.inheritsDefaultExtensions).toBe(true);
   });
 
+  it('disables changes to every profile sharing a name, since the code CLI targets profiles by name', () => {
+    const input = baseInput();
+    input.rawProfiles.push(
+      { location: 'bbb', name: 'Work', inheritsDefaultExtensions: false },
+      { location: 'ccc', name: 'Home', inheritsDefaultExtensions: false },
+    );
+    const inv = composeInventory(input);
+    expect(inv.warnings).toEqual([
+      {
+        file: 'globalStorage/storage.json',
+        message:
+          'More than one profile is named "Work". The code CLI picks a profile by name, so Personas cannot ' +
+          'tell which one a change would reach; changes to them are disabled until one is renamed.',
+        affectedProfileIds: ['aaa', 'bbb'],
+      },
+    ]);
+    expect(installEverywhereTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['default', 'ccc']);
+  });
+
   it('marks app-scoped extensions installed in every profile', () => {
     const inv = composeInventory(baseInput());
     const everywhere = inv.extensions.find((e) => e.id === 'pub.everywhere');

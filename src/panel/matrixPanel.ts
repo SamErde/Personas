@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
-import { directInstallProfileIds, installEverywhereTargets, removeEverywhereTargets } from '../core/inventory';
+import { MatrixActions } from '../core/matrixActions';
 import { MutationError } from '../core/mutations';
 import type { HostToWebview, Inventory, WebviewToHost, WorkspaceInventory } from '../core/types';
 import type { Services } from '../servicesFactory';
@@ -19,53 +19,39 @@ export class MatrixPanel {
   static current: MatrixPanel | undefined;
 
   static show(context: vscode.ExtensionContext, services: Services): void {
-    if (MatrixPanel.current) {
-      MatrixPanel.current.panel.reveal();
-      return;
-    }
-    const panel = vscode.window.createWebviewPanel(
-      'personas.matrix',
-      'Extension Matrix',
-      vscode.ViewColumn.One,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(context.extensionUri, 'dist'),
-          vscode.Uri.file(services.paths.extensionsDir),
-        ],
-      },
-    );
-    MatrixPanel.current = new MatrixPanel(panel, context, services, undefined);
+    MatrixPanel.open(context, services, undefined);
   }
 
   /**
    * Opens the panel in the terminal "can't manage profiles here" state instead of the matrix.
    * Per the design spec's error-handling class 1, the panel must never be a blank screen even
    * when the environment is unsupported — the webview renders `reason` once it signals ready.
-   * Mirrors `show`'s reveal-if-already-open behavior.
    */
   static showUnsupported(context: vscode.ExtensionContext, reason: string): void {
+    MatrixPanel.open(context, undefined, reason);
+  }
+
+  private static open(context: vscode.ExtensionContext, services: Services | undefined, reason: string | undefined): void {
     if (MatrixPanel.current) {
       MatrixPanel.current.panel.reveal();
       return;
     }
-    const panel = vscode.window.createWebviewPanel(
-      'personas.matrix',
-      'Extension Matrix',
-      vscode.ViewColumn.One,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist')],
-      },
-    );
-    MatrixPanel.current = new MatrixPanel(panel, context, undefined, reason);
+    const localResourceRoots = [vscode.Uri.joinPath(context.extensionUri, 'dist')];
+    // Icons are served straight from the extensions folder; unsupported mode shows none.
+    if (services) localResourceRoots.push(vscode.Uri.file(services.paths.extensionsDir));
+    const panel = vscode.window.createWebviewPanel('personas.matrix', 'Extension Matrix', vscode.ViewColumn.One, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots,
+    });
+    MatrixPanel.current = new MatrixPanel(panel, context, services, reason);
   }
 
   private lastInventory: Inventory | undefined;
   private lastWorkspace: WorkspaceInventory | undefined;
   private refreshQueue: Promise<void> = Promise.resolve();
+  private messageQueue: Promise<void> = Promise.resolve();
+  private readonly actions: MatrixActions | undefined;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -75,9 +61,33 @@ export class MatrixPanel {
      *  can't-manage state and every mutating message is guarded out in `onMessage`. */
     private readonly unsupportedReason: string | undefined,
   ) {
+    this.actions = services && new MatrixActions({
+      mutations: services.mutations,
+      cleanup: services.cleanup,
+      ui: {
+        confirm: async (message, action) =>
+          (await vscode.window.showWarningMessage(message, { modal: true }, action)) === action,
+        // Not awaited, for the same reason as the error notification in guard().
+        inform: (message) => void vscode.window.showInformationMessage(message),
+        markPending: (extId, profileId) => this.post({ type: 'pending', extId, profileId }),
+        showCleanupResult: (results) => this.post({ type: 'cleanupResult', results }),
+      },
+      refresh: () => this.refresh(),
+    });
     panel.webview.html = this.html(context);
     panel.onDidDispose(() => (MatrixPanel.current = undefined));
-    panel.webview.onDidReceiveMessage((m: WebviewToHost) => void this.onMessage(m));
+    panel.webview.onDidReceiveMessage((m: WebviewToHost) => void this.enqueue(() => this.onMessage(m)));
+  }
+
+  /**
+   * Handles panel work one item at a time, so a confirm-then-change flow can't interleave with
+   * another one acting on the same (by then stale) `lastInventory`. Every item runs through
+   * guard(), so a failure never stalls the queue.
+   */
+  private enqueue(work: () => Promise<void>): Promise<void> {
+    const task = this.messageQueue.then(work);
+    this.messageQueue = task.catch(() => undefined);
+    return task;
   }
 
   refresh(): Promise<void> {
@@ -119,10 +129,12 @@ export class MatrixPanel {
   async openCleanup(): Promise<void> {
     const services = this.services;
     if (!services) return;
-    await this.guard(async () => {
-      await this.refresh();
-      await this.postOrphans(services);
-    });
+    await this.enqueue(() =>
+      this.guard(async () => {
+        await this.refresh();
+        await this.postOrphans(services);
+      }),
+    );
   }
 
   private async postOrphans(services: Services): Promise<void> {
@@ -137,7 +149,8 @@ export class MatrixPanel {
 
   private async onMessage(m: WebviewToHost): Promise<void> {
     const services = this.services;
-    if (!services) {
+    const actions = this.actions;
+    if (!services || !actions) {
       // Terminal state (see showUnsupported): there are no services to act on, so every
       // message type is guarded out except 'ready', which (re-)announces the can't-manage
       // state instead of refreshing — this covers a fresh webview load and the narrow startup
@@ -151,16 +164,16 @@ export class MatrixPanel {
         await this.guard(() => this.refresh());
         return;
       case 'toggleCell':
-        await this.guard(() => this.toggleCell(services, m.extId, m.profileId, m.install));
+        await this.guard(() => actions.toggleCell(this.lastInventory, m.extId, m.profileId, m.install));
         return;
       case 'toggleAllProfiles':
         await this.guard(() => this.toggleAllProfiles(m.extId));
         return;
       case 'installEverywhere':
-        await this.guard(() => this.installEverywhere(services, m.extId));
+        await this.guard(() => actions.everyProfile(this.lastInventory, m.extId, 'install'));
         return;
       case 'removeEverywhere':
-        await this.guard(() => this.removeEverywhere(services, m.extId));
+        await this.guard(() => actions.everyProfile(this.lastInventory, m.extId, 'remove'));
         return;
       case 'openExtensionPage':
         await this.guard(() => this.openExtensionPage(m.extId));
@@ -169,7 +182,7 @@ export class MatrixPanel {
         await this.guard(() => this.postOrphans(services));
         return;
       case 'cleanup':
-        await this.guard(() => this.cleanup(services, m.folderNames));
+        await this.guard(() => actions.cleanup(this.lastInventory, m.folderNames));
         return;
     }
   }
@@ -180,71 +193,13 @@ export class MatrixPanel {
       await action();
     } catch (e) {
       const detail = e instanceof MutationError ? e.message : e instanceof Error ? e.message : String(e);
-      const pick = await vscode.window.showErrorMessage(`Personas: ${detail}`, 'Copy Details');
-      if (pick === 'Copy Details') await vscode.env.clipboard.writeText(detail);
+      // Not awaited: a non-modal notification settles only when dismissed, and waiting on it would
+      // hold up every message queued behind this one.
+      void vscode.window.showErrorMessage(`Personas: ${detail}`, 'Copy Details').then((pick) => {
+        if (pick === 'Copy Details') void vscode.env.clipboard.writeText(detail);
+      });
       await this.refresh();
     }
-  }
-
-  /**
-   * Sentence appended to uninstall confirmations when the Default profile is affected and other
-   * profiles inherit its extensions — they lose the extension too. Empty when not applicable.
-   */
-  private cascadeWarning(inv: Inventory, defaultIsAffected: boolean): string {
-    const inheritingProfiles = defaultIsAffected ? inv.profiles.filter((p) => p.inheritsDefaultExtensions) : [];
-    return inheritingProfiles.length > 0
-      ? ` Profiles that inherit the Default profile's extensions (${inheritingProfiles.map((p) => p.name).join(', ')}) will also lose it.`
-      : '';
-  }
-
-  private async toggleCell(services: Services, extId: string, profileId: string, install: boolean): Promise<void> {
-    // The webview marks the clicked cell as locally pending the moment the user acts, and only a
-    // fresh 'inventory' push clears that state — so every exit path from a mutation handler,
-    // including these stale/no-op bails, must refresh rather than silently return (same pattern
-    // as the stale-click re-sync below).
-    const inv = this.lastInventory;
-    if (!inv) {
-      await this.refresh();
-      return;
-    }
-    const profile = inv.profiles.find((p) => p.id === profileId);
-    const ext = inv.extensions.find((x) => x.id === extId);
-    if (!profile || !ext || profile.inheritsDefaultExtensions) {
-      await this.refresh();
-      return;
-    }
-
-    if (!install) {
-      // Stale click: the cell no longer reflects reality (e.g. a watcher-driven refresh
-      // already removed it from this profile). Re-sync instead of acting on stale state.
-      if (!ext.installedIn.includes(profileId)) {
-        await this.refresh();
-        return;
-      }
-
-      // installedIn includes profiles that merely inherit the default profile's extensions, so
-      // it overcounts "how many profiles would lose this extension if uninstalled here" — use
-      // direct installs only to detect the true last-profile case.
-      const direct = directInstallProfileIds(inv, extId);
-      if (direct.length === 1 && direct[0] === profileId) {
-        const inheritWarning = this.cascadeWarning(inv, profile.isDefault);
-        const pick = await vscode.window.showWarningMessage(
-          `"${ext.displayName}" is installed only in the "${profile.name}" profile. Uninstall it from your last profile?${inheritWarning}`,
-          { modal: true },
-          'Uninstall',
-        );
-        if (pick !== 'Uninstall') {
-          await this.refresh(); // revert the pending cell
-          return;
-        }
-      }
-    }
-
-    this.post({ type: 'pending', extId, profileId });
-    const profileName = profile.isDefault ? undefined : profile.name;
-    if (install) await services.mutations.install(extId, profileName);
-    else await services.mutations.uninstall(extId, profileName);
-    await this.refresh();
   }
 
   private async toggleAllProfiles(extId: string): Promise<void> {
@@ -261,86 +216,6 @@ export class MatrixPanel {
     );
   }
 
-  private async installEverywhere(services: Services, extId: string): Promise<void> {
-    const inv = this.lastInventory;
-    const ext = inv?.extensions.find((x) => x.id === extId);
-    if (!inv || !ext) {
-      // Stale/unknown id: the webview's bulk button is already locally pending — push a fresh
-      // inventory so that state clears instead of spinning forever.
-      await this.refresh();
-      return;
-    }
-
-    const targets = installEverywhereTargets(inv, extId);
-    if (targets.length === 0) {
-      await vscode.window.showInformationMessage('Already installed in every profile.');
-      await this.refresh();
-      return;
-    }
-
-    const pick = await vscode.window.showWarningMessage(
-      `Install "${ext.displayName}" into ${targets.length} profile(s)?\n\n${targets.map((p) => p.name).join('\n')}`,
-      { modal: true },
-      'Install',
-    );
-    if (pick !== 'Install') {
-      await this.refresh(); // revert any pending UI state
-      return;
-    }
-
-    for (const p of targets) this.post({ type: 'pending', extId, profileId: p.id });
-    // Sequential and awaited so a mid-loop failure (propagated by guard()) stops remaining
-    // installs instead of racing ahead — the MutationService queue already serializes the CLI
-    // calls themselves, this loop controls the higher-level stop-on-error behavior.
-    for (const p of targets) {
-      const profileName = p.isDefault ? undefined : p.name;
-      await services.mutations.install(extId, profileName);
-    }
-    await this.refresh();
-  }
-
-  private async removeEverywhere(services: Services, extId: string): Promise<void> {
-    const inv = this.lastInventory;
-    const ext = inv?.extensions.find((x) => x.id === extId);
-    if (!inv || !ext) {
-      // Same stale-id handling as installEverywhere: refresh so the webview's local pending
-      // state (set on click) is cleared by the resulting 'inventory' push.
-      await this.refresh();
-      return;
-    }
-
-    const targets = removeEverywhereTargets(inv, extId);
-    if (targets.length === 0) {
-      await vscode.window.showInformationMessage('Not directly installed in any profile.');
-      await this.refresh();
-      return;
-    }
-
-    // Always warn like the last-profile path in toggleCell, appending the cascade sentence
-    // whenever the default profile is a target and other profiles inherit its extensions.
-    const cascadeWarning = this.cascadeWarning(
-      inv,
-      targets.some((p) => p.isDefault),
-    );
-
-    const pick = await vscode.window.showWarningMessage(
-      `Remove "${ext.displayName}" from ${targets.length} profile(s)?\n\n${targets.map((p) => p.name).join('\n')}${cascadeWarning}`,
-      { modal: true },
-      'Remove',
-    );
-    if (pick !== 'Remove') {
-      await this.refresh(); // revert any pending UI state
-      return;
-    }
-
-    for (const p of targets) this.post({ type: 'pending', extId, profileId: p.id });
-    for (const p of targets) {
-      const profileName = p.isDefault ? undefined : p.name;
-      await services.mutations.uninstall(extId, profileName);
-    }
-    await this.refresh();
-  }
-
   /**
    * Opens VS Code's own extension page for `extId` — used by the hover card's name link.
    * Honest network note: VS Code's `extension.open` implementation queries its gallery service
@@ -348,7 +223,7 @@ export class MatrixPanel {
    * user-initiated, and any Marketplace contact is VS Code's own, governed by VS Code's settings.
    */
   private async openExtensionPage(extId: string): Promise<void> {
-    // Same defense-in-depth as toggleCell/installEverywhere: only act on ids present in the
+    // Same defense-in-depth as MatrixActions: only act on ids present in the
     // last inventory the webview could have rendered — an unknown/stale id re-syncs instead.
     const ext = this.lastInventory?.extensions.find((x) => x.id === extId);
     if (!ext) {
@@ -356,28 +231,6 @@ export class MatrixPanel {
       return;
     }
     await vscode.commands.executeCommand('extension.open', extId);
-  }
-
-  private async cleanup(services: Services, folderNames: string[]): Promise<void> {
-    const inv = this.lastInventory;
-    if (!inv || folderNames.length === 0) return;
-    // Defense in depth: only ever target folders belonging to orphaned extensions, even
-    // though the webview is only ever expected to request orphan folder names in the first
-    // place — deleteFolders itself performs no orphan verification.
-    const orphanedVersions = inv.extensions.filter((e) => e.orphaned).flatMap((e) => e.versions);
-    const targets = orphanedVersions.filter((v) => folderNames.includes(v.folderName));
-    const pick = await vscode.window.showWarningMessage(
-      `Move ${targets.length} extension folder(s) to the Recycle Bin/Trash?\n\n${targets.map((t) => t.folderName).join('\n')}`,
-      { modal: true },
-      'Move to Trash',
-    );
-    if (pick !== 'Move to Trash') {
-      await this.refresh(); // revert any pending UI state
-      return;
-    }
-    const results = await services.cleanup.deleteFolders(targets);
-    this.post({ type: 'cleanupResult', results });
-    await this.refresh();
   }
 
   private html(context: vscode.ExtensionContext): string {
