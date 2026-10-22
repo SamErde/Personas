@@ -14,8 +14,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // Watchers start with service construction, not with the showMatrix command: Home and open
   // personas-readonly documents must live-update even when the user disables
   // openMatrixOnActivityBarClick and never opens the matrix. Fires once, on the first successful
-  // build, from whichever caller (showMatrix or Home) builds services first; the
-  // unsupported-environment error path never fires it.
+  // build, from whichever caller (showMatrix or Home) builds services first; the unsupported-
+  // environment error path never fires it.
   setOnServicesBuilt((ctx, services) => watchForChanges(ctx, services));
 
   homeProvider = new HomeViewProvider(context);

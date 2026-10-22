@@ -114,9 +114,9 @@ export class MatrixPanel {
 
   /**
    * Ensures inventory is fresh, then opens the cleanup (orphan-review) view — the same effect as
-   * the webview's own "Review…" button, but invoked externally (Home calls this
-   * after asking the host to show the matrix). No-op in the unsupported terminal state, since
-   * there is nothing to review there.
+   * the webview's own "Review…" button, but invoked externally through the
+   * `personas.reviewOrphans` command (extension.ts), which Home runs. No-op in the unsupported
+   * terminal state, since there is nothing to review there.
    */
   async openCleanup(): Promise<void> {
     const services = this.services;

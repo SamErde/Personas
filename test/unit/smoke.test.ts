@@ -2,9 +2,9 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { resolveWorkspaceManifestAction } from '../../src/panel/homeActions';
 import type { HomeToHost } from '../../src/protocol';
 import {
+  homeContentSecurityPolicy,
   matrixContentSecurityPolicy,
   renderContentSecurityPolicyMeta,
-  homeContentSecurityPolicy,
 } from '../../src/panel/webviewSecurity';
 import { isTrustedHostMessageOrigin } from '../../src/webview/messageSecurity';
 
