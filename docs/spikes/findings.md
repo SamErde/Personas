@@ -1,12 +1,12 @@
 # Spike A — state-file semantics findings
 
 **Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), running during the spike.
-**Script:** `scripts/spike-formats.mjs` (read-only; run with no args to use platform defaults).
+**Script:** `docs/spikes/probes/spike-formats.mjs` (read-only; run with no args to use platform defaults).
 **Date:** 2026-07-03
 
-## Step 1-2: `scripts/spike-formats.mjs` output vs. the plan's "Verified file-format facts"
+## Step 1-2: `docs/spikes/probes/spike-formats.mjs` output vs. the plan's "Verified file-format facts"
 
-Ran `node scripts/spike-formats.mjs` against the live `%APPDATA%\Code` and `~/.vscode/extensions`.
+Ran `node docs/spikes/probes/spike-formats.mjs` against the live `%APPDATA%\Code` and `~/.vscode/extensions`.
 
 ### Fact 1 — profile registry (`storage.json` -> `userDataProfiles`)
 
@@ -151,7 +151,7 @@ $ code --profile "Blog" --list-extensions
 
 Full raw output is captured in `.superpowers/sdd/task-2-report.md`.
 
-Verdict: install/uninstall via `code --profile <name>` are scoped strictly to the named profile. Installing into "Blog" did not touch the default profile's `--list-extensions` output, and uninstalling from "Blog" left the default profile and every other profile untouched. Re-running `scripts/spike-formats.mjs` after the sequence showed Blog's own `extensions.json` count back at 11 (its pre-spike value) and the global manifest still at 42 entries — no leakage in either direction. MutationService (Task 8) can rely on `--profile` scoping without an extra guard for install/uninstall crossing profile boundaries.
+Verdict: install/uninstall via `code --profile <name>` are scoped strictly to the named profile. Installing into "Blog" did not touch the default profile's `--list-extensions` output, and uninstalling from "Blog" left the default profile and every other profile untouched. Re-running `docs/spikes/probes/spike-formats.mjs` after the sequence showed Blog's own `extensions.json` count back at 11 (its pre-spike value) and the global manifest still at 42 entries — no leakage in either direction. MutationService (Task 8) can rely on `--profile` scoping without an extra guard for install/uninstall crossing profile boundaries.
 
 The one side effect (folder + `.obsolete` entry lingering until VS Code's own GC) is normal CLI/product behavior, not something the spike introduced or needs to work around — it does not appear in any profile's `extensions.json` and is already covered by fact 7's "not-orphan while obsolete" rule.
 
@@ -302,7 +302,7 @@ code --user-data-dir "$dataDir" --extensions-dir "$extDir" --new-window "$wsDir"
 
 ## Step 2 / fact (a): schema verification under custom dirs
 
-Ran `node scripts/spike-formats.mjs "<dataDir>" "<extDir>"` twice: immediately after launch (no named profile yet) and again after Step 3 created `SpikeTest` and installed `ms-vscode.hexeditor` into it.
+Ran `node docs/spikes/probes/spike-formats.mjs "<dataDir>" "<extDir>"` twice: immediately after launch (no named profile yet) and again after Step 3 created `SpikeTest` and installed `ms-vscode.hexeditor` into it.
 
 Immediately after launch — only the implicit default profile exists, exactly like a freshly installed real VS Code:
 ```
@@ -367,7 +367,7 @@ Profile 'SpikeTest' not found.
 exit=1
 ```
 
-Neither call created a profile entry, a profile folder, or installed anything — `scripts/spike-formats.mjs` still showed `userDataProfiles: []` after both attempts. The CLI's data-operation flags never auto-create a named profile.
+Neither call created a profile entry, a profile folder, or installed anything — `docs/spikes/probes/spike-formats.mjs` still showed `userDataProfiles: []` after both attempts. The CLI's data-operation flags never auto-create a named profile.
 
 Surprise, not anticipated by either brief: opening an actual **window** against the same not-yet-existing name does create it:
 ```
@@ -394,7 +394,7 @@ Three-way comparison, run back to back:
 | `code --user-data-dir <d> --extensions-dir <e> --list-extensions` | both | none | *(empty)* | targets sandbox's own default profile |
 | `code --list-extensions` | **none** | none | 42 entries (`anthropic.claude-code`, `davidanson.vscode-markdownlint`, … full real list) | targets the **real** default install |
 
-Row 3's output is identical (`diff` of the two captured listings, zero differences) to a `code --list-extensions` capture taken *before* the sandbox was ever launched. `node scripts/spike-formats.mjs` (no args → platform defaults) run before, during, and after the entire spike produced identical output all three times — a field-level comparison of the profile registry, global extension manifest, and `.obsolete` (everything the script prints). No warning, no error, no degraded/partial mode when both dir args are omitted — the CLI simply falls back to its normal platform-default paths and operates on the real install as if the sandbox never existed.
+Row 3's output is identical (`diff` of the two captured listings, zero differences) to a `code --list-extensions` capture taken *before* the sandbox was ever launched. `node docs/spikes/probes/spike-formats.mjs` (no args → platform defaults) run before, during, and after the entire spike produced identical output all three times — a field-level comparison of the profile registry, global extension manifest, and `.obsolete` (everything the script prints). No warning, no error, no degraded/partial mode when both dir args are omitted — the CLI simply falls back to its normal platform-default paths and operates on the real install as if the sandbox never existed.
 
 ### Partial omission (exactly one flag) — a silent hybrid, not a clean fallback
 
@@ -417,7 +417,7 @@ So each flag independently overrides only its own half; every omitted flag's hal
 
 - All `Code.exe` processes were enumerated via `Get-CimInstance Win32_Process -Filter "Name='Code.exe'"` and filtered to `CommandLine -like "*personas-spikec-data*"` before any kill — 11 matched (two windows' worth of main+helper processes by that point), 0 overlap with the 19 real-install PIDs recorded as a pre-spike baseline. All 11 were stopped (`Stop-Process -Force`, matched by PID from that same filtered list only); a post-kill re-scan found 0 sandbox-tagged processes remaining, and all 19 original real PIDs (plus one unrelated new one — normal churn in a long-running IDE, confirmed to not reference the sandbox path) still running untouched.
 - Both temp dirs and the throwaway workspace folder were deleted (`Remove-Item -Recurse -Force`) and confirmed absent afterward. The follow-up partial-omission checks used two additional fresh temp dirs (`personas-spikec-partial-data`, `personas-spikec-partial-ext`), spawned no window or lingering process (pure CLI data ops), and were likewise deleted afterward, with the real install re-verified once more.
-- Real install untouched at every level checked — field-level comparison of the profile registry, extension manifests, and CLI listings (`diff` of the captured outputs, zero differences each time): (1) `node scripts/spike-formats.mjs` (platform defaults) captured before the spike vs. during vs. after the main sandbox vs. after the partial-omission checks — identical profile list, global manifest, and `.obsolete` every time; (2) `code --list-extensions` (42 entries) captured before vs. during vs. after — identical; (3) no sandbox-tagged process ever appeared outside the temp-dir-matched filter and no real PID was ever targeted by a kill command. (Incidental real-install state outside the script's output — e.g. window-layout fields the user's own running VS Code rewrites continuously anyway — was not compared; the untouched claim is scoped to the profile/extension state Personas cares about.)
+- Real install untouched at every level checked — field-level comparison of the profile registry, extension manifests, and CLI listings (`diff` of the captured outputs, zero differences each time): (1) `node docs/spikes/probes/spike-formats.mjs` (platform defaults) captured before the spike vs. during vs. after the main sandbox vs. after the partial-omission checks — identical profile list, global manifest, and `.obsolete` every time; (2) `code --list-extensions` (42 entries) captured before vs. during vs. after — identical; (3) no sandbox-tagged process ever appeared outside the temp-dir-matched filter and no real PID was ever targeted by a kill command. (Incidental real-install state outside the script's output — e.g. window-layout fields the user's own running VS Code rewrites continuously anyway — was not compared; the untouched claim is scoped to the profile/extension state Personas cares about.)
 
 ## Surprises / notes for later tasks
 

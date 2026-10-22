@@ -68,9 +68,9 @@ New-Item -ItemType Directory -Force -Path $UserDataDir, $ExtensionsDir | Out-Nul
 
 $WorkspaceFixtureDir = Join-Path $TestRoot 'workspace-fixture'
 New-Item -ItemType Directory -Force -Path $WorkspaceFixtureDir | Out-Null
-Copy-Item -LiteralPath .\test\spike\workspace-status.code-workspace -Destination $WorkspaceFixtureDir
-Copy-Item -LiteralPath .\test\spike\workspace-root -Destination $WorkspaceFixtureDir -Recurse -Force
-Copy-Item -LiteralPath .\test\spike\workspace-root-two -Destination $WorkspaceFixtureDir -Recurse -Force
+Copy-Item -LiteralPath .\test\fixtures\multi-root-workspace\workspace-status.code-workspace -Destination $WorkspaceFixtureDir
+Copy-Item -LiteralPath .\test\fixtures\multi-root-workspace\workspace-root -Destination $WorkspaceFixtureDir -Recurse -Force
+Copy-Item -LiteralPath .\test\fixtures\multi-root-workspace\workspace-root-two -Destination $WorkspaceFixtureDir -Recurse -Force
 $WorkspacePath = Join-Path $WorkspaceFixtureDir 'workspace-status.code-workspace'
 
 $CodeArgs = @(
@@ -86,7 +86,7 @@ $CodeArgs = @(
 ```
 
 The copied fixture preserves the saved workspace's relative folder layout. Make every manual
-fixture change only under `$WorkspaceFixtureDir`; the tracked files under `test/spike` remain
+fixture change only under `$WorkspaceFixtureDir`; the tracked files under `test/fixtures/multi-root-workspace` remain
 unchanged.
 
 Installing the same version again with `--force` replaces the sandbox copy, so ordinary local
