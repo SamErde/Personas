@@ -3,7 +3,7 @@ import type { HostToMatrix, MatrixToHost } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
 import { el, formatBytes } from './ui';
-import { isTrustedHostMessageOrigin } from './messageSecurity';
+import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
 declare function acquireVsCodeApi(): { postMessage(m: MatrixToHost): void };
 const vscode = acquireVsCodeApi();
@@ -637,7 +637,7 @@ function renderCleanup(list: OrphanInfo[]): void {
  * fallback. Also swaps a broken/unresolvable icon path to the fallback at load time, so a stale
  * or invalid host-provided URI never surfaces a broken-image glyph. */
 function extIcon(extId: string, displayName: string): HTMLElement {
-  const src = icons[extId];
+  const src = safeImageSource(icons[extId]);
   if (!src) return letterTile(displayName);
   const img = document.createElement('img');
   img.className = 'ext-icon';

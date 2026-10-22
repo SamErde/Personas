@@ -6,7 +6,7 @@ import {
   matrixContentSecurityPolicy,
   renderContentSecurityPolicyMeta,
 } from '../../src/panel/webviewSecurity';
-import { isTrustedHostMessageOrigin } from '../../src/webview/messageSecurity';
+import { isTrustedHostMessageOrigin, safeImageSource } from '../../src/webview/messageSecurity';
 
 describe('toolchain', () => {
   it('runs', () => {
@@ -31,6 +31,16 @@ describe('webview security and workspace protocol smoke checks', () => {
   it('accepts only same-origin host messages', () => {
     expect(isTrustedHostMessageOrigin('vscode-webview://safe', 'vscode-webview://safe')).toBe(true);
     expect(isTrustedHostMessageOrigin('https://attacker.invalid', 'vscode-webview://safe')).toBe(false);
+  });
+
+  it('accepts only https image sources from the host, such as asWebviewUri output', () => {
+    const icon = 'https://file+.vscode-resource.vscode-cdn.net/c%3A/ext/pub.a-1.0.0/icon.png';
+    expect(safeImageSource(icon)).toBe(icon);
+    expect(safeImageSource('javascript:alert(1)')).toBeUndefined();
+    expect(safeImageSource('data:image/svg+xml,<svg/>')).toBeUndefined();
+    expect(safeImageSource('http://attacker.invalid/x.png')).toBeUndefined();
+    expect(safeImageSource('not a url')).toBeUndefined();
+    expect(safeImageSource(undefined)).toBeUndefined();
   });
 
   it('uses exact host-only workspace manifest commands and ignores a forged path property', () => {
