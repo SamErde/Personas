@@ -1,6 +1,6 @@
 /**
  * Recursively sums file sizes and finds the newest mtime under `fsPath`. Shared by MatrixPanel's
- * orphan listing and the sidebar dashboard's orphan-size line — both feed the result into
+ * orphan listing and Home's orphan-size line — both feed the result into
  * `buildOrphanInfos`'s `stat` callback.
  */
 export async function statFolder(fsPath: string): Promise<{ sizeBytes: number; lastModifiedMs: number }> {

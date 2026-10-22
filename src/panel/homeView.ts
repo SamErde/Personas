@@ -3,26 +3,25 @@ import { buildOrphanInfos } from '../core/cleanup';
 import { asError } from '../core/errors';
 import { profileExtensionCounts, profileManifestPath } from '../core/inventory';
 import { orphanCount } from '../core/inventoryQueries';
-import type { HostToWelcome, WelcomeProfileVm, WelcomeToHost, WelcomeWorkspaceVm } from '../core/types';
 import { workspaceExtensionCounts } from '../core/workspace';
+import type { HomeProfileVm, HomeToHost, HomeWorkspaceVm, HostToHome } from '../protocol';
 import { getOrBuildServices } from '../servicesFactory';
 import { statFolder } from './fsStat';
-import { MatrixPanel } from './matrixPanel';
+import { resolveWorkspaceManifestAction } from './homeActions';
 import { openReadOnly } from './readOnlyProvider';
-import { resolveWorkspaceManifestAction } from './welcomeActions';
-import { createNonce, renderContentSecurityPolicyMeta, welcomeContentSecurityPolicy } from './webviewSecurity';
+import { createNonce, homeContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
 /**
- * Sidebar mini-dashboard for the activity-bar view. Owns no business logic of its own: counts,
- * orphan detection and sizing all come from pure/core helpers (`profileExtensionCounts`,
- * `buildOrphanInfos`) — this class only wires services to the webview and reacts to its messages.
- * The rendering script itself lives in dist/welcome.js (built from src/webview/welcome.ts) rather
- * than inline, to keep this file's HTML skeleton small. The themed "Open Extension Matrix" button
- * and auto-open-on-click behavior are unchanged.
+ * Home, the Personas sidebar: one section per area, currently only Profiles & Extensions. Owns no
+ * business logic of its own: counts, orphan detection and sizing all come from pure/core helpers
+ * (`profileExtensionCounts`, `buildOrphanInfos`) — this class only wires services to the webview
+ * and reacts to its messages. It reaches the Extension Matrix only through commands, never by
+ * importing MatrixPanel. The rendering script lives in dist/home.js (built from
+ * src/webview/home.ts) rather than inline, to keep this file's HTML skeleton small.
  */
-export class WelcomeViewProvider implements vscode.WebviewViewProvider {
+export class HomeViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
-  private profiles: WelcomeProfileVm[] = [];
+  private profiles: HomeProfileVm[] = [];
   private workspaceManifestPath: string | undefined;
   private renderGeneration = 0;
 
@@ -35,18 +34,18 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist')],
     };
     webviewView.webview.html = this.html(webviewView.webview);
-    webviewView.webview.onDidReceiveMessage((m: WelcomeToHost) => void this.onMessage(m));
+    webviewView.webview.onDidReceiveMessage((m: HomeToHost) => void this.onMessage(m));
 
     // resolveWebviewView doesn't re-fire on later re-clicks (the view stays resolved once
     // created), so also auto-open on visibility change to visible — this covers re-clicking the
-    // activity-bar icon after the matrix editor tab was closed. The dashboard itself is
+    // activity-bar icon after the matrix editor tab was closed. Home itself is
     // re-rendered on the same trigger, so it never goes stale while hidden.
     this.maybeAutoOpen();
-    void this.renderDashboard();
+    void this.render();
     const visibilityListener = webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
         this.maybeAutoOpen();
-        void this.renderDashboard();
+        void this.render();
       }
     });
     webviewView.onDidDispose(() => {
@@ -63,7 +62,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
    */
   async refresh(): Promise<void> {
     if (!this.view?.visible) return;
-    await this.renderDashboard();
+    await this.render();
   }
 
   private maybeAutoOpen(): void {
@@ -73,11 +72,11 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     if (enabled) void vscode.commands.executeCommand('personas.showMatrix');
   }
 
-  private post(message: HostToWelcome): void {
+  private post(message: HostToHome): void {
     void this.view?.webview.postMessage(message);
   }
 
-  private async renderDashboard(): Promise<void> {
+  private async render(): Promise<void> {
     const generation = ++this.renderGeneration;
     const setup = await getOrBuildServices(this.context);
     if (generation !== this.renderGeneration) return;
@@ -101,7 +100,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     const orphanedCount = orphanCount(inventory);
     const workspaceInventory = await setup.workspace.getWorkspaceInventory(inventory);
     if (generation !== this.renderGeneration) return;
-    const workspace: WelcomeWorkspaceVm | undefined = workspaceInventory
+    const workspace: HomeWorkspaceVm | undefined = workspaceInventory
       ? {
           name: workspaceInventory.descriptor.name,
           kind: workspaceInventory.descriptor.kind,
@@ -135,7 +134,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async onMessage(m: WelcomeToHost): Promise<void> {
+  private async onMessage(m: HomeToHost): Promise<void> {
     if (m.type === 'openWorkspaceReadOnly' || m.type === 'editWorkspaceFile') {
       const action = resolveWorkspaceManifestAction(m, this.workspaceManifestPath);
       if (!action) return;
@@ -152,7 +151,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     }
     switch (m.type) {
       case 'ready':
-        await this.renderDashboard();
+        await this.render();
         return;
       case 'openMatrix':
         await vscode.commands.executeCommand('personas.showMatrix');
@@ -170,10 +169,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         return;
       }
       case 'reviewOrphans':
-        // Same host round trip the matrix's own "Review…" button takes, just triggered from the
-        // sidebar: show the matrix, then jump it straight into the cleanup view.
-        await vscode.commands.executeCommand('personas.showMatrix');
-        await MatrixPanel.current?.openCleanup();
+        await vscode.commands.executeCommand('personas.reviewOrphans');
         return;
     }
   }
@@ -190,13 +186,13 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private html(webview: vscode.Webview): string {
-    const script = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'welcome.js'));
+    const script = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'home.js'));
     const nonce = createNonce();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-${renderContentSecurityPolicyMeta(welcomeContentSecurityPolicy(nonce))}
+${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
 <title>Personas</title>
 <style nonce="${nonce}">
   body {
@@ -214,7 +210,9 @@ ${renderContentSecurityPolicyMeta(welcomeContentSecurityPolicy(nonce))}
     cursor: pointer;
   }
   button:hover { background: var(--vscode-button-hoverBackground); }
-  h2 { font-size: 0.95em; margin: 1rem 0 0.25rem; }
+  h2 { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; margin: 0.5rem 0 0.5rem; }
+  h3 { font-size: 0.95em; margin: 1rem 0 0.25rem; }
+  .home-section + .home-section { margin-top: 1.25rem; }
   #profiles { list-style: none; margin: 0; padding: 0; }
   #profiles li { margin: 0 0 8px; }
   #profiles li:last-child { margin-bottom: 0; }
@@ -284,15 +282,18 @@ ${renderContentSecurityPolicyMeta(welcomeContentSecurityPolicy(nonce))}
 </style>
 </head>
 <body>
+<section class="home-section" aria-labelledby="profiles-extensions-heading">
+<h2 id="profiles-extensions-heading">Profiles &amp; Extensions</h2>
 <div id="launcher">
 <button id="open">Open Extension Matrix</button>
 </div>
-<div id="dashboard">
-<h2>Profiles</h2>
+<div id="profiles-extensions">
+<h3>Profiles</h3>
 <ul id="profiles"></ul>
 <div id="workspace"></div>
 <div id="extra"></div>
 </div>
+</section>
 <script nonce="${nonce}" src="${script}"></script>
 </body>
 </html>`;

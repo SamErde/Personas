@@ -13,7 +13,7 @@ export function matrixContentSecurityPolicy(cspSource: string, nonce: string): s
   return `default-src 'none'; style-src ${cspSource}; script-src 'nonce-${nonce}'; img-src ${cspSource};`;
 }
 
-export function welcomeContentSecurityPolicy(nonce: string): string {
+export function homeContentSecurityPolicy(nonce: string): string {
   return `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';`;
 }
 

@@ -1,27 +1,25 @@
 import * as vscode from 'vscode';
 import { areFsPathsEqual, type Platform, type WatchTarget } from './core/paths';
+import { HomeViewProvider } from './panel/homeView';
 import { MatrixPanel } from './panel/matrixPanel';
 import { registerPersonasReadOnlyProvider, type PersonasReadOnlyContentProvider } from './panel/readOnlyProvider';
-import { WelcomeViewProvider } from './panel/welcomeView';
 import { getOrBuildServices, setOnServicesBuilt, type Services } from './servicesFactory';
 
-let welcomeProvider: WelcomeViewProvider | undefined;
+let homeProvider: HomeViewProvider | undefined;
 let readOnlyProvider: PersonasReadOnlyContentProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   readOnlyProvider = registerPersonasReadOnlyProvider(context);
 
-  // Watchers start with service construction, not with the showMatrix command: the sidebar
-  // dashboard and open personas-readonly documents must live-update even when the user disables
+  // Watchers start with service construction, not with the showMatrix command: Home and open
+  // personas-readonly documents must live-update even when the user disables
   // openMatrixOnActivityBarClick and never opens the matrix. Fires once, on the first successful
-  // build, from whichever caller (showMatrix or the welcome view) builds services first; the
+  // build, from whichever caller (showMatrix or Home) builds services first; the
   // unsupported-environment error path never fires it.
   setOnServicesBuilt((ctx, services) => watchForChanges(ctx, services));
 
-  welcomeProvider = new WelcomeViewProvider(context);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('personas.welcome', welcomeProvider),
-  );
+  homeProvider = new HomeViewProvider(context);
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider('personas.home', homeProvider));
   context.subscriptions.push(
     vscode.commands.registerCommand('personas.showMatrix', async () => {
       const setup = await getOrBuildServices(context);
@@ -37,6 +35,12 @@ export function activate(context: vscode.ExtensionContext): void {
       MatrixPanel.show(context, setup);
       await MatrixPanel.current?.refresh();
     }),
+    // Internal (not contributed): Home's orphan summary opens the matrix straight into its cleanup
+    // view. Home reaches the matrix only through commands, so neither panel imports the other.
+    vscode.commands.registerCommand('personas.reviewOrphans', async () => {
+      await vscode.commands.executeCommand('personas.showMatrix');
+      await MatrixPanel.current?.openCleanup();
+    }),
   );
 }
 
@@ -48,7 +52,7 @@ function scheduleRefresh(): void {
   clearTimeout(watchTimer);
   watchTimer = setTimeout(() => {
     void MatrixPanel.current?.refresh();
-    void welcomeProvider?.refresh();
+    void homeProvider?.refresh();
     // Open personas-readonly documents are live windows onto profile or workspace manifests.
     readOnlyProvider?.refreshOpenDocuments();
   }, 300);

@@ -46,8 +46,8 @@
     "views": {
       "personas": [
         {
-          "id": "personas.welcome",
-          "name": "Profiles",
+          "id": "personas.home",
+          "name": "Home",
           "type": "webview",
           "icon": "media/activity-icon.svg",
           "contextualTitle": "Personas"
