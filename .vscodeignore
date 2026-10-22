@@ -4,7 +4,6 @@ test/
 src/
 node_modules/
 esbuild.mjs
-vitest.config.ts
 tsconfig*.json
 out-test/
 *.vsix
@@ -20,3 +19,6 @@ scripts/
 .nvmrc
 CLAUDE.md
 vitest.config.*
+# Sourcemaps stay in local and test builds; VS Code doesn't apply them to an
+# installed extension's stack traces, so they only add VSIX size.
+dist/**/*.map

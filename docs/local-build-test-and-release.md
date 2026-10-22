@@ -234,8 +234,9 @@ before it expires. To recover, re-run that job from the GitHub Actions UI. This 
 path, and it publishes the same sealed VSIX.
 
 If re-running the job is not possible, the maintainer may publish the already-released VSIX by hand
-as a last resort: download it from the GitHub release and run
-`npx @vscode/vsce publish --packagePath <file>`. This is the only exception to the "never run
+as a last resort: check out the release tag, run `npm ci`, download the VSIX from the GitHub
+release, and run `npx --no -- vsce publish --packagePath <file>`. This publishes with the vsce version
+locked in `package-lock.json`, as the workflow does. This is the only exception to the "never run
 `vsce publish` manually" rule. It must use `--packagePath` with the released file (never a version
 argument such as `patch`, which bumps and publishes a version release-please does not know about),
 and an agent must not run it.
