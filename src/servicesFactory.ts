@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import { CleanupService } from './core/cleanup';
 import { InventoryService, type InventoryIo } from './core/inventory';
 import { createCliRunner } from './core/cliRunner';
+import { asError } from './core/errors';
 import { MutationService } from './core/mutations';
+import { parsePackageMeta } from './core/parsers';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths, type WatchTarget } from './core/paths';
 import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
@@ -66,40 +68,26 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
       // design guards against. Surface it as an Error so getInventory degrades it like a
       // parse failure instead.
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      return e instanceof Error ? e : new Error(String(e));
-    }
-  };
-  const listDirs = async (p: string): Promise<string[] | Error> => {
-    try {
-      return (await fsp.readdir(p, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
-      return e instanceof Error ? e : new Error(String(e));
+      return asError(e);
     }
   };
   const io: InventoryIo = {
     readFile,
     listDirs: async (p) => {
-      const result = await listDirs(p);
-      return result instanceof Error ? [] : result;
+      try {
+        return (await fsp.readdir(p, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        return asError(e);
+      }
     },
     readPackageMeta: async (folder) => {
+      const text = await readFile(path.join(folder, 'package.json'));
+      if (text === undefined || text instanceof Error) return text;
       try {
-        const pkg = JSON.parse(await fsp.readFile(path.join(folder, 'package.json'), 'utf8')) as {
-          displayName?: unknown;
-          icon?: unknown;
-          description?: unknown;
-          publisher?: unknown;
-        };
-        const displayName =
-          typeof pkg.displayName === 'string' && !pkg.displayName.startsWith('%') ? pkg.displayName : undefined;
-        const icon = typeof pkg.icon === 'string' ? pkg.icon : undefined;
-        const description =
-          typeof pkg.description === 'string' && !pkg.description.startsWith('%') ? pkg.description : undefined;
-        const publisher = typeof pkg.publisher === 'string' ? pkg.publisher : undefined;
-        return { displayName, icon, description, publisher };
-      } catch {
-        return undefined;
+        return parsePackageMeta(text);
+      } catch (e) {
+        return asError(e);
       }
     },
   };
@@ -125,7 +113,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
       }),
     getRuntimeExtensions: () =>
       vscode.extensions.all.map((extension) => ({
-        id: extension.id.toLowerCase(),
+        id: extension.id,
         uri: extension.extensionUri.toString(),
         ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
         ...(typeof extension.packageJSON['version'] === 'string'

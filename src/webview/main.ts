@@ -1,5 +1,7 @@
 import type { HostToWebview, Inventory, OrphanInfo, WebviewToHost, WorkspaceInventory } from '../core/types';
-import { buildViewModel, formatBytes, supportsProfileActions, type Chip, type RowVm } from './render';
+import { orphanCount } from '../core/inventoryQueries';
+import { buildViewModel, type Chip, type RowVm } from './render';
+import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin } from './messageSecurity';
 
 declare function acquireVsCodeApi(): { postMessage(m: WebviewToHost): void };
@@ -8,7 +10,6 @@ const vscode = acquireVsCodeApi();
 let inventory: Inventory | undefined;
 let workspace: WorkspaceInventory | undefined;
 let renderedRows: RowVm[] = [];
-let toggleSupported = false;
 let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
 let chip: Chip = 'all';
 let filter = '';
@@ -215,7 +216,7 @@ function buildCardContent(ext: RowVm): void {
 
   const header = el('div', 'ext-card-header');
   header.append(extIcon(ext.extId, ext.displayName));
-  if (supportsProfileActions(ext)) {
+  if (ext.profileBacked) {
     const nameLink = el('a', 'ext-card-name', ext.displayName) as HTMLAnchorElement;
     nameLink.href = '#';
     nameLink.tabIndex = 0;
@@ -250,7 +251,7 @@ function buildCardContent(ext: RowVm): void {
     card.append(el('div', 'ext-card-meta', metaParts.join(' · ')));
   }
 
-  if (!supportsProfileActions(ext)) {
+  if (!ext.profileBacked) {
     card.append(el('div', 'ext-card-meta', 'Read-only workspace extension; profile actions are unavailable.'));
     return;
   }
@@ -351,7 +352,6 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
     case 'inventory':
       inventory = m.inventory;
       workspace = m.workspace;
-      toggleSupported = m.toggleSupported;
       icons = m.icons;
       pending = new Set();
       localPending = new Set();
@@ -422,7 +422,7 @@ function updateChipButtons(): void {
 }
 
 function updateOrphanButton(): void {
-  const count = inventory ? inventory.extensions.filter((e) => e.orphaned).length : 0;
+  const count = inventory ? orphanCount(inventory) : 0;
   orphanButton.textContent = `Review ${count} orphaned…`;
   orphanButton.hidden = count === 0;
 }
@@ -528,7 +528,7 @@ function renderContent(): void {
 
     if (row.applyToAllProfiles) {
       const badge = el('button', 'badge', 'ALL');
-      badge.title = toggleSupported ? 'Applied to all profiles — click to toggle' : 'Applied to all profiles — click for how to change';
+      badge.title = 'Applied to all profiles — click for how to change';
       badge.addEventListener('click', () => post({ type: 'toggleAllProfiles', extId: row.extId }));
       name.append(badge);
     }
@@ -647,13 +647,6 @@ function extIcon(extId: string, displayName: string): HTMLElement {
 function letterTile(displayName: string): HTMLElement {
   const letter = displayName.trim().charAt(0).toUpperCase() || '?';
   return el('span', 'ext-icon ext-icon-fallback', letter);
-}
-
-function el(tag: string, className: string, text?: string): HTMLElement {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
 }
 
 render();

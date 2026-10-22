@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildViewModel, formatBytes, supportsProfileActions } from '../../src/webview/render';
+import { orphanCount } from '../../src/core/inventoryQueries';
+import { buildViewModel } from '../../src/webview/render';
+import { formatBytes } from '../../src/webview/ui';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../../src/core/types';
 
 const inv: Inventory = {
@@ -27,7 +29,6 @@ function workspaceWith(statuses: WorkspaceExtensionStatus[]): WorkspaceInventory
     activeProfileId: 'aaa',
     activeProfileName: 'Work',
     extensions: statuses,
-    localExtensions: [],
     warnings: ['association evidence is incomplete'],
   };
 }
@@ -43,7 +44,6 @@ function status(
     state,
     installedInActiveProfile: state === 'notInstalledInProfile' ? false : true,
     workspaceLocal: 'none',
-    runtimeSource: state === 'enabled' ? 'profile' : 'unknown',
     profileBacked: inv.extensions.some((extension) => extension.id === id),
     reason: `${state} evidence`,
     ...options,
@@ -79,7 +79,7 @@ describe('buildViewModel', () => {
   });
 
   it('counts orphans in the summary', () => {
-    expect(buildViewModel(inv, { filter: '', chip: 'all' }).orphanCount).toBe(1);
+    expect(orphanCount(inv)).toBe(1);
   });
 
   it('disables cells for profiles named in parse warnings', () => {
@@ -139,7 +139,6 @@ describe('buildViewModel', () => {
     expect(row?.cells).toHaveLength(inv.profiles.length);
     expect(row?.cells.every((cell) => cell.workspaceOnly && !cell.installed)).toBe(true);
     expect(row?.workspaceCell).toMatchObject({ state: 'unknown', label: 'Unknown', symbol: '?' });
-    expect(row && supportsProfileActions(row)).toBe(false);
   });
 
   it('does not expose workspace-only rows through profile-action chips', () => {
@@ -195,13 +194,11 @@ describe('buildViewModel', () => {
     const localOnly = status('local.only', 'enabled', {
       installedInActiveProfile: false,
       workspaceLocal: 'installed',
-      runtimeSource: 'workspace',
       profileBacked: false,
     });
     const bothSources = status('pub.a', 'enabled', {
       installedInActiveProfile: true,
       workspaceLocal: 'installed',
-      runtimeSource: 'workspace',
     });
     const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([localOnly, bothSources]));
     expect(vm.rows.find((row) => row.extId === 'local.only')?.workspaceCell).toMatchObject({

@@ -1,3 +1,10 @@
+import { randomBytes } from 'node:crypto';
+
+/** A fresh CSP nonce per page load, from a cryptographic source so a page cannot predict it. */
+export function createNonce(): string {
+  return randomBytes(16).toString('hex');
+}
+
 function escapeHtmlAttribute(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
 }

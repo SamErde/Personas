@@ -1,8 +1,10 @@
+import { asError } from './errors';
+import { disabledProfileIds } from './inventoryQueries';
 import { pathFor, type Platform, type ResolvedPaths, type WatchTarget } from './paths';
 import {
   type ManifestEntry,
+  type PackageMeta,
   type RawProfile,
-  ParseError,
   parseExtensionFolderName,
   parseExtensionsManifest,
   parseObsolete,
@@ -248,7 +250,7 @@ export function directInstallProfileIds(inventory: Inventory, extId: string): st
 export function installEverywhereTargets(inventory: Inventory, extId: string): Profile[] {
   const ext = inventory.extensions.find((e) => e.id === extId);
   if (!ext || ext.applyToAllProfiles) return [];
-  const disabledIds = new Set(inventory.warnings.flatMap((w) => w.affectedProfileIds));
+  const disabledIds = disabledProfileIds(inventory);
   return inventory.profiles.filter(
     (p) => !p.inheritsDefaultExtensions && !disabledIds.has(p.id) && !ext.installedIn.includes(p.id),
   );
@@ -265,7 +267,7 @@ export function installEverywhereTargets(inventory: Inventory, extId: string): P
 export function removeEverywhereTargets(inventory: Inventory, extId: string): Profile[] {
   const ext = inventory.extensions.find((e) => e.id === extId);
   if (!ext || ext.applyToAllProfiles) return [];
-  const disabledIds = new Set(inventory.warnings.flatMap((w) => w.affectedProfileIds));
+  const disabledIds = disabledProfileIds(inventory);
   const direct = new Set(directInstallProfileIds(inventory, extId).filter((pid) => !disabledIds.has(pid)));
   return inventory.profiles.filter((p) => direct.has(p.id));
 }
@@ -321,12 +323,12 @@ export interface InventoryIo {
    * orphans (see getInventory's orphanKnowledgeUnreliable wiring).
    */
   readFile(p: string): Promise<string | undefined | Error>;
-  listDirs(p: string): Promise<string[]>;
-  /** best-effort displayName/icon/description/publisher from <folder>/package.json; undefined
-   *  when unreadable */
-  readPackageMeta(
-    extFolderPath: string,
-  ): Promise<{ displayName?: string; icon?: string; description?: string; publisher?: string } | undefined>;
+  /** [] when the folder does not exist; an Error when it exists but could not be listed —
+   *  the same "unreadable is not missing" split as readFile. */
+  listDirs(p: string): Promise<string[] | Error>;
+  /** displayName/icon/description/publisher from <folder>/package.json; undefined when the file
+   *  does not exist, an Error when it exists but could not be read or parsed. */
+  readPackageMeta(extFolderPath: string): Promise<PackageMeta | undefined | Error>;
 }
 
 export class InventoryService {
@@ -360,7 +362,7 @@ export class InventoryService {
       try {
         rawProfiles = parseProfileRegistry(storageText);
       } catch (e) {
-        registryError = e instanceof Error ? e : new Error(String(e));
+        registryError = asError(e);
       }
     }
 
@@ -371,7 +373,7 @@ export class InventoryService {
       try {
         return parseExtensionsManifest(text);
       } catch (e) {
-        return e instanceof ParseError ? e : new Error(String(e));
+        return asError(e);
       }
     };
 
@@ -385,7 +387,8 @@ export class InventoryService {
       );
     }
 
-    const diskFolders = await this.io.listDirs(this.paths.extensionsDir);
+    const listed = await this.io.listDirs(this.paths.extensionsDir);
+    const diskFolders = listed instanceof Error ? [] : listed;
     const obsoleteText = await this.io.readFile(this.paths.obsoleteFile);
     let obsoleteFolderNames: string[] = [];
     let obsoleteError: Error | undefined;
@@ -395,7 +398,7 @@ export class InventoryService {
       try {
         obsoleteFolderNames = parseObsolete(obsoleteText);
       } catch (e) {
-        obsoleteError = e instanceof Error ? e : new Error(String(e));
+        obsoleteError = asError(e);
       }
     }
 
@@ -403,6 +406,7 @@ export class InventoryService {
     const iconFsPaths = new Map<string, string>();
     const descriptions = new Map<string, string>();
     const publishers = new Map<string, string>();
+    const packageMetaWarnings: ParseWarning[] = [];
     for (const folderName of diskFolders) {
       const parsed = parseExtensionFolderName(folderName);
       if (!parsed) continue;
@@ -412,6 +416,15 @@ export class InventoryService {
       const needPublisher = !publishers.has(parsed.id);
       if (!needDisplayName && !needIcon && !needDescription && !needPublisher) continue;
       const meta = await this.io.readPackageMeta(join(this.paths.extensionsDir, folderName));
+      if (meta instanceof Error) {
+        // Metadata only: the record falls back to its id and letter tile, so nothing is disabled.
+        packageMetaWarnings.push({
+          file: `extensions/${folderName}/package.json`,
+          message: meta.message,
+          affectedProfileIds: [],
+        });
+        continue;
+      }
       if (!meta) continue;
       if (needDisplayName && meta.displayName) displayNames.set(parsed.id, meta.displayName);
       if (needIcon && meta.icon && isSafeIconRelPath(meta.icon)) {
@@ -434,9 +447,15 @@ export class InventoryService {
       extensionsDir: this.paths.extensionsDir,
       platform: this.paths.platform,
       // Without the registry, named profiles (and their manifests) are invisible; without
-      // .obsolete we cannot tell stale folders from orphans. Suppress rather than guess.
-      orphanKnowledgeUnreliable: obsoleteError !== undefined || registryError !== undefined,
+      // .obsolete we cannot tell stale folders from orphans; without a listing there is no
+      // disk view at all. Suppress rather than guess.
+      orphanKnowledgeUnreliable:
+        obsoleteError !== undefined || registryError !== undefined || listed instanceof Error,
     });
+    inventory.warnings.push(...packageMetaWarnings);
+    if (listed instanceof Error) {
+      inventory.warnings.push({ file: 'extensions/', message: listed.message, affectedProfileIds: [] });
+    }
     if (obsoleteError) {
       inventory.warnings.push({
         file: 'extensions/.obsolete',

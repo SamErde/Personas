@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { asError } from '../core/errors';
 
 const SCHEME = 'personas-readonly';
 
@@ -23,7 +24,7 @@ export class PersonasReadOnlyContentProvider implements vscode.TextDocumentConte
       const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(uri.query));
       return Buffer.from(bytes).toString('utf8');
     } catch (e) {
-      return `// file could not be read: ${e instanceof Error ? e.message : String(e)}`;
+      return `// file could not be read: ${asError(e).message}`;
     }
   }
 
@@ -60,7 +61,7 @@ export async function openReadOnly(label: string, fsPath: string, languageId = '
     await vscode.window.showTextDocument(doc, { preview: true });
   } catch (e) {
     void vscode.window.showErrorMessage(
-      `Personas: couldn't open "${label}" — ${e instanceof Error ? e.message : String(e)}`,
+      `Personas: couldn't open "${label}" — ${asError(e).message}`,
     );
   }
 }

@@ -16,7 +16,6 @@ import type { Inventory, Profile } from '../../src/core/types';
 const entry = (id: string, version: string, appScoped = false): ManifestEntry => ({
   id,
   version,
-  relativeLocation: `${id}-${version}`,
   isApplicationScoped: appScoped,
 });
 
@@ -226,7 +225,7 @@ describe('InventoryService', () => {
 
   const makeIo = (
     files: Record<string, string | Error>,
-    dirs: string[] = [],
+    dirs: string[] | Error = [],
     displayNames: Record<string, string> = {},
     icons: Record<string, string> = {},
   ): InventoryIo => ({
@@ -494,6 +493,34 @@ describe('InventoryService', () => {
     // suppress orphan reporting rather than guess, same as the corrupt-JSON case.
     expect(inv.extensions.find((e) => e.id === 'pub.hidden')).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+
+  it('degrades an unreadable extensions folder into a warning instead of treating it as empty', async () => {
+    const unreadable = Object.assign(new Error("EACCES: permission denied, scandir '/ext'"), { code: 'EACCES' });
+    const io = makeIo(
+      { [PATHS.storageJson]: storageJson, [PATHS.globalExtensionsJson]: defaultManifest },
+      unreadable,
+    );
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    const warning = inv.warnings.find((w) => w.file === 'extensions/');
+    expect(warning?.message).toBe(unreadable.message);
+    expect(warning?.affectedProfileIds).toEqual([]);
+    expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.versions).toEqual([]);
+    expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+
+  it('reports an unreadable package.json as a warning instead of silently dropping its metadata', async () => {
+    const broken = new Error('package.json: invalid JSON');
+    const io: InventoryIo = {
+      ...makeIo({ [PATHS.storageJson]: storageJson, [PATHS.globalExtensionsJson]: defaultManifest }),
+      listDirs: () => Promise.resolve(['pub.alpha-1.0.0']),
+      readPackageMeta: () => Promise.resolve(broken),
+    };
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    const warning = inv.warnings.find((w) => w.file === 'extensions/pub.alpha-1.0.0/package.json');
+    expect(warning?.message).toBe(broken.message);
+    expect(warning?.affectedProfileIds).toEqual([]);
+    expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.displayName).toBe('pub.alpha');
   });
 
   it('degrades a corrupt per-profile manifest into a warning for that profile without rejecting', async () => {
