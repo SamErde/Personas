@@ -99,6 +99,10 @@ run.
 - install the local candidate from the Workspace Recommendations view and confirm the public runtime URI; and
 - exercise the final Personas activity card and matrix states after implementation.
 
+Enablement can't be changed through the CLI. `code --help` on VS Code 1.143.0 (checked
+2026-10-22) says of `--disable-extension`: "Disable the provided extension. This option is not
+persisted and is effective only when the command opens a new window." ADR-0003 builds on this.
+
 These checks were manual because the app-control helper was unavailable. The implementation still
 fails closed as described above, exposing `Unknown` wherever evidence is insufficient.
 

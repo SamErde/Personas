@@ -1,4 +1,4 @@
-import { disabledProfileIds } from '../core/inventoryQueries';
+import { disabledProfileIds, offersWorkspaceEnablementGuide } from '../core/inventoryQueries';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
 export type Chip = 'all' | 'orphaned' | 'appliedToAllProfiles';
@@ -19,6 +19,8 @@ export interface WorkspaceCellVm {
   label: 'Enabled' | 'Not enabled' | 'Not installed in profile' | 'Workspace-local' | 'Unknown';
   symbol: string;
   tooltip: string;
+  /** The cell is a button that hands off to VS Code's Extensions view (ADR-0003). */
+  offersEnablementGuide: boolean;
 }
 
 export interface RowVm {
@@ -128,6 +130,10 @@ export function buildViewModel(
 }
 
 function toWorkspaceCell(status: WorkspaceExtensionStatus): WorkspaceCellVm {
+  return { ...describeWorkspaceStatus(status), offersEnablementGuide: offersWorkspaceEnablementGuide(status) };
+}
+
+function describeWorkspaceStatus(status: WorkspaceExtensionStatus): Omit<WorkspaceCellVm, 'offersEnablementGuide'> {
   if (
     status.state === 'enabled' &&
     status.workspaceLocal === 'installed' &&

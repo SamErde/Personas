@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { MatrixActions } from '../core/matrixActions';
 import { asError } from '../core/errors';
+import { offersWorkspaceEnablementGuide } from '../core/inventoryQueries';
 import type { Inventory, WorkspaceInventory } from '../core/types';
 import type { HostToMatrix, MatrixToHost } from '../protocol';
 import type { Services } from '../servicesFactory';
@@ -161,6 +162,9 @@ export class MatrixPanel {
       case 'showApplyToAllProfilesGuide':
         await this.guard(() => this.showApplyToAllProfilesGuide(m.extId));
         return;
+      case 'showWorkspaceEnablementGuide':
+        await this.guard(() => this.showWorkspaceEnablementGuide(m.extId));
+        return;
       case 'installInEveryProfile':
         await this.guard(() => actions.everyProfile(this.lastInventory, m.extId, 'install'));
         return;
@@ -204,6 +208,25 @@ export class MatrixPanel {
     await vscode.commands.executeCommand('workbench.extensions.search', `@id:${extId}`);
     void vscode.window.showInformationMessage(
       'Right-click the extension in the Extensions view and choose "Apply Extension to all Profiles".',
+    );
+  }
+
+  /**
+   * Guided hand-off (ADR-0003): no official CLI persists workspace enablement (`code
+   * --disable-extension` lasts one launch), so focus the extension in the Extensions view, where
+   * VS Code's own "Enable (Workspace)" / "Disable (Workspace)" actions live.
+   */
+  private async showWorkspaceEnablementGuide(extId: string): Promise<void> {
+    // Same defense-in-depth as openExtensionPage: only act on an id the last workspace
+    // inventory offered the hand-off for — an unknown/stale id re-syncs instead.
+    const status = this.lastWorkspace?.extensions.find((x) => x.id === extId);
+    if (!status || !offersWorkspaceEnablementGuide(status)) {
+      await this.refresh();
+      return;
+    }
+    await vscode.commands.executeCommand('workbench.extensions.search', `@id:${extId}`);
+    void vscode.window.showInformationMessage(
+      'Use "Disable (Workspace)" or "Enable (Workspace)" on the extension in the Extensions view, then restart extensions when VS Code prompts.',
     );
   }
 
