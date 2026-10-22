@@ -71,7 +71,8 @@
     "watch": "node esbuild.mjs --watch",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "npm run build && tsc -p tsconfig.integration.json && node out-test/test/integration/runTests.js",
+    "test:integration": "npm run build && npm run test:integration:prebuilt",
+    "test:integration:prebuilt": "tsc -p tsconfig.integration.json && node out-test/test/integration/runTests.js",
     "package": "node -e \"require('fs').mkdirSync('releases',{recursive:true})\" && vsce package --out releases/"
   },
   "devDependencies": {

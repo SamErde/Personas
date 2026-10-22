@@ -26,13 +26,13 @@ and the Dependabot ignore rules together after testing.
 
 ## Build and package
 
-Install exactly the locked dependencies and run the normal quality gates:
+Install exactly the locked dependencies and run the normal quality gates. `test:integration` builds
+`dist/` first; use `test:integration:prebuilt` to rerun the suite against an existing build:
 
 ```powershell
 npm ci
 npm run lint
 npm test
-npm run build
 npm run test:integration
 git diff --check
 ```

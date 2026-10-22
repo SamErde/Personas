@@ -69,12 +69,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm run build
       - run: npm test
-      - name: Integration tests (Xvfb)
-        run: xvfb-run -a npm run test:integration
-      - name: Package extension
+      # Build once: npm run package runs vscode:prepublish (npm run build), and the
+      # integration tests then run against that same dist/ that went into the VSIX.
+      - name: Package extension (builds dist)
         run: npm run package
+      - name: Integration tests (Xvfb)
+        run: xvfb-run -a npm run test:integration:prebuilt
       - name: Attach VSIX to draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
