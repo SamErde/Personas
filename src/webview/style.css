@@ -98,6 +98,9 @@ th.crosshair-label {
     var(--vscode-editor-background);
 }
 td.crosshair-cell { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+/* The label tint is usually transparent in high-contrast themes, which define
+ * contrastActiveBorder (other themes leave it unset, so the outline stays transparent there). */
+.crosshair-label { outline: 1px solid var(--vscode-contrastActiveBorder, transparent); outline-offset: -1px; }
 .warning {
   background: var(--vscode-inputValidation-warningBackground);
   border: 1px solid var(--vscode-inputValidation-warningBorder);
