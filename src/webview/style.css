@@ -79,7 +79,7 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
   margin-left: 0.5rem; font-size: 0.7em; padding: 0.1rem 0.4rem; border-radius: 0.5rem; border: none; cursor: pointer;
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
 }
-.inherited { opacity: 0.55; }
+.muted { opacity: 0.55; }
 .spinner { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* In-flight mutation feedback: shown the instant a checkbox is toggled (localPending) or once

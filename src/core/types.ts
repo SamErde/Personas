@@ -137,9 +137,9 @@ export type WebviewToHost =
   | { type: 'ready' }
   | { type: 'refresh' }
   | { type: 'toggleCell'; extId: string; profileId: string; install: boolean }
-  | { type: 'toggleAllProfiles'; extId: string }
-  | { type: 'installEverywhere'; extId: string }
-  | { type: 'removeEverywhere'; extId: string }
+  | { type: 'showApplyToAllProfilesGuide'; extId: string }
+  | { type: 'installInEveryProfile'; extId: string }
+  | { type: 'removeFromEveryProfile'; extId: string }
   | { type: 'openExtensionPage'; extId: string }
   | { type: 'requestOrphans' }
   | { type: 'cleanup'; folderNames: string[] };
@@ -147,14 +147,15 @@ export type WebviewToHost =
 // --- Sidebar dashboard (welcome view) message protocol ---
 // Separate from HostToWebview/WebviewToHost above: the sidebar is a much smaller surface and
 // mixing the two protocols would force every matrix message-type change to also touch the
-// sidebar (and vice versa) for no shared benefit.
+// sidebar (and vice versa) for no common benefit.
 
 export interface WelcomeProfileVm {
   id: string;
   name: string;
   inheritsDefaultExtensions: boolean;
   direct: number;
-  shared: number;
+  fromDefault: number;
+  appliedToAllProfiles: number;
   /** Absolute fsPath to this profile's own extensions.json. Absent for a profile that inherits
    * the default profile's extensions — it has no file of its own to open or edit. */
   filePath?: string;

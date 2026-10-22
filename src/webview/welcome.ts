@@ -103,7 +103,8 @@ function render(): void {
       });
       line1.append(edit);
     }
-    li.append(line1, el('div', 'profile-counts', `${p.direct} direct + ${p.shared} shared`));
+    const own = p.inheritsDefaultExtensions ? `${p.fromDefault} from Default` : `${p.direct} direct`;
+    li.append(line1, el('div', 'profile-counts', `${own} · ${p.appliedToAllProfiles} applied to all profiles`));
     list.append(li);
   }
 

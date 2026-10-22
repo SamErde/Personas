@@ -17,13 +17,13 @@ let pending = new Set<string>(); // `${extId}|${profileId}`, echoed back by the 
 // Presentation-only "in flight" state set the instant the user acts, before the host's 'pending'
 // round-trip lands — never shows a target state early (not optimistic UI), only a working state.
 // Keys are `${extId}|${profileId}` for a single-cell toggle, or `${extId}|*` for a card bulk
-// action (install/remove in all profiles) whose per-cell targets are computed host-side and
-// only become known once the user confirms the resulting modal. Cleared wholesale whenever a
-// fresh 'inventory' message arrives (mirrors the `pending` reset below); the `${extId}|*` keys
-// are additionally cleared on 'orphans'/'cleanupResult' since those don't imply an inventory
-// refresh on their own. This also covers the modal-cancel path for free: cancelling triggers a
-// host-side refresh, which pushes a fresh 'inventory', which clears localPending, which reverts
-// the cell/button to its normal look — no timers needed.
+// action (Install in every profile / Remove from every profile) whose per-cell targets are
+// computed host-side and only become known once the user confirms the resulting modal. Cleared
+// wholesale whenever a fresh 'inventory' message arrives (mirrors the `pending` reset below);
+// the `${extId}|*` keys are additionally cleared on 'orphans'/'cleanupResult' since those don't
+// imply an inventory refresh on their own. This also covers the modal-cancel path for free:
+// cancelling triggers a host-side refresh, which pushes a fresh 'inventory', which clears
+// localPending, which reverts the cell/button to its normal look — no timers needed.
 let localPending = new Set<string>();
 let orphans: OrphanInfo[] | undefined; // non-undefined = cleanup view open
 let checked = new Set<string>(); // folderNames selected for cleanup
@@ -53,7 +53,7 @@ filterInput.addEventListener('input', () => {
 toolbar.append(filterInput);
 
 const chipButtons: [Chip, HTMLElement][] = [];
-for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['allProfiles', 'Applied to all profiles']] as const) {
+for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedToAllProfiles', 'Applied to all profiles']] as const) {
   const b = el('button', chip === key ? 'chip active' : 'chip', label);
   b.addEventListener('click', () => {
     chip = key;
@@ -143,7 +143,7 @@ function showCard(extId: string, trigger: HTMLElement): void {
   // detached and would position the card at (0,0). Ignore it; the re-created element gets its
   // own listeners.
   if (!trigger.isConnected) return;
-  const row = renderedRows.find((item) => item.extId === extId);
+  const row = renderedRows.find((item) => item.id === extId);
   if (!row) return;
   cardOwnerExtId = extId;
   rebuildCard(row);
@@ -175,7 +175,7 @@ function rebuildCard(row: RowVm): void {
  */
 function syncOpenCard(): void {
   if (card.hidden || cardOwnerExtId === undefined) return;
-  const row = renderedRows.find((item) => item.extId === cardOwnerExtId);
+  const row = renderedRows.find((item) => item.id === cardOwnerExtId);
   const trigger = contentEl.querySelector<HTMLElement>(`.name[data-ext-id="${CSS.escape(cardOwnerExtId)}"]`);
   if (!row || !trigger) {
     hideCard();
@@ -186,7 +186,7 @@ function syncOpenCard(): void {
   // would leave an open card that no longer closes on tab-away. Remember which control held
   // focus (by its stable data-action name) and restore it after the rebuild — falling back to
   // the card container itself (tabindex=-1) when the control no longer exists (e.g. the
-  // extension became app-scoped and install/remove disappeared). Escape still closes either way.
+  // extension became applied to all profiles and install/remove disappeared). Escape still closes either way.
   const active = document.activeElement;
   const focusedAction =
     active instanceof HTMLElement && card.contains(active) ? active.dataset['action'] : undefined;
@@ -215,7 +215,7 @@ function buildCardContent(ext: RowVm): void {
   card.replaceChildren();
 
   const header = el('div', 'ext-card-header');
-  header.append(extIcon(ext.extId, ext.displayName));
+  header.append(extIcon(ext.id, ext.displayName));
   if (ext.profileBacked) {
     const nameLink = el('a', 'ext-card-name', ext.displayName) as HTMLAnchorElement;
     nameLink.href = '#';
@@ -223,7 +223,7 @@ function buildCardContent(ext: RowVm): void {
     nameLink.dataset['action'] = 'open-page'; // stable id for syncOpenCard's focus restoration
     const openPage = (e: Event) => {
       e.preventDefault();
-      post({ type: 'openExtensionPage', extId: ext.extId });
+      post({ type: 'openExtensionPage', extId: ext.id });
     };
     nameLink.addEventListener('click', openPage);
     nameLink.addEventListener('keydown', (e) => {
@@ -258,15 +258,15 @@ function buildCardContent(ext: RowVm): void {
 
   // Host-echoed per-cell pending plus this extension's local (not-yet-echoed) keys — the same
   // `${ext.id}|` prefix check covers both a single toggled cell and the `${ext.id}|*` bulk key.
-  const bulkKey = `${ext.extId}|*`;
-  const rowPending = [...pending, ...localPending].some((key) => key.startsWith(`${ext.extId}|`));
+  const bulkKey = `${ext.id}|*`;
+  const rowPending = [...pending, ...localPending].some((key) => key.startsWith(`${ext.id}|`));
   const bulkInFlight = localPending.has(bulkKey);
   const actions = el('div', 'ext-card-actions');
   if (!ext.applyToAllProfiles) {
-    const installAllBtn = el('button', 'row-action', 'Install in all profiles') as HTMLButtonElement;
-    installAllBtn.dataset['action'] = 'install-everywhere';
+    const installAllBtn = el('button', 'row-action', 'Install in every profile') as HTMLButtonElement;
+    installAllBtn.dataset['action'] = 'install-in-every-profile';
     installAllBtn.title =
-      "Install in every profile via the VS Code CLI. Unlike VS Code's native 'apply to all profiles' flag, future new profiles will not inherit it.";
+      "Installs separately into each profile via the VS Code CLI. Unlike an extension applied to all profiles, profiles created later will not get it.";
     installAllBtn.disabled = rowPending;
     installAllBtn.classList.toggle('in-flight', bulkInFlight);
     installAllBtn.addEventListener('click', () => {
@@ -274,19 +274,19 @@ function buildCardContent(ext: RowVm): void {
       // the clicked control itself gets an in-flight look — cells wait for the host's echoes.
       localPending.add(bulkKey);
       renderContent();
-      post({ type: 'installEverywhere', extId: ext.extId });
+      post({ type: 'installInEveryProfile', extId: ext.id });
     });
     actions.append(installAllBtn);
 
-    const removeAllBtn = el('button', 'row-action', 'Remove from all profiles') as HTMLButtonElement;
-    removeAllBtn.dataset['action'] = 'remove-everywhere';
+    const removeAllBtn = el('button', 'row-action', 'Remove from every profile') as HTMLButtonElement;
+    removeAllBtn.dataset['action'] = 'remove-from-every-profile';
     removeAllBtn.title = 'Uninstall from every profile where it is directly installed.';
     removeAllBtn.disabled = rowPending;
     removeAllBtn.classList.toggle('in-flight', bulkInFlight);
     removeAllBtn.addEventListener('click', () => {
       localPending.add(bulkKey);
       renderContent();
-      post({ type: 'removeEverywhere', extId: ext.extId });
+      post({ type: 'removeFromEveryProfile', extId: ext.id });
     });
     actions.append(removeAllBtn);
   }
@@ -295,7 +295,7 @@ function buildCardContent(ext: RowVm): void {
   applyAllBtn.title =
     "Opens the Extensions view where you can toggle VS Code's native 'Apply Extension to all Profiles' option — VS Code provides no API for extensions to toggle it directly.";
   applyAllBtn.disabled = rowPending;
-  applyAllBtn.addEventListener('click', () => post({ type: 'toggleAllProfiles', extId: ext.extId }));
+  applyAllBtn.addEventListener('click', () => post({ type: 'showApplyToAllProfilesGuide', extId: ext.id }));
   actions.append(applyAllBtn);
   card.append(actions);
 }
@@ -488,21 +488,21 @@ function renderContent(): void {
   for (const row of vm.rows) {
     const tr = document.createElement('tr');
     const name = el('td', 'ext-col');
-    name.append(extIcon(row.extId, row.displayName));
+    name.append(extIcon(row.id, row.displayName));
 
     // The name itself is the hover-card trigger: hover (after a short delay) or keyboard focus
     // (immediate) opens the card with detail + the row's bulk actions.
     const nameTrigger = el('span', row.orphaned ? 'name orphaned' : 'name', row.displayName);
-    nameTrigger.dataset['extId'] = row.extId; // lets syncOpenCard re-anchor after a rebuild
+    nameTrigger.dataset['extId'] = row.id; // lets syncOpenCard re-anchor after a rebuild
     nameTrigger.tabIndex = 0;
     nameTrigger.setAttribute('role', 'button');
     nameTrigger.setAttribute('aria-haspopup', 'true');
-    nameTrigger.addEventListener('mouseenter', () => scheduleShowCard(row.extId, nameTrigger, 250));
+    nameTrigger.addEventListener('mouseenter', () => scheduleShowCard(row.id, nameTrigger, 250));
     nameTrigger.addEventListener('mouseleave', () => {
       clearShowTimer();
       scheduleHideCard();
     });
-    nameTrigger.addEventListener('focus', () => scheduleShowCard(row.extId, nameTrigger, 0));
+    nameTrigger.addEventListener('focus', () => scheduleShowCard(row.id, nameTrigger, 0));
     nameTrigger.addEventListener('blur', (e) => {
       // Removal-fired blur: renderContent()'s replaceChildren() detaches this element while it
       // holds keyboard focus, and Chromium fires blur with relatedTarget null before
@@ -518,7 +518,7 @@ function renderContent(): void {
     // otherwise the card's action buttons would be unreachable by keyboard even while visible.
     nameTrigger.addEventListener('keydown', (e) => {
       const ke = e as KeyboardEvent;
-      if (ke.key === 'Tab' && !ke.shiftKey && cardOwnerExtId === row.extId) {
+      if (ke.key === 'Tab' && !ke.shiftKey && cardOwnerExtId === row.id) {
         const firstFocusable = card.querySelector<HTMLElement>('a, button');
         if (firstFocusable) {
           ke.preventDefault();
@@ -531,30 +531,30 @@ function renderContent(): void {
     if (row.applyToAllProfiles) {
       const badge = el('button', 'badge', 'ALL');
       badge.title = 'Applied to all profiles — click for how to change';
-      badge.addEventListener('click', () => post({ type: 'toggleAllProfiles', extId: row.extId }));
+      badge.addEventListener('click', () => post({ type: 'showApplyToAllProfilesGuide', extId: row.id }));
       name.append(badge);
     }
 
     tr.append(name);
     for (const cell of row.cells) {
-      const key = `${row.extId}|${cell.profileId}`;
+      const key = `${row.id}|${cell.profileId}`;
       const isPending = pending.has(key) || localPending.has(key);
       const td = el('td', isPending ? 'cell pending' : 'cell');
       if (cell.workspaceOnly) {
-        td.append(el('span', 'inherited', '—'));
+        td.append(el('span', 'muted', '—'));
         td.title = 'Workspace-only extension — profile installation actions are unavailable.';
         td.setAttribute('aria-label', 'Not represented in this profile; read-only workspace extension');
       } else if (isPending) {
         td.append(el('span', 'spinner', '◐'));
       } else if (cell.disabled) {
-        td.append(el('span', 'inherited', cell.installed ? '✓' : '—'));
+        td.append(el('span', 'muted', cell.installed ? '✓' : '—'));
         td.title = 'This profile\'s extension list could not be read — actions are disabled.';
-      } else if (cell.inherited) {
-        td.append(el('span', 'inherited', cell.installed ? '✓' : ''));
+      } else if (cell.profileInheritsDefault) {
+        td.append(el('span', 'muted', cell.installed ? '✓' : ''));
         td.title = 'This profile inherits the default profile\'s extensions.';
       } else if (row.applyToAllProfiles) {
-        td.append(el('span', 'inherited', '✓'));
-        td.title = 'Applied to all profiles — use the ALL badge to change.';
+        td.append(el('span', 'muted', '✓'));
+        td.title = 'Applied to all profiles — use the badge next to the name to change.';
       } else {
         const box = document.createElement('input');
         box.type = 'checkbox';
@@ -565,7 +565,7 @@ function renderContent(): void {
           // new checked state, the moment renderContent() below rebuilds it.
           localPending.add(key);
           renderContent();
-          post({ type: 'toggleCell', extId: row.extId, profileId: cell.profileId, install: box.checked });
+          post({ type: 'toggleCell', extId: row.id, profileId: cell.profileId, install: box.checked });
         });
         td.append(box);
       }

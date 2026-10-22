@@ -50,7 +50,7 @@ export function composeInventory(input: ComposeInput): Inventory {
     })),
   ];
 
-  // Fail closed on shared names. VS Code's profile editor rejects duplicates
+  // Fail closed on duplicate names. VS Code's profile editor rejects duplicates
   // (docs/spikes/findings.md), so this is a safety net for registries edited some other way.
   const idsByName = new Map<string, string[]>();
   for (const p of input.rawProfiles) idsByName.set(p.name, [...(idsByName.get(p.name) ?? []), p.location]);
@@ -91,8 +91,8 @@ export function composeInventory(input: ComposeInput): Inventory {
   // extension id -> set of profile ids
   const membership = new Map<string, Set<string>>();
   const profileVersions = new Map<string, Map<string, string>>();
-  const appScoped = new Set<string>();
-  const appScopedEntries = new Map<string, ManifestEntry>();
+  const appliedToAll = new Set<string>();
+  const appliedToAllEntries = new Map<string, ManifestEntry>();
   const add = (entry: ManifestEntry, profileId: string) => {
     let set = membership.get(entry.id);
     if (!set) membership.set(entry.id, (set = new Set()));
@@ -121,9 +121,9 @@ export function composeInventory(input: ComposeInput): Inventory {
   for (const e of defaultEntries) {
     add(e, 'default');
     for (const pid of inheritingIds) add(e, pid);
-    if (e.isApplicationScoped) {
-      appScoped.add(e.id);
-      if (!appScopedEntries.has(e.id)) appScopedEntries.set(e.id, e);
+    if (e.applyToAllProfiles) {
+      appliedToAll.add(e.id);
+      if (!appliedToAllEntries.has(e.id)) appliedToAllEntries.set(e.id, e);
     }
     noteExtras(e);
   }
@@ -141,17 +141,17 @@ export function composeInventory(input: ComposeInput): Inventory {
     }
     for (const e of manifest ?? []) {
       add(e, p.location);
-      if (e.isApplicationScoped) {
-        appScoped.add(e.id);
-        if (!appScopedEntries.has(e.id)) appScopedEntries.set(e.id, e);
+      if (e.applyToAllProfiles) {
+        appliedToAll.add(e.id);
+        if (!appliedToAllEntries.has(e.id)) appliedToAllEntries.set(e.id, e);
       }
       noteExtras(e);
     }
   }
 
-  // App-scoped extensions are active in every profile.
-  for (const id of appScoped) {
-    const entry = appScopedEntries.get(id);
+  // Extensions applied to all profiles are active in every profile.
+  for (const id of appliedToAll) {
+    const entry = appliedToAllEntries.get(id);
     if (entry) for (const p of profiles) add(entry, p.id);
   }
 
@@ -175,8 +175,8 @@ export function composeInventory(input: ComposeInput): Inventory {
   // When any manifest is unreadable (default or per-profile), or the caller flagged orphan
   // knowledge as unreliable (e.g. a corrupt .obsolete file), disk-only ids are indistinguishable
   // from extensions belonging to the unreadable data — a corrupt default manifest also hides
-  // isApplicationScoped flags, so an app-scoped extension could surface as a false orphan.
-  // Suppress ALL disk-only records registry-wide rather than guess.
+  // applied-to-all-profiles flags, so such an extension could surface as a false orphan.
+  // Suppress every disk-only record registry-wide rather than guess.
   const orphanKnowledgeUnreliable =
     input.orphanKnowledgeUnreliable === true ||
     input.defaultManifest instanceof Error ||
@@ -187,7 +187,7 @@ export function composeInventory(input: ComposeInput): Inventory {
     .filter((id) => !orphanKnowledgeUnreliable || membership.has(id))
     .map((id) => {
       const installedIn = profiles.map((p) => p.id).filter((pid) => membership.get(id)?.has(pid));
-      const isAppScoped = appScoped.has(id);
+      const isAppliedToAll = appliedToAll.has(id);
       const iconFsPath = input.iconFsPaths?.get(id);
       const description = input.descriptions?.get(id);
       const publisher = input.publishers?.get(id);
@@ -202,9 +202,9 @@ export function composeInventory(input: ComposeInput): Inventory {
         displayName: input.displayNames.get(id) ?? id,
         versions: versionsById.get(id) ?? [],
         ...(selectedVersions.length > 0 ? { profileVersions: selectedVersions } : {}),
-        applyToAllProfiles: isAppScoped,
+        applyToAllProfiles: isAppliedToAll,
         installedIn,
-        orphaned: installedIn.length === 0 && !isAppScoped,
+        orphaned: installedIn.length === 0 && !isAppliedToAll,
         ...(iconFsPath !== undefined ? { iconFsPath } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(publisher !== undefined ? { publisher } : {}),
@@ -242,12 +242,12 @@ export function directInstallProfileIds(inventory: Inventory, extId: string): st
 }
 
 /**
- * Profiles "Install in all profiles" should target: non-inheriting (inheriting profiles can't
+ * Profiles "Install in every profile" should target: non-inheriting (inheriting profiles can't
  * hold a direct install), not disabled by a parse warning, and not already installed.
- * App-scoped extensions (applyToAllProfiles) are never targeted: they are already active in
- * every profile via VS Code's native flag, so per-profile CLI installs are meaningless.
+ * Extensions applied to all profiles are never targeted: they are already active in every
+ * profile via VS Code's native flag, so per-profile CLI installs are meaningless.
  */
-export function installEverywhereTargets(inventory: Inventory, extId: string): Profile[] {
+export function installInEveryProfileTargets(inventory: Inventory, extId: string): Profile[] {
   const ext = inventory.extensions.find((e) => e.id === extId);
   if (!ext || ext.applyToAllProfiles) return [];
   const disabledIds = disabledProfileIds(inventory);
@@ -257,14 +257,14 @@ export function installEverywhereTargets(inventory: Inventory, extId: string): P
 }
 
 /**
- * Profiles "Remove from all profiles" should target: every profile the extension is directly
+ * Profiles "Remove from every profile" should target: every profile the extension is directly
  * installed in (see directInstallProfileIds), minus any disabled by a parse warning.
- * App-scoped extensions are never targeted: composeInventory propagates their id into every
- * profile's installedIn, so directInstallProfileIds cannot distinguish real per-profile installs
- * from app-scope propagation — per-profile `--uninstall-extension` calls would act on installs
- * that don't exist per-profile. VS Code's native flag is the correct affordance for them.
+ * Extensions applied to all profiles are never targeted: composeInventory propagates their id
+ * into every profile's installedIn, so directInstallProfileIds cannot distinguish real
+ * per-profile installs from that propagation — per-profile `--uninstall-extension` calls would
+ * act on installs that don't exist per-profile. VS Code's native flag is the correct affordance.
  */
-export function removeEverywhereTargets(inventory: Inventory, extId: string): Profile[] {
+export function removeFromEveryProfileTargets(inventory: Inventory, extId: string): Profile[] {
   const ext = inventory.extensions.find((e) => e.id === extId);
   if (!ext || ext.applyToAllProfiles) return [];
   const disabledIds = disabledProfileIds(inventory);
@@ -272,30 +272,33 @@ export function removeEverywhereTargets(inventory: Inventory, extId: string): Pr
   return inventory.profiles.filter((p) => direct.has(p.id));
 }
 
+export interface ProfileExtensionCounts {
+  /** From the profile's own manifest. Always 0 for a profile that uses Default's extensions. */
+  direct: number;
+  /** Default's own extensions, counted only for a profile that uses Default's extensions. */
+  fromDefault: number;
+  /** Extensions applied to all profiles, present in every profile whatever its manifest says. */
+  appliedToAllProfiles: number;
+}
+
 /**
- * Per-profile "N direct + M shared" counts for the sidebar dashboard.
- * - direct: extensions from the profile's own manifest — i.e. non-app-scoped extensions whose
- *   `installedIn` includes this profile id. The default profile's own manifest entries land in
- *   `installedIn` under the 'default' id; a non-inheriting named profile's own entries land under
- *   its own id (see composeInventory). Inheriting profiles own no manifest, so direct is always 0.
- * - shared: app-scoped extensions, which composeInventory propagates into every profile's
- *   `installedIn` regardless of manifest ownership — "shared" here means "not from this profile's
- *   own file". Inheriting profiles additionally share the default profile's direct extensions
- *   (the ones they inherit), so their shared count adds the default profile's direct count.
+ * Per-profile counts for the sidebar. composeInventory propagates both Default's extensions (into
+ * inheriting profiles) and applied-to-all-profiles extensions (into every profile) through
+ * `installedIn`, so `installedIn` alone cannot tell the three apart.
  */
-export function profileExtensionCounts(inventory: Inventory): Map<string, { direct: number; shared: number }> {
+export function profileExtensionCounts(inventory: Inventory): Map<string, ProfileExtensionCounts> {
   const directCount = (profileId: string): number =>
     inventory.extensions.filter((e) => !e.applyToAllProfiles && e.installedIn.includes(profileId)).length;
-  const appScopedCount = inventory.extensions.filter((e) => e.applyToAllProfiles).length;
+  const appliedToAllProfiles = inventory.extensions.filter((e) => e.applyToAllProfiles).length;
   const defaultDirect = directCount('default');
 
-  const result = new Map<string, { direct: number; shared: number }>();
+  const result = new Map<string, ProfileExtensionCounts>();
   for (const p of inventory.profiles) {
     result.set(
       p.id,
       p.inheritsDefaultExtensions
-        ? { direct: 0, shared: appScopedCount + defaultDirect }
-        : { direct: directCount(p.id), shared: appScopedCount },
+        ? { direct: 0, fromDefault: defaultDirect, appliedToAllProfiles }
+        : { direct: directCount(p.id), fromDefault: 0, appliedToAllProfiles },
     );
   }
   return result;

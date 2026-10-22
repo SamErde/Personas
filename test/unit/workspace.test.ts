@@ -544,17 +544,17 @@ describe('workspace status composition', () => {
     expect(result.extensions[0]?.reason).toContain(candidatePath);
   });
 
-  it('preserves inherited and application-scoped membership already composed by profile inventory', () => {
+  it('preserves inherited and applied-to-all-profiles membership already composed by profile inventory', () => {
     const inherited = compose({
       inv: inventory({ installedIn: ['default', 'builtin/agents'] }),
       associations: association('agents'),
     }).extensions[0];
     expect(inherited).toMatchObject({ state: 'notEnabled', installedInActiveProfile: true });
 
-    const appScopedInventory = inventory({ installedIn: profiles.map((profile) => profile.id) });
-    if (appScopedInventory.extensions[0]) appScopedInventory.extensions[0].applyToAllProfiles = true;
-    const appScoped = compose({ inv: appScopedInventory }).extensions[0];
-    expect(appScoped).toMatchObject({ state: 'notEnabled', installedInActiveProfile: true });
+    const appliedToAllInventory = inventory({ installedIn: profiles.map((profile) => profile.id) });
+    if (appliedToAllInventory.extensions[0]) appliedToAllInventory.extensions[0].applyToAllProfiles = true;
+    const appliedToAll = compose({ inv: appliedToAllInventory }).extensions[0];
+    expect(appliedToAll).toMatchObject({ state: 'notEnabled', installedInActiveProfile: true });
   });
 
   it('treats an unreadable Default manifest as unreliable for an inheriting active profile', () => {
@@ -599,7 +599,7 @@ describe('workspace status composition', () => {
     });
   });
 
-  it('keeps active membership known when the only warning is a shared profile name', () => {
+  it('keeps active membership known when the only warning is a duplicate profile name', () => {
     const inv = inventory({
       installedIn: ['default'],
       warnings: [

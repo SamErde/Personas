@@ -59,23 +59,23 @@ describe('buildViewModel', () => {
 
   it('marks inherited cells read-only', () => {
     const vm = buildViewModel(inv, { filter: '', chip: 'all' });
-    const betaAgentsCell = vm.rows.find((r) => r.extId === 'pub.b')?.cells[2];
-    expect(betaAgentsCell?.inherited).toBe(true);
+    const betaAgentsCell = vm.rows.find((r) => r.id === 'pub.b')?.cells[2];
+    expect(betaAgentsCell?.profileInheritsDefault).toBe(true);
   });
 
   it('chip=orphaned shows only orphans', () => {
     const vm = buildViewModel(inv, { filter: '', chip: 'orphaned' });
-    expect(vm.rows.map((r) => r.extId)).toEqual(['pub.c']);
+    expect(vm.rows.map((r) => r.id)).toEqual(['pub.c']);
   });
 
-  it('chip=allProfiles shows only app-scoped extensions', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'allProfiles' });
-    expect(vm.rows.map((r) => r.extId)).toEqual(['pub.a']);
+  it('chip=appliedToAllProfiles shows only extensions applied to all profiles', () => {
+    const vm = buildViewModel(inv, { filter: '', chip: 'appliedToAllProfiles' });
+    expect(vm.rows.map((r) => r.id)).toEqual(['pub.a']);
   });
 
   it('filter matches id and displayName, case-insensitive', () => {
-    expect(buildViewModel(inv, { filter: 'BETA', chip: 'all' }).rows.map((r) => r.extId)).toEqual(['pub.b']);
-    expect(buildViewModel(inv, { filter: 'pub.c', chip: 'all' }).rows.map((r) => r.extId)).toEqual(['pub.c']);
+    expect(buildViewModel(inv, { filter: 'BETA', chip: 'all' }).rows.map((r) => r.id)).toEqual(['pub.b']);
+    expect(buildViewModel(inv, { filter: 'pub.c', chip: 'all' }).rows.map((r) => r.id)).toEqual(['pub.c']);
   });
 
   it('counts orphans in the summary', () => {
@@ -103,7 +103,7 @@ describe('buildViewModel', () => {
     expect(vm.profileNames.map((profile) => profile.id)).toEqual(['default', 'aaa', 'bbb']);
     expect(vm.workspace).toEqual({ name: 'Shared workspace', kind: 'workspace' });
     expect(vm.workspaceWarnings).toEqual(['association evidence is incomplete']);
-    expect(vm.rows.find((row) => row.extId === 'pub.a')?.workspaceCell).toMatchObject({
+    expect(vm.rows.find((row) => row.id === 'pub.a')?.workspaceCell).toMatchObject({
       state: 'enabled',
       label: 'Enabled',
       symbol: '✓',
@@ -115,7 +115,7 @@ describe('buildViewModel', () => {
       status('pub.a', 'enabled', { version: '9.0.0' }),
     ]);
     const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspace);
-    expect(vm.rows.find((row) => row.extId === 'pub.a')?.version).toBe('9.0.0');
+    expect(vm.rows.find((row) => row.id === 'pub.a')?.version).toBe('9.0.0');
   });
 
   it('unions workspace-only rows and makes every profile cell read-only', () => {
@@ -128,7 +128,7 @@ describe('buildViewModel', () => {
       }),
     ]);
     const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspace);
-    const row = vm.rows.find((item) => item.extId === 'local.only');
+    const row = vm.rows.find((item) => item.id === 'local.only');
     expect(row).toMatchObject({
       displayName: 'Local Fixture',
       profileBacked: false,
@@ -149,10 +149,10 @@ describe('buildViewModel', () => {
         profileBacked: false,
       }),
     ]);
-    expect(buildViewModel(inv, { filter: '', chip: 'orphaned' }, workspace).rows.map((row) => row.extId)).toEqual([
+    expect(buildViewModel(inv, { filter: '', chip: 'orphaned' }, workspace).rows.map((row) => row.id)).toEqual([
       'pub.c',
     ]);
-    expect(buildViewModel(inv, { filter: '', chip: 'allProfiles' }, workspace).rows.map((row) => row.extId)).toEqual([
+    expect(buildViewModel(inv, { filter: '', chip: 'appliedToAllProfiles' }, workspace).rows.map((row) => row.id)).toEqual([
       'pub.a',
     ]);
   });
@@ -166,10 +166,10 @@ describe('buildViewModel', () => {
         profileBacked: false,
       }),
     ]);
-    expect(buildViewModel(inv, { filter: 'SPECIAL', chip: 'all' }, workspace).rows.map((row) => row.extId)).toEqual([
+    expect(buildViewModel(inv, { filter: 'SPECIAL', chip: 'all' }, workspace).rows.map((row) => row.id)).toEqual([
       'local.only',
     ]);
-    expect(buildViewModel(inv, { filter: 'local.only', chip: 'all' }, workspace).rows.map((row) => row.extId)).toEqual([
+    expect(buildViewModel(inv, { filter: 'local.only', chip: 'all' }, workspace).rows.map((row) => row.id)).toEqual([
       'local.only',
     ]);
   });
@@ -183,7 +183,7 @@ describe('buildViewModel', () => {
     'maps %s to exact accessible status text',
     (state, label, symbol) => {
       const row = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([status('pub.a', state)])).rows.find(
-        (item) => item.extId === 'pub.a',
+        (item) => item.id === 'pub.a',
       );
       expect(row?.workspaceCell).toMatchObject({ state, label, symbol });
       expect(row?.workspaceCell?.tooltip).toContain(label);
@@ -201,11 +201,11 @@ describe('buildViewModel', () => {
       workspaceLocal: 'installed',
     });
     const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([localOnly, bothSources]));
-    expect(vm.rows.find((row) => row.extId === 'local.only')?.workspaceCell).toMatchObject({
+    expect(vm.rows.find((row) => row.id === 'local.only')?.workspaceCell).toMatchObject({
       label: 'Workspace-local',
       symbol: '✓ W',
     });
-    expect(vm.rows.find((row) => row.extId === 'pub.a')?.workspaceCell?.label).toBe('Enabled');
+    expect(vm.rows.find((row) => row.id === 'pub.a')?.workspaceCell?.label).toBe('Enabled');
   });
 });
 

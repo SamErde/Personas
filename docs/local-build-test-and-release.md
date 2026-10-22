@@ -144,7 +144,7 @@ workspace disposable while exercising the same production-host safety behavior t
 ## Manual test scenarios
 
 Trust only the disposable fixture workspace. In the sandbox, open the Personas activity-bar icon
-and run **Personas: Show Extension Matrix** if the matrix does not open automatically.
+and run **Personas: Open Extension Matrix** if the matrix does not open automatically.
 
 1. Open an empty window and verify that profile cards remain but the Current workspace card and
    matrix column are absent.
