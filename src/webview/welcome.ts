@@ -174,7 +174,8 @@ function render(): void {
   }
 
   for (const w of state.warnings) {
-    extra.append(el('p', 'warning-line', `⚠ ${w.file}: actions for affected profiles are disabled`));
+    const effect = w.affectedProfileIds.length > 0 ? 'actions for affected profiles are disabled' : w.message;
+    extra.append(el('p', 'warning-line', `⚠ ${w.file}: ${effect}`));
   }
 }
 

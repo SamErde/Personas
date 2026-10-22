@@ -446,7 +446,9 @@ function renderContent(): void {
   renderedRows = vm.rows;
 
   for (const w of vm.warnings) {
-    contentEl.append(el('div', 'warning', `⚠ ${w.file}: ${w.message} — actions for affected profiles are disabled.`));
+    // Metadata-only warnings (.obsolete, folder listing, package.json) disable nothing.
+    const effect = w.affectedProfileIds.length > 0 ? ' — actions for affected profiles are disabled.' : '';
+    contentEl.append(el('div', 'warning', `⚠ ${w.file}: ${w.message}${effect}`));
   }
   for (const warning of vm.workspaceWarnings) {
     contentEl.append(el('div', 'warning workspace-warning', `⚠ Current workspace: ${warning}`));
