@@ -75,7 +75,7 @@ jobs:
       - name: Package extension (builds dist)
         run: npm run package
       - name: Integration tests (Xvfb)
-        run: xvfb-run -a npm run test:integration:run
+        run: xvfb-run -a npm run test:integration:prebuilt
       - name: Attach VSIX to draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -38,7 +38,7 @@ earliest working name "Visex".)
 
 - `npm run lint` (tsc --noEmit) · `npm test` (vitest unit) · `npm run build` (esbuild)
 - `npm run test:integration` — runs against a sandboxed VS Code (node:test). It builds first;
-  `test:integration:run` skips the build and reuses `dist/` (CI builds once, via `vsce package`).
+  `test:integration:prebuilt` skips the build and reuses `dist/` (CI builds once, via `vsce package`).
 
 ## Deeper context (read on demand — not every session)
 

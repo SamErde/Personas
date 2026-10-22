@@ -1,11 +1,15 @@
 import { runTests } from '@vscode/test-electron';
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 async function main(): Promise<void> {
   const extensionDevelopmentPath = path.resolve(__dirname, '..', '..', '..');
+  // test:integration:prebuilt skips the build, so fail clearly rather than launch without dist/.
+  if (!existsSync(path.join(extensionDevelopmentPath, 'dist', 'extension.js'))) {
+    throw new Error('dist/extension.js is missing; run `npm run build` (or `npm run test:integration`) first.');
+  }
   const extensionTestsPath = path.resolve(__dirname, 'suite', 'index');
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'personas-it-data-'));
   const extensionsDir = mkdtempSync(path.join(tmpdir(), 'personas-it-ext-'));
