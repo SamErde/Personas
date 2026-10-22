@@ -17,13 +17,13 @@ let pending = new Set<string>(); // `${extId}|${profileId}`, echoed back by the 
 // Presentation-only "in flight" state set the instant the user acts, before the host's 'pending'
 // round-trip lands — never shows a target state early (not optimistic UI), only a working state.
 // Keys are `${extId}|${profileId}` for a single-cell toggle, or `${extId}|*` for a card bulk
-// action (Install in every profile / Remove from every profile) whose per-cell targets are computed host-side and
-// only become known once the user confirms the resulting modal. Cleared wholesale whenever a
-// fresh 'inventory' message arrives (mirrors the `pending` reset below); the `${extId}|*` keys
-// are additionally cleared on 'orphans'/'cleanupResult' since those don't imply an inventory
-// refresh on their own. This also covers the modal-cancel path for free: cancelling triggers a
-// host-side refresh, which pushes a fresh 'inventory', which clears localPending, which reverts
-// the cell/button to its normal look — no timers needed.
+// action (Install in every profile / Remove from every profile) whose per-cell targets are
+// computed host-side and only become known once the user confirms the resulting modal. Cleared
+// wholesale whenever a fresh 'inventory' message arrives (mirrors the `pending` reset below);
+// the `${extId}|*` keys are additionally cleared on 'orphans'/'cleanupResult' since those don't
+// imply an inventory refresh on their own. This also covers the modal-cancel path for free:
+// cancelling triggers a host-side refresh, which pushes a fresh 'inventory', which clears
+// localPending, which reverts the cell/button to its normal look — no timers needed.
 let localPending = new Set<string>();
 let orphans: OrphanInfo[] | undefined; // non-undefined = cleanup view open
 let checked = new Set<string>(); // folderNames selected for cleanup

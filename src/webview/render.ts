@@ -22,6 +22,8 @@ export interface WorkspaceCellVm {
 }
 
 export interface RowVm {
+  /** The extension id. A record names its own key `id`; anything that refers to an extension
+   *  from elsewhere (messages, parameters, data attributes) names it `extId`. */
   id: string;
   displayName: string;
   applyToAllProfiles: boolean;

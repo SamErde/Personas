@@ -458,17 +458,17 @@ describe('InventoryService', () => {
   });
 
   it('does not report on-disk extensions applied to all profiles as orphans when the default manifest is corrupt', async () => {
-    // pub.appscoped's applied-to-all-profiles flag lives in the unreadable default manifest;
+    // pub.applied-to-all's applied-to-all-profiles flag lives in the unreadable default manifest;
     // flagging it orphaned would be a guess, so it is suppressed instead.
     const io = makeIo(
       { [PATHS.storageJson]: storageJson, [PATHS.globalExtensionsJson]: '{{{' },
-      ['pub.appscoped-1.0.0'],
+      ['pub.applied-to-all-1.0.0'],
     );
     const inv = await new InventoryService(PATHS, io).getInventory();
     const warning = inv.warnings.find((w) => w.file === 'extensions.json (default profile)');
     expect(warning).toBeDefined();
     expect(warning?.affectedProfileIds).toEqual(['default']);
-    expect(inv.extensions.find((e) => e.id === 'pub.appscoped')).toBeUndefined();
+    expect(inv.extensions.find((e) => e.id === 'pub.applied-to-all')).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
   });
 
@@ -624,8 +624,8 @@ describe('installInEveryProfileTargets', () => {
       ],
       extensions: [
         {
-          id: 'pub.appscoped',
-          displayName: 'AppScoped',
+          id: 'pub.applied-to-all',
+          displayName: 'Applied To All',
           versions: [],
           applyToAllProfiles: true,
           installedIn: ['default'], // p1 missing — must still not be targeted
@@ -634,7 +634,7 @@ describe('installInEveryProfileTargets', () => {
       ],
       warnings: [],
     };
-    expect(installInEveryProfileTargets(inv, 'pub.appscoped')).toEqual([]);
+    expect(installInEveryProfileTargets(inv, 'pub.applied-to-all')).toEqual([]);
   });
 });
 
