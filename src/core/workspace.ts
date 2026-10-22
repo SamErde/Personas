@@ -326,7 +326,7 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
       .filter((warning) => warning.kind !== 'duplicateName') // readable data, only changes are blocked
       .flatMap((warning) => warning.affectedProfileIds),
   );
-  // Any unreadable profile manifest can hide an application-scoped entry. Because such an entry
+  // Any unreadable profile manifest can hide an entry applied to all profiles. Because such an entry
   // applies to every profile, membership in even a different readable active profile is uncertain
   // until all profile manifests that can carry the flag are readable.
   const profileMembershipReliable = affectedProfiles.size === 0;

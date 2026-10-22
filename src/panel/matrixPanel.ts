@@ -157,13 +157,13 @@ export class MatrixPanel {
       case 'toggleCell':
         await this.guard(() => actions.toggleCell(this.lastInventory, m.extId, m.profileId, m.install));
         return;
-      case 'toggleAllProfiles':
-        await this.guard(() => this.toggleAllProfiles(m.extId));
+      case 'showApplyToAllProfilesGuide':
+        await this.guard(() => this.showApplyToAllProfilesGuide(m.extId));
         return;
-      case 'installEverywhere':
+      case 'installInEveryProfile':
         await this.guard(() => actions.everyProfile(this.lastInventory, m.extId, 'install'));
         return;
-      case 'removeEverywhere':
+      case 'removeFromEveryProfile':
         await this.guard(() => actions.everyProfile(this.lastInventory, m.extId, 'remove'));
         return;
       case 'openExtensionPage':
@@ -199,7 +199,7 @@ export class MatrixPanel {
    * (docs/spikes/findings.md): `workbench.extensions.action.toggleApplyToAllProfiles` needs VS
    * Code's internal IExtension view-model as its argument, which no public API provides.
    */
-  private async toggleAllProfiles(extId: string): Promise<void> {
+  private async showApplyToAllProfilesGuide(extId: string): Promise<void> {
     await vscode.commands.executeCommand('workbench.extensions.search', `@id:${extId}`);
     void vscode.window.showInformationMessage(
       'Right-click the extension in the Extensions view and choose "Apply Extension to all Profiles".',

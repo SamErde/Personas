@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   composeInventory,
   directInstallProfileIds,
-  installEverywhereTargets,
+  installInEveryProfileTargets,
   profileExtensionCounts,
   profileManifestPath,
-  removeEverywhereTargets,
+  removeFromEveryProfileTargets,
   InventoryService,
   type InventoryIo,
 } from '../../src/core/inventory';
@@ -13,10 +13,10 @@ import type { ResolvedPaths } from '../../src/core/paths';
 import type { ManifestEntry, RawProfile } from '../../src/core/parsers';
 import type { Inventory, Profile } from '../../src/core/types';
 
-const entry = (id: string, version: string, appScoped = false): ManifestEntry => ({
+const entry = (id: string, version: string, applyToAllProfiles = false): ManifestEntry => ({
   id,
   version,
-  isApplicationScoped: appScoped,
+  applyToAllProfiles,
 });
 
 const baseInput = () => ({
@@ -63,7 +63,7 @@ describe('composeInventory', () => {
         kind: 'duplicateName',
       },
     ]);
-    expect(installEverywhereTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['default', 'ccc']);
+    expect(installInEveryProfileTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['default', 'ccc']);
   });
 
   it('disables changes to a named profile called "Default", which --profile Default cannot reach', () => {
@@ -87,7 +87,7 @@ describe('composeInventory', () => {
     ]);
   });
 
-  it('marks app-scoped extensions installed in every profile', () => {
+  it('marks extensions applied to all profiles as installed in every profile', () => {
     const inv = composeInventory(baseInput());
     const everywhere = inv.extensions.find((e) => e.id === 'pub.everywhere');
     expect(everywhere?.applyToAllProfiles).toBe(true);
@@ -118,7 +118,7 @@ describe('composeInventory', () => {
     ]);
   });
 
-  it('flags orphans: on disk, in no profile, not app-scoped', () => {
+  it('flags orphans: on disk, in no profile, not applied to all profiles', () => {
     const inv = composeInventory(baseInput());
     const orphan = inv.extensions.find((e) => e.id === 'pub.orphan');
     expect(orphan?.orphaned).toBe(true);
@@ -457,8 +457,8 @@ describe('InventoryService', () => {
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
   });
 
-  it('does not report app-scoped-on-disk extensions as orphans when the default manifest is corrupt', async () => {
-    // pub.appscoped's isApplicationScoped flag lives in the unreadable default manifest;
+  it('does not report on-disk extensions applied to all profiles as orphans when the default manifest is corrupt', async () => {
+    // pub.appscoped's applied-to-all-profiles flag lives in the unreadable default manifest;
     // flagging it orphaned would be a guess, so it is suppressed instead.
     const io = makeIo(
       { [PATHS.storageJson]: storageJson, [PATHS.globalExtensionsJson]: '{{{' },
@@ -588,33 +588,33 @@ describe('directInstallProfileIds', () => {
   });
 });
 
-describe('installEverywhereTargets', () => {
+describe('installInEveryProfileTargets', () => {
   it('targets non-inheriting profiles missing the extension, skipping inheriting and already-installed ones', () => {
     const inv = composeInventory(baseInput());
     // pub.default-only is installed in 'default' (direct) and 'builtin/agents' (inherited) —
     // only 'aaa' is a non-inheriting profile that still lacks it.
-    expect(installEverywhereTargets(inv, 'pub.default-only').map((p) => p.id)).toEqual(['aaa']);
+    expect(installInEveryProfileTargets(inv, 'pub.default-only').map((p) => p.id)).toEqual(['aaa']);
   });
 
   it('returns an empty array once installed (or inherited) in every profile', () => {
     const inv = composeInventory(baseInput());
-    expect(installEverywhereTargets(inv, 'pub.everywhere')).toEqual([]);
+    expect(installInEveryProfileTargets(inv, 'pub.everywhere')).toEqual([]);
   });
 
   it('excludes profiles disabled by a parse warning even when they lack the extension', () => {
     const input = baseInput();
     input.profileManifests.set('aaa', new Error('boom'));
     const inv = composeInventory(input);
-    expect(installEverywhereTargets(inv, 'pub.default-only')).toEqual([]);
+    expect(installInEveryProfileTargets(inv, 'pub.default-only')).toEqual([]);
   });
 
   it('returns an empty array for an unknown extension id', () => {
     const inv = composeInventory(baseInput());
-    expect(installEverywhereTargets(inv, 'pub.does-not-exist')).toEqual([]);
+    expect(installInEveryProfileTargets(inv, 'pub.does-not-exist')).toEqual([]);
   });
 
-  it('never targets an app-scoped extension, even if a profile were missing from installedIn', () => {
-    // Regression: app-scoped ids must be excluded by the applyToAllProfiles flag itself, not
+  it('never targets an extension applied to all profiles, even if a profile were missing from installedIn', () => {
+    // Regression: ids applied to all profiles must be excluded by the applyToAllProfiles flag itself, not
     // merely because composeInventory happens to fill installedIn — a hand-built record with a
     // gap in installedIn must still yield no targets.
     const inv: Inventory = {
@@ -634,19 +634,19 @@ describe('installEverywhereTargets', () => {
       ],
       warnings: [],
     };
-    expect(installEverywhereTargets(inv, 'pub.appscoped')).toEqual([]);
+    expect(installInEveryProfileTargets(inv, 'pub.appscoped')).toEqual([]);
   });
 });
 
-describe('removeEverywhereTargets', () => {
+describe('removeFromEveryProfileTargets', () => {
   it('targets every profile the extension is directly installed in', () => {
     const inv = composeInventory(baseInput());
-    expect(removeEverywhereTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['aaa']);
+    expect(removeFromEveryProfileTargets(inv, 'pub.work-only').map((p) => p.id)).toEqual(['aaa']);
   });
 
   it('returns an empty array when not directly installed anywhere', () => {
     const inv = composeInventory(baseInput());
-    expect(removeEverywhereTargets(inv, 'pub.orphan')).toEqual([]);
+    expect(removeFromEveryProfileTargets(inv, 'pub.orphan')).toEqual([]);
   });
 
   it('excludes profiles disabled by a parse warning from the target list', () => {
@@ -668,30 +668,30 @@ describe('removeEverywhereTargets', () => {
       ],
       warnings: [{ file: 'profiles/p2/extensions.json', message: 'bad', affectedProfileIds: ['p2'] }],
     };
-    expect(removeEverywhereTargets(inv, 'pub.shared').map((p) => p.id)).toEqual(['p1']);
+    expect(removeFromEveryProfileTargets(inv, 'pub.shared').map((p) => p.id)).toEqual(['p1']);
   });
 
-  it('never targets an app-scoped extension despite installedIn covering every profile', () => {
-    // Regression: composeInventory propagates app-scoped ids into every profile's installedIn,
+  it('never targets an extension applied to all profiles despite installedIn covering every profile', () => {
+    // Regression: composeInventory propagates applied-to-all-profiles ids into every profile's installedIn,
     // so directInstallProfileIds alone would report phantom per-profile installs (pub.everywhere
     // → default, aaa) — the applyToAllProfiles flag must short-circuit to no targets.
     const inv = composeInventory(baseInput());
     expect(directInstallProfileIds(inv, 'pub.everywhere')).toEqual(['default', 'aaa']); // the trap
-    expect(removeEverywhereTargets(inv, 'pub.everywhere')).toEqual([]);
+    expect(removeFromEveryProfileTargets(inv, 'pub.everywhere')).toEqual([]);
   });
 });
 
 describe('profileExtensionCounts', () => {
-  it('computes direct/shared per profile: own-manifest entries vs app-scoped-everywhere entries', () => {
+  it('splits each profile into direct, from-Default, and applied-to-all-profiles counts', () => {
     const inv = composeInventory(baseInput());
     const counts = profileExtensionCounts(inv);
-    // default: pub.default-only is its own manifest entry (direct); pub.everywhere is app-scoped (shared).
-    expect(counts.get('default')).toEqual({ direct: 1, shared: 1 });
-    // aaa: pub.work-only is its own manifest entry (direct); pub.everywhere is app-scoped (shared).
-    expect(counts.get('aaa')).toEqual({ direct: 1, shared: 1 });
-    // builtin/agents inherits the default profile's extensions: no manifest of its own (direct 0),
-    // and shares both the app-scoped extension and the default profile's direct extension.
-    expect(counts.get('builtin/agents')).toEqual({ direct: 0, shared: 2 });
+    // default: pub.default-only is its own manifest entry; pub.everywhere is applied to all profiles.
+    expect(counts.get('default')).toEqual({ direct: 1, fromDefault: 0, appliedToAllProfiles: 1 });
+    // aaa: pub.work-only is its own manifest entry; pub.everywhere is applied to all profiles.
+    expect(counts.get('aaa')).toEqual({ direct: 1, fromDefault: 0, appliedToAllProfiles: 1 });
+    // builtin/agents uses the default profile's extensions: no manifest of its own, so its
+    // pub.default-only comes from Default, counted apart from pub.everywhere.
+    expect(counts.get('builtin/agents')).toEqual({ direct: 0, fromDefault: 1, appliedToAllProfiles: 1 });
   });
 
   it("zeroes an inheriting profile's direct count even though composeInventory propagates default extensions into its installedIn", () => {
@@ -706,12 +706,12 @@ describe('profileExtensionCounts', () => {
     input.profileManifests.set('aaa', new Error('boom'));
     const inv = composeInventory(input);
     const counts = profileExtensionCounts(inv);
-    expect(counts.get('aaa')).toEqual({ direct: 0, shared: 1 });
-    expect(counts.get('default')).toEqual({ direct: 1, shared: 1 });
-    expect(counts.get('builtin/agents')).toEqual({ direct: 0, shared: 2 });
+    expect(counts.get('aaa')).toEqual({ direct: 0, fromDefault: 0, appliedToAllProfiles: 1 });
+    expect(counts.get('default')).toEqual({ direct: 1, fromDefault: 0, appliedToAllProfiles: 1 });
+    expect(counts.get('builtin/agents')).toEqual({ direct: 0, fromDefault: 1, appliedToAllProfiles: 1 });
   });
 
-  it('returns direct:0 and shared:0 when there are no app-scoped or default extensions at all', () => {
+  it('returns all-zero counts when no extension is installed anywhere', () => {
     const inv = composeInventory({
       rawProfiles: [{ location: 'p1', name: 'P1', inheritsDefaultExtensions: false }] as RawProfile[],
       defaultManifest: [] as ManifestEntry[] | Error,
@@ -722,8 +722,9 @@ describe('profileExtensionCounts', () => {
       extensionsDir: '/x',
       platform: 'linux',
     });
-    expect(profileExtensionCounts(inv).get('p1')).toEqual({ direct: 0, shared: 0 });
-    expect(profileExtensionCounts(inv).get('default')).toEqual({ direct: 0, shared: 0 });
+    const zero = { direct: 0, fromDefault: 0, appliedToAllProfiles: 0 };
+    expect(profileExtensionCounts(inv).get('p1')).toEqual(zero);
+    expect(profileExtensionCounts(inv).get('default')).toEqual(zero);
   });
 });
 

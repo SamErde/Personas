@@ -14,7 +14,8 @@ export interface RawProfile {
 export interface ManifestEntry {
   id: string;
   version: string;
-  isApplicationScoped: boolean;
+  /** VS Code's on-disk `metadata.isApplicationScoped` ("Apply Extension to all Profiles"). */
+  applyToAllProfiles: boolean;
   /** From metadata.publisherDisplayName, when present and string-typed. */
   publisherDisplayName?: string;
   /** From metadata.installedTimestamp, when present and number-typed. */
@@ -111,7 +112,7 @@ export function parseExtensionsManifest(text: string): ManifestEntry[] {
     if (typeof id !== 'string' || typeof e['version'] !== 'string') continue;
     const metadata = e['metadata'];
     const metaObj = typeof metadata === 'object' && metadata !== null ? (metadata as Record<string, unknown>) : undefined;
-    const isApplicationScoped = metaObj?.['isApplicationScoped'] === true;
+    const applyToAllProfiles = metaObj?.['isApplicationScoped'] === true;
     const publisherDisplayName =
       typeof metaObj?.['publisherDisplayName'] === 'string' ? metaObj['publisherDisplayName'] : undefined;
     const installedTimestamp =
@@ -119,7 +120,7 @@ export function parseExtensionsManifest(text: string): ManifestEntry[] {
     entries.push({
       id: normalizeExtensionId(id),
       version: e['version'],
-      isApplicationScoped,
+      applyToAllProfiles,
       ...(publisherDisplayName !== undefined ? { publisherDisplayName } : {}),
       ...(installedTimestamp !== undefined ? { installedTimestamp } : {}),
     });

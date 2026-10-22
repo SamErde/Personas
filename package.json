@@ -29,7 +29,7 @@
     "commands": [
       {
         "command": "personas.showMatrix",
-        "title": "Show Extension Matrix",
+        "title": "Open Extension Matrix",
         "category": "Personas",
         "icon": "$(extensions)"
       }

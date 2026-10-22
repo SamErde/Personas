@@ -107,14 +107,14 @@ describe('parseExtensionsManifest', () => {
       {
         id: 'johnpapa.vscode-peacock',
         version: '4.2.2',
-        isApplicationScoped: true,
+        applyToAllProfiles: true,
         publisherDisplayName: 'John Papa',
         installedTimestamp: 1771712605225,
       },
       {
         id: 'esbenp.prettier-vscode',
         version: '11.0.0',
-        isApplicationScoped: false,
+        applyToAllProfiles: false,
         installedTimestamp: 1771712605000,
       },
     ]);
@@ -135,7 +135,7 @@ describe('parseExtensionsManifest', () => {
     expect(onlyEntry).toEqual({
       id: 'pub.ext',
       version: '1.0.0',
-      isApplicationScoped: false,
+      applyToAllProfiles: false,
     });
     expect(onlyEntry).not.toHaveProperty('publisherDisplayName');
     expect(onlyEntry).not.toHaveProperty('installedTimestamp');

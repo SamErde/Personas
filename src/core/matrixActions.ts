@@ -1,5 +1,5 @@
 import type { CleanupService } from './cleanup';
-import { directInstallProfileIds, installEverywhereTargets, removeEverywhereTargets } from './inventory';
+import { directInstallProfileIds, installInEveryProfileTargets, removeFromEveryProfileTargets } from './inventory';
 import { disabledProfileIds } from './inventoryQueries';
 import type { MutationService } from './mutations';
 import type { Inventory, Profile } from './types';
@@ -127,13 +127,13 @@ export class MatrixActions {
 
 const EVERY_PROFILE = {
   install: {
-    targets: installEverywhereTargets,
+    targets: installInEveryProfileTargets,
     verb: 'Install',
     preposition: 'into',
     nothingToDo: 'Already installed in every profile.',
   },
   remove: {
-    targets: removeEverywhereTargets,
+    targets: removeFromEveryProfileTargets,
     verb: 'Remove',
     preposition: 'from',
     nothingToDo: 'Not directly installed in any profile.',

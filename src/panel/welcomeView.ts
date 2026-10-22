@@ -94,7 +94,8 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       name: p.name,
       inheritsDefaultExtensions: p.inheritsDefaultExtensions,
       direct: counts.get(p.id)?.direct ?? 0,
-      shared: counts.get(p.id)?.shared ?? 0,
+      fromDefault: counts.get(p.id)?.fromDefault ?? 0,
+      appliedToAllProfiles: counts.get(p.id)?.appliedToAllProfiles ?? 0,
       filePath: profileManifestPath(setup.paths, p),
     }));
     const orphanedCount = orphanCount(inventory);

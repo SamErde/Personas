@@ -1,12 +1,13 @@
 import { disabledProfileIds } from '../core/inventoryQueries';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
-export type Chip = 'all' | 'orphaned' | 'allProfiles';
+export type Chip = 'all' | 'orphaned' | 'appliedToAllProfiles';
 
 export interface CellVm {
   profileId: string;
   installed: boolean;
-  inherited: boolean;
+  /** True when this cell's profile uses the Default profile's extensions instead of its own. */
+  profileInheritsDefault: boolean;
   /** True when this profile's extensions.json failed to parse — mutations disabled. */
   disabled: boolean;
   /** Workspace-only rows never expose a profile mutation, even when the id exists in a gallery. */
@@ -21,7 +22,7 @@ export interface WorkspaceCellVm {
 }
 
 export interface RowVm {
-  extId: string;
+  id: string;
   displayName: string;
   applyToAllProfiles: boolean;
   orphaned: boolean;
@@ -64,7 +65,7 @@ export function buildViewModel(
     const applyToAllProfiles = extension?.applyToAllProfiles ?? false;
     const orphaned = extension?.orphaned ?? false;
     if (state.chip === 'orphaned' && (!profileBacked || !orphaned)) continue;
-    if (state.chip === 'allProfiles' && (!profileBacked || !applyToAllProfiles)) continue;
+    if (state.chip === 'appliedToAllProfiles' && (!profileBacked || !applyToAllProfiles)) continue;
     if (filter && !id.includes(filter) && !displayName.toLowerCase().includes(filter)) continue;
 
     // In a loaded workspace, the workspace composer has resolved the active profile manifest or
@@ -78,7 +79,7 @@ export function buildViewModel(
           : undefined
       : undefined;
     rows.push({
-      extId: id,
+      id,
       displayName,
       applyToAllProfiles,
       orphaned,
@@ -86,7 +87,7 @@ export function buildViewModel(
       cells: inv.profiles.map((profile) => ({
         profileId: profile.id,
         installed: extension?.installedIn.includes(profile.id) ?? false,
-        inherited: profile.inheritsDefaultExtensions,
+        profileInheritsDefault: profile.inheritsDefaultExtensions,
         disabled: profileBacked && disabledIds.has(profile.id),
         workspaceOnly: !profileBacked,
       })),
@@ -108,7 +109,7 @@ export function buildViewModel(
   rows.sort(
     (a, b) =>
       a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()) ||
-      a.extId.localeCompare(b.extId),
+      a.id.localeCompare(b.id),
   );
 
   return {
