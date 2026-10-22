@@ -1,5 +1,5 @@
 // Prints the live profile/extension state of this machine's VS Code Stable install.
-// Read-only. Run: node scripts/spike-formats.mjs [userDataDir] [extensionsDir]
+// Read-only. Run: node docs/spikes/probes/spike-formats.mjs [userDataDir] [extensionsDir]
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

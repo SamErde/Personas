@@ -3,16 +3,16 @@
 **Date:** 2026-08-10
 **Machine:** Windows 11 x64
 **VS Code lines:** 1.90.2 (minimum supported line at the time; since raised to 1.101) and 1.132.0 (current Stable)
-**Harness:** `scripts/spike-workspace-status.mjs`
+**Harness:** `docs/spikes/probes/spike-workspace-status.mjs`
 
 ## Boundary and setup
 
-The probe used only stable `vscode.workspace` and `vscode.extensions` APIs, the documented VS Code CLI, and read-only inspection of `globalStorage/storage.json`. Each run created separate temporary `--user-data-dir` and `--extensions-dir` directories. API/event checks ran in the extension test host; profile-association checks used a packaged probe installed into short-lived regular VS Code windows. It opened only the fixtures under `test/spike`; it did not read or change the user's VS Code data.
+The probe used only stable `vscode.workspace` and `vscode.extensions` APIs, the documented VS Code CLI, and read-only inspection of `globalStorage/storage.json`. Each run created separate temporary `--user-data-dir` and `--extensions-dir` directories. API/event checks ran in the extension test host; profile-association checks used a packaged probe installed into short-lived regular VS Code windows. It opened only the fixtures now under `test/fixtures/multi-root-workspace`; it did not read or change the user's VS Code data.
 
 Run:
 
 ```text
-node scripts/spike-workspace-status.mjs 1.90.2 stable
+node docs/spikes/probes/spike-workspace-status.mjs 1.90.2 stable
 ```
 
 The fixture set included:

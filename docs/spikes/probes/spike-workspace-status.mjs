@@ -12,13 +12,14 @@ import {
   runTests,
 } from '@vscode/test-electron';
 
-const root = path.resolve(import.meta.dirname, '..');
+const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const versions = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['1.90.2', 'stable'];
 const fixtureDir = path.join(root, 'test', 'fixtures', 'hello-ext');
 const vsixPath = path.join(fixtureDir, 'fixture.vsix');
 const webFixtureDir = path.join(root, 'test', 'fixtures', 'web-ext');
 const webVsixPath = path.join(webFixtureDir, 'fixture.vsix');
-const associationProbeDir = path.join(root, 'test', 'spike', 'workspace-status-extension');
+const associationProbeDir = path.join(import.meta.dirname, 'workspace-status-extension');
+const workspaceFixtureDir = path.join(root, 'test', 'fixtures', 'multi-root-workspace');
 const associationProbeVsixPath = path.join(associationProbeDir, 'association-probe.vsix');
 const vsce = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'vsce.cmd' : 'vsce');
 
@@ -165,10 +166,10 @@ for (const version of versions) {
 
   await runTests({
     vscodeExecutablePath: executable,
-    extensionDevelopmentPath: path.join(root, 'test', 'spike', 'workspace-status-extension'),
-    extensionTestsPath: path.join(root, 'test', 'spike', 'workspace-status-suite', 'index.js'),
+    extensionDevelopmentPath: associationProbeDir,
+    extensionTestsPath: path.join(import.meta.dirname, 'workspace-status-suite', 'index.js'),
     launchArgs: [
-      path.join(root, 'test', 'spike', 'workspace-root'),
+      path.join(workspaceFixtureDir, 'workspace-root'),
       '--user-data-dir', userDataDir,
       '--extensions-dir', extensionsDir,
       '--disable-workspace-trust',
@@ -194,7 +195,7 @@ for (const version of versions) {
   ], { shell: process.platform === 'win32', stdio: 'inherit' });
   await ensureNamedProfile({
     executable,
-    target: path.join(root, 'test', 'spike', 'workspace-root'),
+    target: path.join(workspaceFixtureDir, 'workspace-root'),
     profile: 'SpikeNamed',
     userDataDir,
     extensionsDir,
@@ -211,16 +212,16 @@ for (const version of versions) {
   for (const associationCase of [
     {
       label: 'default-saved-workspace',
-      target: path.join(root, 'test', 'spike', 'workspace-status.code-workspace'),
+      target: path.join(workspaceFixtureDir, 'workspace-status.code-workspace'),
     },
     {
       label: 'named-folder',
-      target: path.join(root, 'test', 'spike', 'workspace-root'),
+      target: path.join(workspaceFixtureDir, 'workspace-root'),
       profile: 'SpikeNamed',
     },
     {
       label: 'named-saved-workspace',
-      target: path.join(root, 'test', 'spike', 'workspace-status.code-workspace'),
+      target: path.join(workspaceFixtureDir, 'workspace-status.code-workspace'),
       profile: 'SpikeNamed',
     },
   ]) {
