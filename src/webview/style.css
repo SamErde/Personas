@@ -85,6 +85,19 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
 /* In-flight mutation feedback: shown the instant a checkbox is toggled (localPending) or once
  * the host echoes a 'pending' message — Cell Sky alpha-blended so it reads on light+dark. */
 .cell.pending { background: rgba(56, 189, 248, 0.25); border-radius: 3px; }
+/* Crosshair highlight for the row and column under the pointer or focus. `crosshair-label` marks
+ * the labels the user reads: the column's header and the row's extension-name cell. The sticky
+ * header layers the tint over the opaque editor background so rows can't show through where the
+ * token is translucent or transparent. The outline keeps the active cell visible in high-contrast
+ * themes, where the hover background is often transparent. */
+td.crosshair { background: var(--vscode-list-hoverBackground); }
+td.crosshair-label { background: var(--vscode-list-inactiveSelectionBackground); }
+th.crosshair-label {
+  background:
+    linear-gradient(var(--vscode-list-inactiveSelectionBackground), var(--vscode-list-inactiveSelectionBackground)),
+    var(--vscode-editor-background);
+}
+td.crosshair-cell { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .warning {
   background: var(--vscode-inputValidation-warningBackground);
   border: 1px solid var(--vscode-inputValidation-warningBorder);
