@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { MatrixActions } from '../core/matrixActions';
 import { asError } from '../core/errors';
-import type { HostToWebview, Inventory, WebviewToHost, WorkspaceInventory } from '../core/types';
+import type { Inventory, WorkspaceInventory } from '../core/types';
+import type { HostToMatrix, MatrixToHost } from '../protocol';
 import type { Services } from '../servicesFactory';
 import { statFolder } from './fsStat';
 import { createNonce, matrixContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
@@ -68,7 +69,7 @@ export class MatrixPanel {
     });
     panel.webview.html = this.html(context);
     panel.onDidDispose(() => (MatrixPanel.current = undefined));
-    panel.webview.onDidReceiveMessage((m: WebviewToHost) => void this.enqueue(() => this.onMessage(m)));
+    panel.webview.onDidReceiveMessage((m: MatrixToHost) => void this.enqueue(() => this.onMessage(m)));
   }
 
   /**
@@ -113,9 +114,9 @@ export class MatrixPanel {
 
   /**
    * Ensures inventory is fresh, then opens the cleanup (orphan-review) view — the same effect as
-   * the webview's own "Review…" button, but invoked externally (the sidebar dashboard calls this
-   * after asking the host to show the matrix). No-op in the unsupported terminal state, since
-   * there is nothing to review there.
+   * the webview's own "Review…" button, but invoked externally through the
+   * `personas.reviewOrphans` command (extension.ts), which Home runs. No-op in the unsupported
+   * terminal state, since there is nothing to review there.
    */
   async openCleanup(): Promise<void> {
     const services = this.services;
@@ -134,11 +135,11 @@ export class MatrixPanel {
     this.post({ type: 'orphans', orphans });
   }
 
-  private post(message: HostToWebview): void {
+  private post(message: HostToMatrix): void {
     void this.panel.webview.postMessage(message);
   }
 
-  private async onMessage(m: WebviewToHost): Promise<void> {
+  private async onMessage(m: MatrixToHost): Promise<void> {
     const services = this.services;
     const actions = this.actions;
     if (!services || !actions) {

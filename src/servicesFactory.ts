@@ -138,9 +138,9 @@ let onFirstBuild: ((context: vscode.ExtensionContext, services: Services) => voi
 
 /**
  * Registers the hook run exactly once, when services are first built successfully. extension.ts
- * uses it to start the file watchers that drive live refresh (matrix, sidebar dashboard, open
+ * uses it to start the file watchers that drive live refresh (matrix, Home, open
  * personas-readonly documents) — tied to service construction rather than the showMatrix command, so
- * the sidebar-only path (welcome view resolve, with openMatrixOnActivityBarClick disabled) gets
+ * the sidebar-only path (Home resolve, with openMatrixOnActivityBarClick disabled) gets
  * watchers too. Lives here as a hook, not a direct call, because servicesFactory importing
  * extension.ts would be circular. Never invoked on the unsupported-environment error path.
  */
@@ -152,7 +152,7 @@ export function setOnServicesBuilt(hook: (context: vscode.ExtensionContext, serv
  * Builds the extension's core services once per process lifetime and caches the result (including
  * a failure) — paths/CLI resolution never changes for the life of the host, so rebuilding on every
  * call would redo the dev-host guard and CLI probe for no reason. Shared by the showMatrix command
- * and the sidebar dashboard so both act on the same services without duplicating construction.
+ * and Home so both act on the same services without duplicating construction.
  */
 export function getOrBuildServices(context: vscode.ExtensionContext): Promise<Services | { error: string }> {
   if (!servicesPromise) {

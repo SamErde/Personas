@@ -1,4 +1,4 @@
-import type { WelcomeToHost } from '../core/types';
+import type { HomeToHost } from '../protocol';
 
 export interface WorkspaceManifestAction {
   mode: 'readOnly' | 'edit';
@@ -8,7 +8,7 @@ export interface WorkspaceManifestAction {
 /** Resolve manifest actions exclusively from host-owned state. Extra properties on an untrusted
  * webview message can never select a different path. */
 export function resolveWorkspaceManifestAction(
-  message: WelcomeToHost,
+  message: HomeToHost,
   workspaceManifestPath: string | undefined,
 ): WorkspaceManifestAction | undefined {
   if (!workspaceManifestPath) return undefined;

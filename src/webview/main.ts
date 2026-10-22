@@ -1,10 +1,11 @@
-import type { HostToWebview, Inventory, OrphanInfo, WebviewToHost, WorkspaceInventory } from '../core/types';
+import type { Inventory, OrphanInfo, WorkspaceInventory } from '../core/types';
+import type { HostToMatrix, MatrixToHost } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
 import { el, formatBytes } from './ui';
-import { isTrustedHostMessageOrigin } from './messageSecurity';
+import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
-declare function acquireVsCodeApi(): { postMessage(m: WebviewToHost): void };
+declare function acquireVsCodeApi(): { postMessage(m: MatrixToHost): void };
 const vscode = acquireVsCodeApi();
 
 let inventory: Inventory | undefined;
@@ -344,7 +345,7 @@ window.addEventListener(
 );
 // ---------------------------------------------------------------------------------------------
 
-window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
+window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
   if (!isTrustedHostMessageOrigin(event.origin, window.location.origin)) return;
 
   const m = event.data;
@@ -394,7 +395,7 @@ window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
   }
 });
 
-function post(m: WebviewToHost): void {
+function post(m: MatrixToHost): void {
   vscode.postMessage(m);
 }
 
@@ -636,7 +637,7 @@ function renderCleanup(list: OrphanInfo[]): void {
  * fallback. Also swaps a broken/unresolvable icon path to the fallback at load time, so a stale
  * or invalid host-provided URI never surfaces a broken-image glyph. */
 function extIcon(extId: string, displayName: string): HTMLElement {
-  const src = icons[extId];
+  const src = safeImageSource(icons[extId]);
   if (!src) return letterTile(displayName);
   const img = document.createElement('img');
   img.className = 'ext-icon';
