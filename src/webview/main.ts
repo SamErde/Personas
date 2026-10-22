@@ -2,6 +2,7 @@ import type { Inventory, OrphanInfo, WorkspaceInventory } from '../core/types';
 import type { HostToMatrix, MatrixToHost } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
+import { crosshairFor, type GridHit } from './crosshair';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -134,6 +135,7 @@ function hideCard(): void {
   card.hidden = true;
   card.replaceChildren();
   cardOwnerExtId = undefined;
+  applyCrosshair(); // the card's row no longer holds the highlight
 }
 
 function showCard(extId: string, trigger: HTMLElement): void {
@@ -150,6 +152,7 @@ function showCard(extId: string, trigger: HTMLElement): void {
   rebuildCard(row);
   card.hidden = false;
   positionCard(trigger);
+  applyCrosshair();
 }
 
 /** True while buildCardContent is replacing the card's children — the removal of a focused
@@ -343,6 +346,71 @@ window.addEventListener(
   },
   { capture: true },
 );
+// ---------------------------------------------------------------------------------------------
+
+// --- Crosshair highlight --------------------------------------------------------------------
+// Highlights the row and column under the pointer or keyboard focus so the user doesn't lose
+// their place in a wide grid. Delegated on the persistent `contentEl` (the table is rebuilt on
+// every render) and keyed by the `data-row` / `data-col` indexes renderContent() stamps on the
+// table. Nothing about the hit itself is stored: each apply re-reads the element under the last
+// pointer position and the live `document.activeElement`, so a rebuild can't leave a stale row
+// or column behind (a focused checkbox removed by a rebuild fires its focusout while detached,
+// which never reaches `contentEl`).
+const CROSSHAIR_CLASSES = ['crosshair', 'crosshair-label', 'crosshair-cell'];
+let pointerAt: { x: number; y: number } | undefined; // last position while over contentEl
+
+function gridHitAt(target: EventTarget | null): GridHit | undefined {
+  if (!(target instanceof Element)) return undefined;
+  const cellEl = target.closest<HTMLElement>('th[data-col], td[data-col]');
+  if (!cellEl || !contentEl.contains(cellEl)) return undefined;
+  const col = Number(cellEl.dataset['col']);
+  if (cellEl.tagName === 'TH') return { kind: 'header', col };
+  const row = Number(cellEl.closest<HTMLElement>('tr')?.dataset['row']);
+  return col === 0 ? { kind: 'name', row } : { kind: 'cell', row, col };
+}
+
+/** Body-row index of the extension whose hover card is open, if that row is rendered. */
+function openCardRow(): number | undefined {
+  if (card.hidden) return undefined;
+  const index = renderedRows.findIndex((r) => r.id === cardOwnerExtId);
+  return index >= 0 ? index : undefined;
+}
+
+function applyCrosshair(): void {
+  for (const node of contentEl.querySelectorAll(CROSSHAIR_CLASSES.map((c) => `.${c}`).join(', '))) {
+    node.classList.remove(...CROSSHAIR_CLASSES);
+  }
+  const { row, col, outlineCell } = crosshairFor({
+    pointer: pointerAt && gridHitAt(document.elementFromPoint(pointerAt.x, pointerAt.y)),
+    focus: gridHitAt(document.activeElement),
+    cardRow: openCardRow(),
+  });
+  // The row's name cell and the column's header are labels: what the user reads to find their
+  // place, so they get the stronger emphasis.
+  const rowCells = contentEl.querySelectorAll<HTMLElement>(`tr[data-row="${row}"] > td`);
+  if (row !== undefined) {
+    for (const node of rowCells) node.classList.add(node.dataset['col'] === '0' ? 'crosshair-label' : 'crosshair');
+  }
+  if (col !== undefined) {
+    for (const node of contentEl.querySelectorAll<HTMLElement>(`[data-col="${col}"]`)) {
+      node.classList.add(node.tagName === 'TH' ? 'crosshair-label' : 'crosshair');
+    }
+  }
+  if (outlineCell) rowCells[col ?? -1]?.classList.add('crosshair-cell');
+}
+
+contentEl.addEventListener('pointerover', (e) => {
+  pointerAt = { x: e.clientX, y: e.clientY };
+  applyCrosshair();
+});
+contentEl.addEventListener('pointerleave', () => {
+  pointerAt = undefined;
+  applyCrosshair();
+});
+// During focusout, activeElement is already <body>, so leaving the table clears the focus hit;
+// moving within the table re-applies on the focusin that follows.
+contentEl.addEventListener('focusin', applyCrosshair);
+contentEl.addEventListener('focusout', applyCrosshair);
 // ---------------------------------------------------------------------------------------------
 
 window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
@@ -584,11 +652,18 @@ function renderContent(): void {
     }
     table.append(tr);
   }
+  // Indexes for the crosshair highlight: every row has one cell per column (no spans), so a
+  // cell's position is its column. Body rows count from 0, after the header row.
+  [...table.rows].forEach((tr, i) => {
+    if (i > 0) tr.dataset['row'] = String(i - 1);
+    [...tr.cells].forEach((cellEl, col) => (cellEl.dataset['col'] = String(col)));
+  });
   contentEl.append(table);
 
   // An open card survives the rebuild: re-anchored to the re-created name element and its
   // contents (including pending-disabled buttons) refreshed from the new state.
   syncOpenCard();
+  applyCrosshair();
 }
 
 function renderCleanup(list: OrphanInfo[]): void {
