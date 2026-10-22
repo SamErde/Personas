@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.1.3](https://github.com/SamErde/Personas/compare/v1.1.2...v1.1.3) (2026-10-22)
+
+
+### Bug Fixes
+
+* **release:** publish with the locked vsce and keep sourcemaps out of the VSIX ([#93](https://github.com/SamErde/Personas/issues/93)) ([ff7e865](https://github.com/SamErde/Personas/commit/ff7e865d1b6ce7100056a1ac25d113227a6c554e))
+
 ## [1.1.2](https://github.com/SamErde/Personas/compare/v1.1.1...v1.1.2) (2026-10-22)
 
 
