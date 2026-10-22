@@ -111,8 +111,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       # Publish with the vsce locked in package-lock.json, the same copy that
-      # packaged the VSIX in phase 2.
-      - run: npm ci
+      # packaged the VSIX in phase 2. No install scripts: this job only uploads a
+      # built, unsigned VSIX, and nothing should run ahead of the VSCE_PAT step.
+      - run: npm ci --ignore-scripts
       - name: Download released VSIX
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
