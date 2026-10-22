@@ -414,7 +414,8 @@ export class InventoryService {
       const needIcon = !iconFsPaths.has(parsed.id);
       const needDescription = !descriptions.has(parsed.id);
       const needPublisher = !publishers.has(parsed.id);
-      if (!needDisplayName && !needIcon && !needDescription && !needPublisher) continue;
+      // Read every folder, even when its fields are already known, so a broken package.json is
+      // reported regardless of directory order.
       const meta = await this.io.readPackageMeta(join(this.paths.extensionsDir, folderName));
       if (meta instanceof Error) {
         // Metadata only: the record falls back to its id and letter tile, so nothing is disabled.

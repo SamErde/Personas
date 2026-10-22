@@ -523,6 +523,25 @@ describe('InventoryService', () => {
     expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.displayName).toBe('pub.alpha');
   });
 
+  it('warns about a broken package.json even when an earlier version folder supplied every field', async () => {
+    const broken = new Error('package.json: invalid JSON');
+    const io: InventoryIo = {
+      ...makeIo({ [PATHS.storageJson]: storageJson, [PATHS.globalExtensionsJson]: defaultManifest }),
+      listDirs: () => Promise.resolve(['pub.alpha-1.0.0', 'pub.alpha-0.9.0']),
+      readPackageMeta: (p) =>
+        Promise.resolve(
+          p.endsWith('pub.alpha-0.9.0')
+            ? broken
+            : { displayName: 'Alpha', icon: 'icon.png', description: 'Does alpha things.', publisher: 'pub' },
+        ),
+    };
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    expect(inv.warnings.find((w) => w.file === 'extensions/pub.alpha-0.9.0/package.json')?.message).toBe(
+      broken.message,
+    );
+    expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.displayName).toBe('Alpha');
+  });
+
   it('degrades a corrupt per-profile manifest into a warning for that profile without rejecting', async () => {
     const io = makeIo({
       [PATHS.storageJson]: storageJson,
