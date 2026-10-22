@@ -19,6 +19,6 @@ scripts/
 .nvmrc
 CLAUDE.md
 vitest.config.*
-# Sourcemaps stay in local and test builds; VS Code doesn't apply them to an
-# installed extension's stack traces, so they only add VSIX size.
+# Sourcemaps stay in local and test builds for debugging; nothing in the
+# installed extension uses them, so they only add VSIX size.
 dist/**/*.map
