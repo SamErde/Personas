@@ -12,6 +12,7 @@ import {
   runTests,
 } from '@vscode/test-electron';
 
+// This script lives in docs/spikes/probes/; the repo root is three levels up.
 const root = path.resolve(import.meta.dirname, '..', '..', '..');
 const versions = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['1.90.2', 'stable'];
 const fixtureDir = path.join(root, 'test', 'fixtures', 'hello-ext');
