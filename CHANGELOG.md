@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.1.2](https://github.com/SamErde/Personas/compare/v1.1.1...v1.1.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* surface swallowed IO errors, remove dead code, merge duplicated helpers ([#88](https://github.com/SamErde/Personas/issues/88)) ([7903b37](https://github.com/SamErde/Personas/commit/7903b372ed701feff69caa3a89c9a5566926a823))
+
 ## [1.1.1](https://github.com/SamErde/Personas/compare/v1.1.0...v1.1.1) (2026-10-21)
 
 
