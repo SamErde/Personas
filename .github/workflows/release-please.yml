@@ -91,8 +91,8 @@ jobs:
   # Marketplace failure (PAT expiry, scan rejection) fails visibly WITHOUT
   # blocking phase 3 — the GitHub release is sealed by phase 2 and is the
   # source of truth. Skipped if package-and-publish failed (no sealed release
-  # or vsix). Recovery is manual: re-run this job, or download the released
-  # vsix and run `npx @vscode/vsce publish --packagePath <file>`.
+  # or vsix). Recovery is manual: re-run this job, or follow the last-resort
+  # fallback in docs/local-build-test-and-release.md.
   publish-marketplace:
     needs: [release, package-and-publish]
     if: ${{ needs.release.outputs.release_created }}
@@ -110,6 +110,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # Publish with the vsce locked in package-lock.json, the same copy that
+      # packaged the VSIX in phase 2.
+      - run: npm ci
       - name: Download released VSIX
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -118,7 +121,7 @@ jobs:
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx --yes @vscode/vsce@4 publish --packagePath releases/*.vsix
+        run: npx --no -- vsce publish --packagePath releases/*.vsix
 
   # Phase 3: create/update the NEXT release PR — only after the GitHub release
   # is sealed (phase 2), so the boundary lookup succeeds. Independent of the
