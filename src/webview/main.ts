@@ -651,6 +651,7 @@ function renderContent(): void {
       const guide = status?.offersEnablementGuide ? el('button', 'workspace-guide') : undefined;
       if (guide) {
         td.title += ' Opens the Extensions view to enable or disable it for this workspace.';
+        td.classList.add('workspace-guide-cell'); // the button, not the cell, carries the padding
         guide.addEventListener('click', () => post({ type: 'showWorkspaceEnablementGuide', extId: row.id }));
         td.append(guide);
       }
