@@ -1,5 +1,6 @@
 import { constants } from 'node:fs';
 import { open, lstat, opendir, realpath, type FileHandle } from 'node:fs/promises';
+import { asError } from './core/errors';
 import { isFsPathContained } from './core/paths';
 
 interface WorkspaceDirectoryEntry {
@@ -19,10 +20,6 @@ type OpenWorkspaceDirectory = (p: string) => Promise<WorkspaceDirectoryReader>;
 type StatManifestPath = (p: string) => Promise<{ dev: bigint; ino: bigint; isFile(): boolean; isSymbolicLink(): boolean }>;
 
 const lstatExact: StatManifestPath = (p) => lstat(p, { bigint: true });
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
-}
 
 /** Enumerate only enough workspace-controlled entries to fill the cap and detect truncation. */
 export async function listBoundedWorkspaceEntries(

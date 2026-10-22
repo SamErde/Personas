@@ -6,6 +6,7 @@ import type {
   WelcomeWorkspaceVm,
 } from '../core/types';
 import { isTrustedHostMessageOrigin } from './messageSecurity';
+import { el, formatBytes } from './ui';
 
 declare function acquireVsCodeApi(): { postMessage(m: WelcomeToHost): void };
 const vscode = acquireVsCodeApi();
@@ -56,12 +57,6 @@ window.addEventListener('message', (event: MessageEvent<HostToWelcome>) => {
 function setLauncherHidden(hidden: boolean): void {
   const launcher = document.getElementById('launcher');
   if (launcher) launcher.hidden = hidden;
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function render(): void {
@@ -179,15 +174,9 @@ function render(): void {
   }
 
   for (const w of state.warnings) {
-    extra.append(el('p', 'warning-line', `⚠ ${w.file}: actions for affected profiles are disabled`));
+    const effect = w.affectedProfileIds.length > 0 ? 'actions for affected profiles are disabled' : w.message;
+    extra.append(el('p', 'warning-line', `⚠ ${w.file}: ${effect}`));
   }
-}
-
-function el(tag: string, className: string, text?: string): HTMLElement {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
 }
 
 vscode.postMessage({ type: 'ready' });

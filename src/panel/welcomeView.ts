@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
+import { asError } from '../core/errors';
 import { profileExtensionCounts, profileManifestPath } from '../core/inventory';
+import { orphanCount } from '../core/inventoryQueries';
 import type { HostToWelcome, WelcomeProfileVm, WelcomeToHost, WelcomeWorkspaceVm } from '../core/types';
 import { workspaceExtensionCounts } from '../core/workspace';
 import { getOrBuildServices } from '../servicesFactory';
@@ -8,7 +10,7 @@ import { statFolder } from './fsStat';
 import { MatrixPanel } from './matrixPanel';
 import { openReadOnly } from './readOnlyProvider';
 import { resolveWorkspaceManifestAction } from './welcomeActions';
-import { renderContentSecurityPolicyMeta, welcomeContentSecurityPolicy } from './webviewSecurity';
+import { createNonce, renderContentSecurityPolicyMeta, welcomeContentSecurityPolicy } from './webviewSecurity';
 
 /**
  * Sidebar mini-dashboard for the activity-bar view. Owns no business logic of its own: counts,
@@ -95,7 +97,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       shared: counts.get(p.id)?.shared ?? 0,
       filePath: profileManifestPath(setup.paths, p),
     }));
-    const orphanCount = inventory.extensions.filter((e) => e.orphaned).length;
+    const orphanedCount = orphanCount(inventory);
     const workspaceInventory = await setup.workspace.getWorkspaceInventory(inventory);
     if (generation !== this.renderGeneration) return;
     const workspace: WelcomeWorkspaceVm | undefined = workspaceInventory
@@ -118,11 +120,11 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       type: 'state',
       profiles,
       ...(workspace ? { workspace } : {}),
-      orphanCount,
+      orphanCount: orphanedCount,
       warnings: inventory.warnings,
     });
 
-    if (orphanCount > 0) {
+    if (orphanedCount > 0) {
       // Sent as a follow-up patch, not blocking the state push above: the size walk is a real
       // disk scan and the count should render immediately.
       const orphans = await buildOrphanInfos(inventory, statFolder);
@@ -181,14 +183,14 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       await vscode.window.showTextDocument(doc, { preview: false });
     } catch (e) {
       void vscode.window.showErrorMessage(
-        `Personas: couldn't open ${filePath} — ${e instanceof Error ? e.message : String(e)}`,
+        `Personas: couldn't open ${filePath} — ${asError(e).message}`,
       );
     }
   }
 
   private html(webview: vscode.Webview): string {
     const script = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'welcome.js'));
-    const nonce = [...Array(24)].map(() => Math.random().toString(36)[2]).join('');
+    const nonce = createNonce();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>

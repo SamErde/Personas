@@ -1,5 +1,6 @@
 import type { CleanupService } from './cleanup';
 import { directInstallProfileIds, installEverywhereTargets, removeEverywhereTargets } from './inventory';
+import { disabledProfileIds } from './inventoryQueries';
 import type { MutationService } from './mutations';
 import type { Inventory, Profile } from './types';
 
@@ -148,9 +149,4 @@ function cascadeWarning(inv: Inventory, defaultIsAffected: boolean): string {
   return inheriting.length > 0
     ? `Profiles that inherit the Default profile's extensions (${inheriting.map((p) => p.name).join(', ')}) will also lose it.`
     : '';
-}
-
-/** Profiles a warning disabled: unreadable data, or a name the code CLI cannot tell apart. */
-function disabledProfileIds(inv: Inventory): Set<string> {
-  return new Set(inv.warnings.flatMap((w) => w.affectedProfileIds));
 }

@@ -1,3 +1,4 @@
+import { asError } from './errors';
 import type { Inventory, OrphanInfo } from './types';
 
 export async function buildOrphanInfos(
@@ -40,7 +41,7 @@ export class CleanupService {
         await this.trash(f.fsPath);
         results.push({ folderName: f.folderName, ok: true });
       } catch (e) {
-        results.push({ folderName: f.folderName, ok: false, error: e instanceof Error ? e.message : String(e) });
+        results.push({ folderName: f.folderName, ok: false, error: asError(e).message });
       }
     }
     return results;

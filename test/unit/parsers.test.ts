@@ -41,7 +41,6 @@ describe('parseWorkspaceProfileAssociations', () => {
     expect(parseWorkspaceProfileAssociations('{"other": 1}')).toEqual({
       workspaces: new Map(),
       warnings: [],
-      present: false,
     });
   });
 
@@ -58,7 +57,6 @@ describe('parseWorkspaceProfileAssociations', () => {
         },
       }),
     );
-    expect(parsed.present).toBe(true);
     expect([...parsed.workspaces]).toEqual([
       ['file:///c%3A/code/one', '__default__profile__'],
       ['file:///c%3A/code/two.code-workspace', 'profile-id'],
@@ -87,13 +85,11 @@ describe('parseWorkspaceProfileAssociations', () => {
 
   it('fails closed when the associations container or workspace map has the wrong shape', () => {
     expect(parseWorkspaceProfileAssociations('{"profileAssociations": []}')).toMatchObject({
-      present: false,
       warnings: ['profileAssociations is not an object.'],
     });
     expect(
       parseWorkspaceProfileAssociations('{"profileAssociations": {"workspaces": []}}'),
     ).toMatchObject({
-      present: false,
       warnings: ['profileAssociations.workspaces is not an object.'],
     });
   });
@@ -105,13 +101,12 @@ describe('parseWorkspaceProfileAssociations', () => {
 });
 
 describe('parseExtensionsManifest', () => {
-  it('extracts id (lowercased), version, relativeLocation, app scope, and metadata extras', () => {
+  it('extracts id (lowercased), version, app scope, and metadata extras', () => {
     const entries = parseExtensionsManifest(fixture('extensions-global.json'));
     expect(entries).toEqual([
       {
         id: 'johnpapa.vscode-peacock',
         version: '4.2.2',
-        relativeLocation: 'johnpapa.vscode-peacock-4.2.2',
         isApplicationScoped: true,
         publisherDisplayName: 'John Papa',
         installedTimestamp: 1771712605225,
@@ -119,7 +114,6 @@ describe('parseExtensionsManifest', () => {
       {
         id: 'esbenp.prettier-vscode',
         version: '11.0.0',
-        relativeLocation: 'esbenp.prettier-vscode-11.0.0',
         isApplicationScoped: false,
         installedTimestamp: 1771712605000,
       },
@@ -141,7 +135,6 @@ describe('parseExtensionsManifest', () => {
     expect(onlyEntry).toEqual({
       id: 'pub.ext',
       version: '1.0.0',
-      relativeLocation: 'pub.ext-1.0.0',
       isApplicationScoped: false,
     });
     expect(onlyEntry).not.toHaveProperty('publisherDisplayName');

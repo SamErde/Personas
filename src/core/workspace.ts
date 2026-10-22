@@ -1,6 +1,9 @@
 import { dirnameFsPath, fsPathKey, isFsPathContained, joinFsPath, type WatchTarget } from './paths';
+import { asError } from './errors';
 import {
+  normalizeExtensionId,
   parseWorkspaceProfileAssociations,
+  unlocalizedString,
   type ParsedWorkspaceProfileAssociations,
 } from './parsers';
 import type {
@@ -254,7 +257,7 @@ export async function discoverWorkspaceLocalExtensions(
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('expected an object');
         manifest = parsed as Record<string, unknown>;
       } catch (error) {
-        warnings.push(`Ignored ${manifestPath}: invalid JSON (${error instanceof Error ? error.message : String(error)}).`);
+        warnings.push(`Ignored ${manifestPath}: invalid JSON (${asError(error).message}).`);
         continue;
       }
       const publisher = manifest['publisher'];
@@ -268,22 +271,15 @@ export async function discoverWorkspaceLocalExtensions(
         warnings.push(`Ignored ${manifestPath}: publisher and name must form a valid extension id.`);
         continue;
       }
-      const id = `${publisher}.${name}`.toLowerCase();
-      const rawDisplayName = manifest['displayName'];
-      const displayName =
-        typeof rawDisplayName === 'string' && rawDisplayName.trim() && !rawDisplayName.startsWith('%')
-          ? rawDisplayName
-          : id;
+      const id = normalizeExtensionId(`${publisher}.${name}`);
+      const rawDisplayName = unlocalizedString(manifest['displayName']);
+      const displayName = rawDisplayName?.trim() ? rawDisplayName : id;
       const version = typeof manifest['version'] === 'string' ? manifest['version'] : undefined;
-      const description =
-        typeof manifest['description'] === 'string' && !manifest['description'].startsWith('%')
-          ? manifest['description']
-          : undefined;
+      const description = unlocalizedString(manifest['description']);
       candidates.push({
         id,
         displayName,
         fsPath: folderPath,
-        runtimeVisible: false,
         ...(version ? { version } : {}),
         ...(description ? { description } : {}),
         ...(publisher ? { publisher } : {}),
@@ -316,14 +312,13 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
     warnings.push(`Could not read VS Code's effective extension snapshot: ${input.runtimeExtensions.message}`);
   }
   const runtimeById = groupById(
-    runtimeSnapshot.map((extension) => ({ ...extension, id: extension.id.toLowerCase() })),
+    runtimeSnapshot.map((extension) => ({ ...extension, id: normalizeExtensionId(extension.id) })),
   );
   for (const [id, matches] of runtimeById) {
     if (matches.length > 1) warnings.push(`VS Code reported multiple effective locations for ${id}.`);
   }
 
-  const candidates = input.discovery.candidates.map((candidate) => ({ ...candidate }));
-  const candidatesById = groupById(candidates);
+  const candidatesById = groupById(input.discovery.candidates);
   const profileById = new Map(input.inventory.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...candidatesById.keys()]);
   const affectedProfiles = new Set(
@@ -344,7 +339,6 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
     const localMatch = localCandidates.find((candidate) =>
       runtimes.some((runtime) => runtime.fsPath && isFsPathContained(candidate.fsPath, runtime.fsPath)),
     );
-    if (localMatch) localMatch.runtimeVisible = true;
     const runtime =
       (localMatch
         ? runtimes.find((item) => item.fsPath && isFsPathContained(localMatch.fsPath, item.fsPath))
@@ -356,11 +350,6 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
         ? (profileExtension?.installedIn.includes(activeProfile.id) ?? false)
         : 'unknown';
     const workspaceLocal = localMatch ? 'installed' : localCandidates.length > 0 ? 'candidate' : 'none';
-    const runtimeSource = localMatch
-      ? 'workspace'
-      : runtime && installedInActiveProfile === true
-        ? 'profile'
-        : 'unknown';
     const stateAndReason = composeState({
       activeProfile,
       installedInActiveProfile,
@@ -395,7 +384,6 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
       state: stateAndReason.state,
       installedInActiveProfile,
       workspaceLocal,
-      runtimeSource,
       profileBacked: profileExtension !== undefined,
       reason: stateAndReason.reason,
       ...(profileExtension?.description ?? metadataCandidate?.description
@@ -414,7 +402,6 @@ export function composeWorkspaceInventory(input: ComposeWorkspaceInventoryInput)
     descriptor: input.descriptor,
     ...(activeProfile ? { activeProfileId: activeProfile.id, activeProfileName: activeProfile.name } : {}),
     extensions: statuses,
-    localExtensions: candidates,
     warnings: unique(warnings),
   };
 }
@@ -488,10 +475,6 @@ export function workspaceExtensionCounts(workspace: WorkspaceInventory): Workspa
   return counts;
 }
 
-export function workspaceExtensionsRootPaths(descriptor: WorkspaceDescriptor): string[] {
-  return descriptor.rootFsPaths.map((root) => joinFsPath(root, '.vscode', 'extensions'));
-}
-
 /** Narrow watcher targets that also work before .vscode/extensions exists. */
 export function workspaceWatchTargets(descriptor: WorkspaceDescriptor): WatchTarget[] {
   const targets: WatchTarget[] = descriptor.rootFsPaths.map((root) => ({
@@ -533,7 +516,7 @@ export class WorkspaceInventoryService {
       try {
         associations = parseWorkspaceProfileAssociations(storage);
       } catch (error) {
-        associations = error instanceof Error ? error : new Error(String(error));
+        associations = asError(error);
       }
     }
 
@@ -543,14 +526,14 @@ export class WorkspaceInventoryService {
     } catch (error) {
       discovery = {
         candidates: [],
-        warnings: [`Could not discover workspace-local extensions: ${error instanceof Error ? error.message : String(error)}`],
+        warnings: [`Could not discover workspace-local extensions: ${asError(error).message}`],
       };
     }
     let runtimeExtensions: WorkspaceRuntimeExtension[] | Error;
     try {
       runtimeExtensions = this.io.getRuntimeExtensions();
     } catch (error) {
-      runtimeExtensions = error instanceof Error ? error : new Error(String(error));
+      runtimeExtensions = asError(error);
     }
     return composeWorkspaceInventory({ descriptor, inventory, associations, discovery, runtimeExtensions });
   }
@@ -567,10 +550,9 @@ function comparePaths(a: string, b: string): number {
 function groupById<T extends { id: string }>(items: T[]): Map<string, T[]> {
   const result = new Map<string, T[]>();
   for (const item of items) {
-    const id = item.id.toLowerCase();
-    const list = result.get(id) ?? [];
+    const list = result.get(item.id) ?? [];
     list.push(item);
-    result.set(id, list);
+    result.set(item.id, list);
   }
   return result;
 }

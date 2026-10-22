@@ -1,19 +1,11 @@
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { MatrixActions } from '../core/matrixActions';
-import { MutationError } from '../core/mutations';
+import { asError } from '../core/errors';
 import type { HostToWebview, Inventory, WebviewToHost, WorkspaceInventory } from '../core/types';
 import type { Services } from '../servicesFactory';
 import { statFolder } from './fsStat';
-import { matrixContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
-
-// Spike B verdict (docs/spikes/findings.md): TOGGLE_SUPPORTED = no. The command
-// `workbench.extensions.action.toggleApplyToAllProfiles` exists but requires VS Code's
-// internal IExtension workbench view-model as its argument (not obtainable via any public
-// API) — every public-API shape tried (string id, {id}, array, and the real vscode.Extension
-// object) crashes inside the handler. Not invocable with public args; keep undefined and
-// offer the guided fallback in toggleAllProfiles below instead.
-const TOGGLE_ALL_PROFILES_COMMAND: string | undefined = undefined;
+import { createNonce, matrixContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
 export class MatrixPanel {
   static current: MatrixPanel | undefined;
@@ -115,7 +107,6 @@ export class MatrixPanel {
       type: 'inventory',
       inventory,
       ...(workspace ? { workspace } : {}),
-      toggleSupported: TOGGLE_ALL_PROFILES_COMMAND !== undefined,
       icons,
     });
   }
@@ -192,7 +183,7 @@ export class MatrixPanel {
     try {
       await action();
     } catch (e) {
-      const detail = e instanceof MutationError ? e.message : e instanceof Error ? e.message : String(e);
+      const detail = asError(e).message;
       // Not awaited: a non-modal notification settles only when dismissed, and waiting on it would
       // hold up every message queued behind this one.
       void vscode.window.showErrorMessage(`Personas: ${detail}`, 'Copy Details').then((pick) => {
@@ -202,14 +193,13 @@ export class MatrixPanel {
     }
   }
 
+  /**
+   * Guided fallback: focus the extension in the Extensions view; the user applies the native
+   * "Apply Extension to all Profiles" context-menu action there. Spike B
+   * (docs/spikes/findings.md): `workbench.extensions.action.toggleApplyToAllProfiles` needs VS
+   * Code's internal IExtension view-model as its argument, which no public API provides.
+   */
   private async toggleAllProfiles(extId: string): Promise<void> {
-    if (TOGGLE_ALL_PROFILES_COMMAND !== undefined) {
-      await vscode.commands.executeCommand(TOGGLE_ALL_PROFILES_COMMAND, extId);
-      await this.refresh();
-      return;
-    }
-    // Guided fallback: focus the extension in the Extensions view; user applies the
-    // native "Apply Extension to all Profiles" context-menu action there.
     await vscode.commands.executeCommand('workbench.extensions.search', `@id:${extId}`);
     void vscode.window.showInformationMessage(
       'Right-click the extension in the Extensions view and choose "Apply Extension to all Profiles".',
@@ -237,7 +227,7 @@ export class MatrixPanel {
     const w = this.panel.webview;
     const script = w.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview.js'));
     const style = w.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview.css'));
-    const nonce = [...Array(24)].map(() => Math.random().toString(36)[2]).join('');
+    const nonce = createNonce();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>

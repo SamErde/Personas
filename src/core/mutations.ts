@@ -1,10 +1,7 @@
 import type { CliRunner } from './cliRunner';
 
 export class MutationError extends Error {
-  constructor(
-    message: string,
-    public readonly stderr: string,
-  ) {
+  constructor(message: string, stderr: string) {
     super(`${message}${stderr ? `: ${stderr.trim()}` : ''}`);
     this.name = 'MutationError';
   }

@@ -80,7 +80,6 @@ export interface WorkspaceLocalExtension {
   description?: string;
   publisher?: string;
   fsPath: string;
-  runtimeVisible: boolean;
 }
 
 export interface WorkspaceExtensionStatus {
@@ -92,7 +91,6 @@ export interface WorkspaceExtensionStatus {
   state: WorkspaceExtensionState;
   installedInActiveProfile: boolean | 'unknown';
   workspaceLocal: 'installed' | 'candidate' | 'none';
-  runtimeSource: 'profile' | 'workspace' | 'unknown';
   /** True only when this row has a normal profile-backed ExtensionRecord. */
   profileBacked: boolean;
   runtimeUri?: string;
@@ -104,7 +102,6 @@ export interface WorkspaceInventory {
   activeProfileId?: string;
   activeProfileName?: string;
   extensions: WorkspaceExtensionStatus[];
-  localExtensions: WorkspaceLocalExtension[];
   warnings: string[];
 }
 
@@ -129,7 +126,6 @@ export type HostToWebview =
       type: 'inventory';
       inventory: Inventory;
       workspace?: WorkspaceInventory;
-      toggleSupported: boolean;
       icons: Record<string, string>;
     }
   | { type: 'pending'; extId: string; profileId: string }

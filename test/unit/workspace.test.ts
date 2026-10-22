@@ -17,7 +17,6 @@ import {
   normalizeUriIdentity,
   resolveActiveProfile,
   workspaceExtensionCounts,
-  workspaceExtensionsRootPaths,
   workspaceWatchTargets,
   type WorkspaceDiscoveryResult,
   type WorkspaceRuntimeExtension,
@@ -40,7 +39,6 @@ const descriptor: WorkspaceDescriptor = {
 const association = (profileId = 'abc123'): ParsedWorkspaceProfileAssociations => ({
   workspaces: new Map([[descriptor.associationUri as string, profileId]]),
   warnings: [],
-  present: true,
 });
 
 const inventory = (options?: {
@@ -204,7 +202,6 @@ describe('workspace URI and profile identity', () => {
           ['file:///home/me/repo/archive', '__default__profile__'],
         ]),
         warnings: [],
-        present: true,
       },
       profiles,
     );
@@ -245,13 +242,12 @@ describe('workspace URI and profile identity', () => {
     const associations: ParsedWorkspaceProfileAssociations = {
       workspaces: new Map([['file:///C:/code/example/', 'abc123']]),
       warnings: [],
-      present: true,
     };
     expect(resolveActiveProfile(descriptor, associations, profiles).profile?.id).toBe('abc123');
   });
 
   it.each([
-    ['missing association', { workspaces: new Map(), warnings: [], present: false }],
+    ['missing association', { workspaces: new Map(), warnings: [] }],
     ['unknown profile', association('does-not-exist')],
   ] satisfies [string, ParsedWorkspaceProfileAssociations][])('%s remains unresolved', (_name, associations) => {
     const result = resolveActiveProfile(descriptor, associations, profiles);
@@ -268,7 +264,6 @@ describe('workspace URI and profile identity', () => {
           ['file:///c%3A/code/example/', '__default__profile__'],
         ]),
         warnings: [],
-        present: true,
       },
       profiles,
     );
@@ -279,7 +274,7 @@ describe('workspace URI and profile identity', () => {
   it('keeps parser warnings and rejects malformed descriptor identities', () => {
     const result = resolveActiveProfile(
       { ...descriptor, associationUri: 'not a URI' },
-      { workspaces: new Map(), warnings: ['bad entry'], present: true },
+      { workspaces: new Map(), warnings: ['bad entry'] },
       profiles,
     );
     expect(result.profile).toBeUndefined();
@@ -319,7 +314,6 @@ describe('workspace-local candidate discovery', () => {
         description: 'Local fixture',
         publisher: 'Acme',
         fsPath: `${root}\\Local-One`,
-        runtimeVisible: false,
       },
     ]);
     expect(result.warnings.join(' ')).toContain('unsafe');
@@ -400,22 +394,12 @@ describe('workspace-local candidate discovery', () => {
     expect(isFsPathContained('/repo/One', '/repo/one/file')).toBe(false);
   });
 
-  it('returns only the bounded candidate roots that should be watched', () => {
-    expect(workspaceExtensionsRootPaths({ ...descriptor, rootFsPaths: ['C:\\B', '/a'] })).toEqual([
-      'C:\\B\\.vscode\\extensions',
-      '/a/.vscode/extensions',
-    ]);
-  });
-
   it('preserves a literal backslash in an absolute POSIX workspace path', () => {
     const posixDescriptor = {
       ...descriptor,
       rootFsPaths: ['/home/me/repo\\archive'],
       manifestFsPath: '/home/me/shared\\name.code-workspace',
     };
-    expect(workspaceExtensionsRootPaths(posixDescriptor)).toEqual([
-      '/home/me/repo\\archive/.vscode/extensions',
-    ]);
     expect(workspaceWatchTargets(posixDescriptor)).toEqual([
       { baseFsPath: '/home/me/repo\\archive', pattern: '.vscode/extensions/**' },
       {
@@ -473,7 +457,7 @@ describe('workspace status composition', () => {
     },
     {
       name: 'unresolved active profile',
-      options: { associations: { workspaces: new Map(), warnings: [], present: false } },
+      options: { associations: { workspaces: new Map(), warnings: [] } },
       expectedState: 'unknown',
       expectedMembership: 'unknown',
     },
@@ -509,17 +493,14 @@ describe('workspace status composition', () => {
       id: 'local.only',
       displayName: 'Local only',
       fsPath: 'C:\\Code\\Example\\.vscode\\extensions\\local-only',
-      runtimeVisible: false,
     };
     const result = compose({ inv: { ...inventory(), extensions: [] }, candidates: [candidate] });
     expect(result.extensions[0]).toMatchObject({
       id: 'local.only',
       state: 'unknown',
       workspaceLocal: 'candidate',
-      runtimeSource: 'unknown',
       profileBacked: false,
     });
-    expect(result.localExtensions[0]?.runtimeVisible).toBe(false);
   });
 
   it('positively identifies a workspace-local extension only by a contained runtime URI', () => {
@@ -528,7 +509,6 @@ describe('workspace status composition', () => {
       id: 'local.only',
       displayName: 'Local only',
       fsPath: candidatePath,
-      runtimeVisible: false,
     };
     const result = compose({
       inv: { ...inventory(), extensions: [] },
@@ -539,10 +519,8 @@ describe('workspace status composition', () => {
       state: 'enabled',
       installedInActiveProfile: false,
       workspaceLocal: 'installed',
-      runtimeSource: 'workspace',
       runtimeUri: expect.any(String),
     });
-    expect(result.localExtensions[0]?.runtimeVisible).toBe(true);
   });
 
   it('reports both sources when the effective workspace-local copy is also profile-installed', () => {
@@ -553,7 +531,6 @@ describe('workspace status composition', () => {
           id: 'pub.ext',
           displayName: 'Workspace copy',
           fsPath: candidatePath,
-          runtimeVisible: false,
         },
       ],
       runtimes: [runtime(candidatePath)],
@@ -562,7 +539,6 @@ describe('workspace status composition', () => {
       state: 'enabled',
       installedInActiveProfile: true,
       workspaceLocal: 'installed',
-      runtimeSource: 'workspace',
     });
     expect(result.extensions[0]?.reason).toContain('also installed in the active profile');
     expect(result.extensions[0]?.reason).toContain(candidatePath);
@@ -674,10 +650,9 @@ describe('workspace status composition', () => {
       id: 'pub.ext',
       displayName: 'Candidate',
       fsPath: 'C:\\Code\\Example\\.vscode\\extensions\\candidate',
-      runtimeVisible: false,
     };
     const status = compose({ candidates: [candidate], runtimes: [runtime()] }).extensions[0];
-    expect(status).toMatchObject({ state: 'enabled', workspaceLocal: 'candidate', runtimeSource: 'profile' });
+    expect(status).toMatchObject({ state: 'enabled', workspaceLocal: 'candidate' });
   });
 
   it('warns but stays deterministic when VS Code reports duplicate effective locations', () => {
@@ -692,7 +667,6 @@ describe('workspace activity counts and service failures', () => {
     const baseStatus = {
       displayName: 'x',
       profileBacked: true,
-      runtimeSource: 'profile' as const,
       reason: 'reason',
     };
     const statuses: WorkspaceExtensionStatus[] = [
@@ -714,7 +688,6 @@ describe('workspace activity counts and service failures', () => {
         activeProfileId: 'abc123',
         activeProfileName: 'Work',
         extensions: statuses,
-        localExtensions: [],
         warnings: [],
       }),
     ).toEqual({ enabled: 2, notEnabled: 1, unknown: 1, workspaceLocal: 1 });

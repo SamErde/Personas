@@ -14,7 +14,6 @@ export interface RawProfile {
 export interface ManifestEntry {
   id: string;
   version: string;
-  relativeLocation: string;
   isApplicationScoped: boolean;
   /** From metadata.publisherDisplayName, when present and string-typed. */
   publisherDisplayName?: string;
@@ -22,10 +21,16 @@ export interface ManifestEntry {
   installedTimestamp?: number;
 }
 
+export interface PackageMeta {
+  displayName?: string;
+  icon?: string;
+  description?: string;
+  publisher?: string;
+}
+
 export interface ParsedWorkspaceProfileAssociations {
   workspaces: Map<string, string>;
   warnings: string[];
-  present: boolean;
 }
 
 function parseJson(text: string, what: string): unknown {
@@ -62,21 +67,19 @@ export function parseWorkspaceProfileAssociations(text: string): ParsedWorkspace
   const root = parseJson(text, 'storage.json');
   if (typeof root !== 'object' || root === null) throw new ParseError('storage.json: not an object');
   const associations = (root as Record<string, unknown>)['profileAssociations'];
-  if (associations === undefined) return { workspaces: new Map(), warnings: [], present: false };
+  if (associations === undefined) return { workspaces: new Map(), warnings: [] };
   if (typeof associations !== 'object' || associations === null || Array.isArray(associations)) {
     return {
       workspaces: new Map(),
       warnings: ['profileAssociations is not an object.'],
-      present: false,
     };
   }
   const rawWorkspaces = (associations as Record<string, unknown>)['workspaces'];
-  if (rawWorkspaces === undefined) return { workspaces: new Map(), warnings: [], present: false };
+  if (rawWorkspaces === undefined) return { workspaces: new Map(), warnings: [] };
   if (typeof rawWorkspaces !== 'object' || rawWorkspaces === null || Array.isArray(rawWorkspaces)) {
     return {
       workspaces: new Map(),
       warnings: ['profileAssociations.workspaces is not an object.'],
-      present: false,
     };
   }
 
@@ -90,7 +93,7 @@ export function parseWorkspaceProfileAssociations(text: string): ParsedWorkspace
     }
     workspaces.set(uri, profileId);
   }
-  return { workspaces, warnings, present: true };
+  return { workspaces, warnings };
 }
 
 export function parseExtensionsManifest(text: string): ManifestEntry[] {
@@ -114,15 +117,40 @@ export function parseExtensionsManifest(text: string): ManifestEntry[] {
     const installedTimestamp =
       typeof metaObj?.['installedTimestamp'] === 'number' ? metaObj['installedTimestamp'] : undefined;
     entries.push({
-      id: id.toLowerCase(),
+      id: normalizeExtensionId(id),
       version: e['version'],
-      relativeLocation: typeof e['relativeLocation'] === 'string' ? e['relativeLocation'] : '',
       isApplicationScoped,
       ...(publisherDisplayName !== undefined ? { publisherDisplayName } : {}),
       ...(installedTimestamp !== undefined ? { installedTimestamp } : {}),
     });
   }
   return entries;
+}
+
+/** Reads the package.json fields the inventory shows. Throws ParseError on invalid JSON. */
+export function parsePackageMeta(text: string): PackageMeta {
+  const root = parseJson(text, 'package.json');
+  if (typeof root !== 'object' || root === null || Array.isArray(root)) throw new ParseError('package.json: not an object');
+  const pkg = root as Record<string, unknown>;
+  return {
+    displayName: unlocalizedString(pkg['displayName']),
+    icon: typeof pkg['icon'] === 'string' ? pkg['icon'] : undefined,
+    description: unlocalizedString(pkg['description']),
+    publisher: typeof pkg['publisher'] === 'string' ? pkg['publisher'] : undefined,
+  };
+}
+
+/**
+ * A package.json string field, or undefined when it is missing, not a string, or an unresolved
+ * `%key%` localization placeholder (resolving it would need the extension's package.nls.json).
+ */
+export function unlocalizedString(value: unknown): string | undefined {
+  return typeof value === 'string' && !value.startsWith('%') ? value : undefined;
+}
+
+/** Extension ids are case-insensitive; every id is compared in this lowercase form. */
+export function normalizeExtensionId(id: string): string {
+  return id.toLowerCase();
 }
 
 export function parseObsolete(text: string): string[] {
@@ -142,5 +170,5 @@ export function parseExtensionFolderName(
 ): { id: string; version: string } | undefined {
   const m = FOLDER_RE.exec(folderName);
   if (!m || m[1] === undefined || m[2] === undefined) return undefined;
-  return { id: m[1].toLowerCase(), version: m[2] };
+  return { id: normalizeExtensionId(m[1]), version: m[2] };
 }

@@ -1,3 +1,4 @@
+import { disabledProfileIds } from '../core/inventoryQueries';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
 export type Chip = 'all' | 'orphaned' | 'allProfiles';
@@ -39,13 +40,8 @@ export interface ViewModel {
   profileNames: { id: string; name: string; inherits: boolean }[];
   workspace?: { name: string; kind: WorkspaceInventory['descriptor']['kind'] };
   rows: RowVm[];
-  orphanCount: number;
   warnings: Inventory['warnings'];
   workspaceWarnings: string[];
-}
-
-export function supportsProfileActions(row: Pick<RowVm, 'profileBacked'>): boolean {
-  return row.profileBacked;
 }
 
 export function buildViewModel(
@@ -54,7 +50,7 @@ export function buildViewModel(
   workspace?: WorkspaceInventory,
 ): ViewModel {
   const filter = state.filter.trim().toLowerCase();
-  const disabledIds = new Set(inv.warnings.flatMap((warning) => warning.affectedProfileIds));
+  const disabledIds = disabledProfileIds(inv);
   const workspaceById = new Map(workspace?.extensions.map((extension) => [extension.id, extension]) ?? []);
   const profileById = new Map(inv.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...workspaceById.keys()]);
@@ -123,7 +119,6 @@ export function buildViewModel(
     })),
     ...(workspace ? { workspace: { name: workspace.descriptor.name, kind: workspace.descriptor.kind } } : {}),
     rows,
-    orphanCount: inv.extensions.filter((extension) => extension.orphaned).length,
     warnings: inv.warnings,
     workspaceWarnings: workspace?.warnings ?? [],
   };
@@ -157,10 +152,4 @@ function toWorkspaceCell(status: WorkspaceExtensionStatus): WorkspaceCellVm {
     case 'unknown':
       return { state: status.state, label: 'Unknown', symbol: '?', tooltip: `Unknown — ${status.reason}` };
   }
-}
-
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
