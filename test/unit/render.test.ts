@@ -207,6 +207,34 @@ describe('buildViewModel', () => {
     });
     expect(vm.rows.find((row) => row.id === 'pub.a')?.workspaceCell?.label).toBe('Enabled');
   });
+
+  it.each([
+    ['enabled', true],
+    ['notEnabled', true],
+    ['notInstalledInProfile', false],
+    ['unknown', false],
+  ] satisfies [WorkspaceExtensionStatus['state'], boolean][])(
+    'offers the workspace enablement hand-off for %s: %s',
+    (state, offered) => {
+      const row = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([status('pub.a', state)])).rows.find(
+        (item) => item.id === 'pub.a',
+      );
+      expect(row?.workspaceCell?.offersEnablementGuide).toBe(offered);
+    },
+  );
+
+  it('offers the workspace enablement hand-off for a Workspace-local extension', () => {
+    const localOnly = status('local.only', 'enabled', {
+      installedInActiveProfile: false,
+      workspaceLocal: 'installed',
+      profileBacked: false,
+    });
+    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([localOnly]));
+    expect(vm.rows.find((row) => row.id === 'local.only')?.workspaceCell).toMatchObject({
+      label: 'Workspace-local',
+      offersEnablementGuide: true,
+    });
+  });
 });
 
 describe('formatBytes', () => {

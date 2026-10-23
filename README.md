@@ -10,7 +10,7 @@ Easily see and manage which extensions are installed in each VS Code profile, an
 the effective extension status of the current workspace, all from one convenient matrix.
 
 - **Profile x extension matrix**: Show every profile as a column and every extension as a row. Toggle any cell to install or uninstall the extension for that profile.
-- **Current workspace status**: When a folder or workspace is open, a visually separate, read-only column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence.
+- **Current workspace status**: When a folder or workspace is open, a visually separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Clicking an `Enabled`, `Not enabled`, or `Workspace-local` cell opens the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including workspace-only rows. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Cross-profile install/uninstall**: Act on any profile directly from the matrix; you never have to switch into a profile just to add or remove an extension from it.
 - **Orphan cleanup**: Find extension versions on disk that no profile references, review them (size, last modified), and move them to the Trash/Recycle Bin.
@@ -28,6 +28,8 @@ Ordinary Marketplace and VSIX extensions are installed per VS Code profile. VS C
 enable or disable an installed extension globally or for the current workspace. Personas keeps
 those concepts separate: profile columns remain editable installation manifests, while the
 **Current workspace** card and matrix column report effective status without changing enablement.
+To change it, the matrix hands off to VS Code's own "Enable (Workspace)" / "Disable (Workspace)"
+actions, because no official CLI saves workspace enablement.
 
 A saved `.code-workspace` file is shareable JSON configuration. Its Current workspace card can
 open a read-only preview or edit that manifest directly. VS Code's internal extension-enablement

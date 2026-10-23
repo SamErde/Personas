@@ -28,6 +28,7 @@ export type MatrixToHost =
   | { type: 'refresh' }
   | { type: 'toggleCell'; extId: string; profileId: string; install: boolean }
   | { type: 'showApplyToAllProfilesGuide'; extId: string }
+  | { type: 'showWorkspaceEnablementGuide'; extId: string }
   | { type: 'installInEveryProfile'; extId: string }
   | { type: 'removeFromEveryProfile'; extId: string }
   | { type: 'openExtensionPage'; extId: string }

@@ -645,9 +645,19 @@ function renderContent(): void {
       const td = el('td', `workspace-col workspace-state workspace-${status?.state ?? 'unknown'}`);
       const label = status?.label ?? 'Unknown';
       const symbol = status?.symbol ?? '?';
-      td.append(el('span', 'workspace-symbol', symbol), el('span', 'sr-only', label));
       td.title = status?.tooltip ?? 'Unknown — no supported workspace status evidence was available.';
-      td.setAttribute('aria-label', `${label}. ${td.title}`);
+      // Guided hand-off (ADR-0003): no CLI persists workspace enablement, so the cell becomes a
+      // button that opens the extension in VS Code's Extensions view instead of changing it.
+      const guide = status?.offersEnablementGuide ? el('button', 'workspace-guide') : undefined;
+      if (guide) {
+        td.title += ' Opens the Extensions view to enable or disable it for this workspace.';
+        td.classList.add('workspace-guide-cell'); // the button, not the cell, carries the padding
+        guide.addEventListener('click', () => post({ type: 'showWorkspaceEnablementGuide', extId: row.id }));
+        td.append(guide);
+      }
+      const labelled = guide ?? td;
+      labelled.append(el('span', 'workspace-symbol', symbol), el('span', 'sr-only', label));
+      labelled.setAttribute('aria-label', `${label}. ${td.title}`);
       tr.append(td);
     }
     table.append(tr);
