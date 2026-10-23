@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.3.0](https://github.com/SamErde/Personas/compare/v1.2.0...v1.3.0) (2026-10-23)
+
+
+### Features
+
+* **matrix:** present the Agents window profile for what it is ([#110](https://github.com/SamErde/Personas/issues/110)) ([44e24b8](https://github.com/SamErde/Personas/commit/44e24b82736e9d4cc83994ab99c211ed54b63ac6))
+
 ## [1.2.0](https://github.com/SamErde/Personas/compare/v1.1.3...v1.2.0) (2026-10-23)
 
 
