@@ -184,9 +184,10 @@ Whether an extension runs in the Agents window is decided by `canExecuteOnSessio
 1. VS Code's `product.json` allow-list.
 2. The per-extension user setting `extensions.supportAgentsWindow`.
 3. The manifest's `capabilities.agentsWindow.supported`. This counts only for built-in extensions, or when `extensions.experimental.enableAgentsWindowCapability` is on.
-4. For other extensions, any `main` or `browser` entry point excludes them; declarative extensions qualify.
+4. Built-in extensions with no declaration qualify unless they contribute debuggers, views, view containers, or walkthroughs.
+5. Any other extension with a `main` or `browser` entry point is excluded. One without them qualifies only if every contribution point it uses is in VS Code's permitted set (declarative points such as themes).
 
-Because of steps 1–3, Personas can't reliably tell from a manifest whether an extension runs there, so it doesn't warn per extension. Personas has a `main` entry point and deliberately doesn't opt in, so it never runs in the Agents window.
+Because of steps 1–3, Personas can't reliably tell from a manifest whether an extension runs there, so it doesn't warn per extension. Personas has a `main` entry point and deliberately doesn't opt in, so by default it doesn't run in the Agents window. A user could still opt it in by ID with `extensions.supportAgentsWindow`; that isn't a supported way to use Personas.
 
 ## Profile names must be unique
 
