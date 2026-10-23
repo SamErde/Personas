@@ -20,6 +20,10 @@ _Avoid_: identity profile, Git profile
 A VS Code profile, always in VS Code's own sense; never called a persona.
 _Avoid_: persona, workspace profile
 
+**Agents window profile**:
+VS Code's built-in profile (registry location `builtin/agents`) for its separate Agents window. It shares the Default profile's extensions and settings directly, and is not an ordinary profile: it does not become active just because an agent is running.
+_Avoid_: Agents profile, agent profile
+
 **Applied to all profiles**:
 An extension VS Code itself marks with "Apply Extension to all Profiles", installed once and present in every profile.
 _Avoid_: app-scoped, application-scoped, shared, ALL

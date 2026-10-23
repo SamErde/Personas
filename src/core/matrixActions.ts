@@ -1,6 +1,6 @@
 import type { CleanupService } from './cleanup';
 import { directInstallProfileIds, installInEveryProfileTargets, removeFromEveryProfileTargets } from './inventory';
-import { disabledProfileIds } from './inventoryQueries';
+import { disabledProfileIds, isAgentsWindowProfile } from './inventoryQueries';
 import type { MutationService } from './mutations';
 import type { Inventory, Profile } from './types';
 
@@ -143,9 +143,13 @@ const EVERY_PROFILE = {
 /**
  * Sentence added to uninstall confirmations when the Default profile is affected and other
  * profiles inherit its extensions — they lose the extension too. Empty when not applicable.
+ * The Agents window profile is left out: whether an extension runs there depends on VS Code
+ * state Personas can't reliably check, so its column tooltip states the effect instead.
  */
 function cascadeWarning(inv: Inventory, defaultIsAffected: boolean): string {
-  const inheriting = defaultIsAffected ? inv.profiles.filter((p) => p.inheritsDefaultExtensions) : [];
+  const inheriting = defaultIsAffected
+    ? inv.profiles.filter((p) => p.inheritsDefaultExtensions && !isAgentsWindowProfile(p))
+    : [];
   return inheriting.length > 0
     ? `Profiles that inherit the Default profile's extensions (${inheriting.map((p) => p.name).join(', ')}) will also lose it.`
     : '';

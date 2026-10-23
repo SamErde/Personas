@@ -237,6 +237,23 @@ describe('buildViewModel', () => {
   });
 });
 
+describe('buildViewModel profile headers', () => {
+  it('labels each profile column, marking ones that use Default extensions and the Agents window', () => {
+    const withAgents: Inventory = {
+      ...inv,
+      profiles: [
+        ...inv.profiles,
+        { id: 'builtin/agents', name: 'Agents', isDefault: false, inheritsDefaultExtensions: true },
+      ],
+    };
+    const headers = buildViewModel(withAgents, { filter: '', chip: 'all' }).profileNames;
+    expect(headers.map((h) => h.label)).toEqual(['Default', 'Work', '⤷ Agents', '⤷ Agents window']);
+    expect(headers[0]?.tooltip).toBeUndefined();
+    expect(headers[2]?.tooltip).toBe("Uses the Default profile's extensions.");
+    expect(headers[3]?.tooltip).toContain('Agents window');
+  });
+});
+
 describe('formatBytes', () => {
   it('formats human-readable sizes', () => {
     expect(formatBytes(0)).toBe('0 B');

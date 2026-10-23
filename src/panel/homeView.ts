@@ -2,12 +2,13 @@ import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { asError } from '../core/errors';
 import { profileExtensionCounts, profileManifestPath } from '../core/inventory';
-import { orphanCount } from '../core/inventoryQueries';
+import { isAgentsWindowProfile, orphanCount, profileLabel } from '../core/inventoryQueries';
 import { workspaceExtensionCounts } from '../core/workspace';
 import type { HomeProfileVm, HomeToHost, HomeWorkspaceVm, HostToHome } from '../protocol';
 import { getOrBuildServices } from '../servicesFactory';
 import { statFolder } from './fsStat';
 import { resolveWorkspaceManifestAction } from './homeActions';
+import { shownInventory } from './profileVisibility';
 import { openReadOnly } from './readOnlyProvider';
 import { createNonce, homeContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
@@ -88,9 +89,11 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     }
     const inventory = await setup.inventory.getInventory();
     const counts = profileExtensionCounts(inventory);
-    const profiles = inventory.profiles.map((p) => ({
+    const profiles = shownInventory(inventory).profiles.map((p) => ({
       id: p.id,
       name: p.name,
+      ...profileLabel(p),
+      agentsWindow: isAgentsWindowProfile(p),
       inheritsDefaultExtensions: p.inheritsDefaultExtensions,
       direct: counts.get(p.id)?.direct ?? 0,
       fromDefault: counts.get(p.id)?.fromDefault ?? 0,
@@ -228,7 +231,6 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   }
   .edit-icon { margin-left: 0.35rem; flex-shrink: 0; }
   .edit-icon:focus { outline: 1px solid var(--vscode-focusBorder); }
-  .inherits { opacity: 0.75; font-size: 0.9em; margin-left: 0.3rem; flex-shrink: 0; }
   .profile-counts { margin-top: 0.15rem; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
   .workspace-card {
     width: 100%;

@@ -7,6 +7,7 @@ import type { Inventory, WorkspaceInventory } from '../core/types';
 import type { HostToMatrix, MatrixToHost } from '../protocol';
 import type { Services } from '../servicesFactory';
 import { statFolder } from './fsStat';
+import { shownInventory } from './profileVisibility';
 import { createNonce, matrixContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
 export class MatrixPanel {
@@ -107,7 +108,7 @@ export class MatrixPanel {
     this.lastWorkspace = workspace;
     this.post({
       type: 'inventory',
-      inventory,
+      inventory: shownInventory(inventory),
       ...(workspace ? { workspace } : {}),
       icons,
     });
