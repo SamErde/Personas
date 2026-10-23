@@ -10,6 +10,7 @@ Easily see and manage which extensions are installed in each VS Code profile, an
 the effective extension status of the current workspace, all from one convenient matrix.
 
 - **Profile x extension matrix**: Show every profile as a column and every extension as a row. Toggle any cell to install or uninstall the extension for that profile.
+- **Easy to navigate**: The row and column under the pointer or keyboard focus are highlighted, and the extension names stay in view when a wide matrix scrolls sideways.
 - **Current workspace status**: When a folder or workspace is open, a visually separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Clicking an `Enabled`, `Not enabled`, or `Workspace-local` cell opens the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including workspace-only rows. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Cross-profile install/uninstall**: Act on any profile directly from the matrix; you never have to switch into a profile just to add or remove an extension from it.
@@ -18,7 +19,7 @@ the effective extension status of the current workspace, all from one convenient
 
 ## Requirements & Limitations
 
-- VS Code Stable or Insiders on Windows, macOS, or Linux.
+- VS Code Stable or Insiders 1.101 or newer, on Windows, macOS, or Linux.
 - Portable installations and custom `--user-data-dir`/`--extensions-dir` are supported.
 - Remote workspaces (SSH, WSL, containers, github.dev) are not managed. Personas manages the local desktop install it runs in.
 

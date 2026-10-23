@@ -173,6 +173,15 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
     `Unknown`, and no enabled mutation action.
 14. Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
     unchanged.
+15. Hover over and tab through matrix cells. Verify that the row and column are highlighted, with
+    stronger emphasis on the column header and the extension name. Check a light, a dark, and both
+    high-contrast themes, where the labels get an outline.
+16. Click an `Enabled`, `Not enabled`, or `Workspace-local` cell in the Current workspace column.
+    Verify that the Extensions view shows that extension along with an info message, and that the
+    `—` and `?` cells are not buttons.
+17. Add several profiles or narrow the window until the matrix scrolls sideways. Verify that the
+    extension names stay pinned, with their row dividers, and that the top-left header stays on top
+    when you scroll both ways.
 
 The inert profile fixture can be installed in the same sandbox when an ordinary VSIX is useful:
 

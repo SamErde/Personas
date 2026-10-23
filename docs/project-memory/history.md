@@ -88,3 +88,33 @@
   publishing moved to vsce v4 (**PR #63**).
 - Test counts at v1.0.1: 151 unit tests passing (1 skipped) across 9 files, plus 2
   integration tests.
+
+## 2026-10 — Cleanup, packaging, and v1.1.0 → v1.2.0
+
+- **v1.1.0** released 2026-10-21 (**PR #82**): the minimum VS Code version rose to 1.101, and
+  workspace-local manifests were fixed on Node 22 extension hosts.
+- A seven-step cleanup before the Git identity personas work (issues #68–#74), shipped in
+  1.1.1 through 1.1.3:
+  - **PR #80:** stale docs fixed; `GLOSSARY.md` and the first ADRs added.
+  - **PR #84:** one CLI runner for `code` and `git`, with a timeout and an injected platform.
+  - **PR #86:** one path module.
+  - **PR #87:** the matrix mutation rules moved into a tested `MatrixActions` service.
+  - **PR #88:** swallowed IO errors surfaced, dead code removed, duplicated helpers merged.
+  - **PR #90:** naming aligned with the glossary.
+  - **PR #91:** webview messages split from the domain types, and the sidebar restructured as
+    **Home**.
+- CI and packaging:
+  - **PR #92:** each CI job builds once instead of three or four times.
+  - **PR #93 (v1.1.3):** sourcemaps left out of the VSIX, which dropped it from 121 KB to 55 KB;
+    the Marketplace publish uses the locked vsce.
+  - **PR #96:** spike probes moved out of `test/` and `scripts/`.
+  - **PR #97:** the publish job skips dependency install scripts.
+- **v1.2.0** released 2026-10-23 (**PR #101**). Features came from user feedback in discussion
+  #48:
+  - **PR #100:** a row and column crosshair highlight in the Extension Matrix.
+  - **PR #104:** a high-contrast outline for the highlighted labels.
+  - **PR #106:** a pinned extension-name column.
+  - **PR #103:** a guided hand-off from the Current workspace column to VS Code's own
+    "Enable (Workspace)" / "Disable (Workspace)" actions (ADR-0003).
+- Test counts at v1.2.0: 215 unit tests passing (2 skipped) across 12 files, plus 2 integration
+  tests.
