@@ -2,6 +2,20 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.2.0](https://github.com/SamErde/Personas/compare/v1.1.3...v1.2.0) (2026-10-23)
+
+
+### Features
+
+* **matrix:** hand off workspace enable/disable to the Extensions view ([#103](https://github.com/SamErde/Personas/issues/103)) ([9a1ee99](https://github.com/SamErde/Personas/commit/9a1ee9982cd135baed78b9e01a2a73b936f84695))
+* **matrix:** highlight the row and column under the pointer or focus ([#100](https://github.com/SamErde/Personas/issues/100)) ([b50629d](https://github.com/SamErde/Personas/commit/b50629d4eb768aec20329907a461d599c75a9ac0))
+* **matrix:** keep the extension-name column visible when scrolling sideways ([#106](https://github.com/SamErde/Personas/issues/106)) ([f1e68b9](https://github.com/SamErde/Personas/commit/f1e68b98b93d95b0579971c0687d5b9d60d201c2))
+
+
+### Bug Fixes
+
+* **matrix:** outline crosshair labels in high-contrast themes ([#104](https://github.com/SamErde/Personas/issues/104)) ([96eb416](https://github.com/SamErde/Personas/commit/96eb416bbe149c89585404ef7158292b4f261b16))
+
 ## [1.1.3](https://github.com/SamErde/Personas/compare/v1.1.2...v1.1.3) (2026-10-22)
 
 
