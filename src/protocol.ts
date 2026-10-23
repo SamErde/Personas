@@ -43,6 +43,12 @@ export type MatrixToHost =
 export interface HomeProfileVm {
   id: string;
   name: string;
+  /** Display name and tooltip from profileLabel (a leading ⤷ for profiles using Default's
+   * extensions). */
+  label: string;
+  tooltip?: string;
+  /** VS Code's built-in Agents window profile. */
+  agentsWindow: boolean;
   inheritsDefaultExtensions: boolean;
   direct: number;
   fromDefault: number;

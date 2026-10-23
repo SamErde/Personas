@@ -68,13 +68,13 @@ function render(): void {
     const li = document.createElement('li');
     const line1 = el('div', 'profile-line1');
     if (p.inheritsDefaultExtensions) {
-      const nameSpan = el('span', 'profile-name', p.name);
-      nameSpan.title = p.name;
-      line1.append(nameSpan, el('span', 'inherits', '(inherits Default)'));
+      const nameSpan = el('span', 'profile-name', p.label);
+      nameSpan.title = p.tooltip ?? p.label;
+      line1.append(nameSpan);
     } else {
-      const link = el('a', 'profile-name', p.name) as HTMLAnchorElement;
+      const link = el('a', 'profile-name', p.label) as HTMLAnchorElement;
       link.href = '#';
-      link.title = p.name;
+      link.title = p.tooltip ?? p.label;
       link.addEventListener('click', (e) => {
         e.preventDefault();
         vscode.postMessage({ type: 'openProfileReadOnly', profileId: p.id });
@@ -98,7 +98,11 @@ function render(): void {
       });
       line1.append(edit);
     }
-    const own = p.inheritsDefaultExtensions ? `${p.fromDefault} from Default` : `${p.direct} direct`;
+    const own = p.agentsWindow
+      ? 'Same extensions as Default'
+      : p.inheritsDefaultExtensions
+        ? `${p.fromDefault} from Default`
+        : `${p.direct} direct`;
     li.append(line1, el('div', 'profile-counts', `${own} · ${p.appliedToAllProfiles} applied to all profiles`));
     list.append(li);
   }

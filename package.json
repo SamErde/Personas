@@ -61,6 +61,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "When enabled, activating the Personas sidebar automatically opens the Extension Matrix — including on window restore if the sidebar was left active. Disable to require clicking the \"Open Extension Matrix\" button instead."
+        },
+        "personas.showAgentsWindowProfile": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show VS Code's built-in Agents window profile in the Extension Matrix and Home. It uses the Default profile's extensions, so its column always matches Default."
         }
       }
     }

@@ -543,7 +543,11 @@ function renderContent(): void {
   const table = document.createElement('table');
   const head = document.createElement('tr');
   head.append(el('th', 'ext-col', 'Extension'));
-  for (const p of vm.profileNames) head.append(el('th', '', p.inherits ? `${p.name} ⤷` : p.name));
+  for (const p of vm.profileNames) {
+    const th = el('th', '', p.label);
+    if (p.tooltip) th.title = p.tooltip;
+    head.append(th);
+  }
   if (vm.workspace) {
     const workspaceHead = el('th', 'workspace-col workspace-header');
     workspaceHead.append(

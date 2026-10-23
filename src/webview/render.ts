@@ -1,4 +1,4 @@
-import { disabledProfileIds, offersWorkspaceEnablementGuide } from '../core/inventoryQueries';
+import { disabledProfileIds, offersWorkspaceEnablementGuide, profileLabel } from '../core/inventoryQueries';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
 export type Chip = 'all' | 'orphaned' | 'appliedToAllProfiles';
@@ -42,7 +42,8 @@ export interface RowVm {
 }
 
 export interface ViewModel {
-  profileNames: { id: string; name: string; inherits: boolean }[];
+  /** Column headers in profile order; `label`/`tooltip` come from profileLabel. */
+  profileNames: { id: string; name: string; label: string; tooltip?: string }[];
   workspace?: { name: string; kind: WorkspaceInventory['descriptor']['kind'] };
   rows: RowVm[];
   warnings: Inventory['warnings'];
@@ -117,11 +118,7 @@ export function buildViewModel(
   );
 
   return {
-    profileNames: inv.profiles.map((profile) => ({
-      id: profile.id,
-      name: profile.name,
-      inherits: profile.inheritsDefaultExtensions,
-    })),
+    profileNames: inv.profiles.map((profile) => ({ id: profile.id, name: profile.name, ...profileLabel(profile) })),
     ...(workspace ? { workspace: { name: workspace.descriptor.name, kind: workspace.descriptor.kind } } : {}),
     rows,
     warnings: inv.warnings,

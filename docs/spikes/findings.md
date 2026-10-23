@@ -175,6 +175,19 @@ Schema is platform-independent (confirmed above); only paths need re-checking. C
 - [ ] `code --profile "<name>" --install-extension` / `--uninstall-extension` remain scoped to the named profile only (re-run the Step 2 sequence against a disposable profile — do not reuse a profile with real user data on a shared macOS/Linux test machine).
 - [ ] Folder naming convention `<publisher.name>-<version>[-<platform>]` — confirm the `-<platform>` suffix pattern (e.g. `-darwin-arm64`, `-linux-x64`) matches what Task 6's folder-name parser expects.
 
+## The Agents window profile (VS Code 1.143.0, checked 2026-10-23)
+
+The local registry stores it as `{ "location": "builtin/agents", "name": "Agents", "useDefaultFlags": { "settings", "keybindings", "prompts", "mcp", "languageModels", "snippets", "tasks", "extensions": all true } }`, so it uses Default's settings as well as its extensions. Across all profiles, only the keys `location`, `name`, `icon` and `useDefaultFlags` are stored. The internal `agents` id and `isInternal` flag exist only in memory, so the registry location is the only marker on disk. Personas recognises the profile by that exact location; a user profile named "Agents" stays ordinary.
+
+Whether an extension runs in the Agents window is decided by `canExecuteOnSessionsWindow` in `src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts` (VS Code revision `aacb2f715e638130e30998cc6abdbe5caf99c2be`). It checks these in order:
+
+1. VS Code's `product.json` allow-list.
+2. The per-extension user setting `extensions.supportAgentsWindow`.
+3. The manifest's `capabilities.agentsWindow.supported`. This counts only for built-in extensions, or when `extensions.experimental.enableAgentsWindowCapability` is on.
+4. For other extensions, any `main` or `browser` entry point excludes them; declarative extensions qualify.
+
+Because of steps 1–3, Personas can't reliably tell from a manifest whether an extension runs there, so it doesn't warn per extension. Personas has a `main` entry point and deliberately doesn't opt in, so it never runs in the Agents window.
+
 ## Profile names must be unique
 
 Verified fact: VS Code's profile editor rejects creating a profile whose name duplicates an

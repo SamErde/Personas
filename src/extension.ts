@@ -19,6 +19,11 @@ export function activate(context: vscode.ExtensionContext): void {
   setOnServicesBuilt((ctx, services) => watchForChanges(ctx, services));
 
   homeProvider = new HomeViewProvider(context);
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('personas.showAgentsWindowProfile')) scheduleRefresh();
+    }),
+  );
   context.subscriptions.push(vscode.window.registerWebviewViewProvider('personas.home', homeProvider));
   context.subscriptions.push(
     vscode.commands.registerCommand('personas.showMatrix', async () => {

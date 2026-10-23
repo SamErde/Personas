@@ -127,6 +127,35 @@ describe('MatrixActions.toggleCell', () => {
     ]);
   });
 
+  it('leaves the Agents window out of the warning about profiles that inherit Default', async () => {
+    const { actions, log } = harness();
+    const inv = inventory(
+      [
+        profile('default', 'Default'),
+        profile('i1', 'Shared', { inheritsDefaultExtensions: true }),
+        profile('builtin/agents', 'Agents', { inheritsDefaultExtensions: true }),
+      ],
+      [ext('pub.a', ['default', 'i1', 'builtin/agents'], { displayName: 'Alpha' })],
+    );
+    await actions.toggleCell(inv, 'pub.a', 'default', false);
+    expect(log[0]).toBe(
+      'confirm[Uninstall] "Alpha" is installed only in the "Default" profile. Uninstall it from your last profile?' +
+        " Profiles that inherit the Default profile's extensions (Shared) will also lose it.",
+    );
+  });
+
+  it('omits the warning when the Agents window is the only profile inheriting Default', async () => {
+    const { actions, log } = harness();
+    const inv = inventory(
+      [profile('default', 'Default'), profile('builtin/agents', 'Agents', { inheritsDefaultExtensions: true })],
+      [ext('pub.a', ['default', 'builtin/agents'], { displayName: 'Alpha' })],
+    );
+    await actions.toggleCell(inv, 'pub.a', 'default', false);
+    expect(log[0]).toBe(
+      'confirm[Uninstall] "Alpha" is installed only in the "Default" profile. Uninstall it from your last profile?',
+    );
+  });
+
   it('re-syncs without uninstalling when the last-profile prompt is dismissed', async () => {
     const { actions, log } = harness({ confirm: false });
     const inv = inventory([profile('default', 'Default'), profile('w1', 'Work')], [ext('pub.a', ['w1'], { displayName: 'Alpha' })]);
