@@ -20,9 +20,11 @@ body {
 .chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
 .chip.refresh { margin-left: auto; }
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
-table { border-collapse: collapse; }
+/* Separate borders (with no spacing) so each cell owns its border: collapsed borders are painted
+ * at the cell's original position and would not move with the sticky header and name column. */
+table { border-collapse: separate; border-spacing: 0; }
 th, td { padding: 0.25rem 0.75rem; text-align: center; border-bottom: 1px solid var(--vscode-panel-border); }
-th { position: sticky; top: 0; background: var(--vscode-editor-background); }
+th { position: sticky; top: 0; z-index: 2; background: var(--vscode-editor-background); }
 .workspace-col { border-left: 2px solid var(--vscode-focusBorder); }
 .workspace-header { min-width: 9.5rem; }
 .workspace-header-title, .workspace-header-name { display: block; }
@@ -67,6 +69,13 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
   border: 0;
 }
 .ext-col { text-align: left; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The extension-name column stays in view when a wide grid scrolls sideways, like the header row
+ * does vertically. Opaque, with a right border marking where cells pass underneath. Stacking:
+ * name cells (1) < header row (2, on `th` above) < the top-left corner (3), which sticks on both
+ * axes. */
+td.ext-col { position: sticky; left: 0; z-index: 1; background: var(--vscode-editor-background); }
+th.ext-col { left: 0; z-index: 3; }
+.ext-col { border-right: 1px solid var(--vscode-panel-border); }
 .ext-icon {
   width: 16px; height: 16px;
   border-radius: 2px;
@@ -94,13 +103,13 @@ th { position: sticky; top: 0; background: var(--vscode-editor-background); }
  * the host echoes a 'pending' message — Cell Sky alpha-blended so it reads on light+dark. */
 .cell.pending { background: rgba(56, 189, 248, 0.25); border-radius: 3px; }
 /* Crosshair highlight for the row and column under the pointer or focus. `crosshair-label` marks
- * the labels the user reads: the column's header and the row's extension-name cell. The sticky
- * header layers the tint over the opaque editor background so rows can't show through where the
- * token is translucent or transparent. The outline keeps the active cell visible in high-contrast
- * themes, where the hover background is often transparent. */
+ * the labels the user reads: the column's header and the row's extension-name cell. Both are
+ * sticky, so the tint is layered over the opaque editor background (cells can't show through
+ * where the token is translucent). `td.crosshair-label` matches `td.ext-col`'s specificity and
+ * wins only by coming after it, so keep this rule below that one. The outline keeps the active cell visible in high-contrast themes, where the
+ * hover background is often transparent. */
 td.crosshair { background: var(--vscode-list-hoverBackground); }
-td.crosshair-label { background: var(--vscode-list-inactiveSelectionBackground); }
-th.crosshair-label {
+th.crosshair-label, td.crosshair-label {
   background:
     linear-gradient(var(--vscode-list-inactiveSelectionBackground), var(--vscode-list-inactiveSelectionBackground)),
     var(--vscode-editor-background);
