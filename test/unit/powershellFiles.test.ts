@@ -70,3 +70,16 @@ it('deletes only a link when a recoverable link-aware adapter is available', asy
   expect(await fs.readFile(target,'utf8')).toBe('keep target');
   expect((await fs.lstat(path.join(root,'trash-link'))).isSymbolicLink()).toBe(true);
 });
+
+it.skipIf(process.platform === 'win32')('reports an unreadable linked target without losing the link destination', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-profile-')); roots.push(root);
+  const target=path.join(root,'private.ps1'), file=path.join(root,'profile.ps1');
+  await fs.writeFile(target,'private'); await fs.symlink(target,file);
+  const location: ProfileLocation = {id:'private',edition:'PowerShell 7',scope:'Current User',host:'Console',path:file,readOnly:false};
+  await fs.chmod(target,0);
+  try {
+    const row=await inspectProfile(location);
+    expect(row.state).toBe('inaccessible');
+    expect(row.target).toBe(target);
+  } finally {await fs.chmod(target,0o600);}
+});

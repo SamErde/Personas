@@ -10,6 +10,7 @@ export async function inspectProfile(location: ProfileLocation): Promise<Profile
       const target = path.resolve(path.dirname(location.path), await fs.readlink(location.path));
       try {
         const targetStat = await fs.stat(location.path);
+        if (targetStat.isFile()) await fs.access(location.path, fs.constants.R_OK);
         return { ...location, target, state: targetStat.isFile() ? 'existing' : 'inaccessible',
           detail: targetStat.isFile() ? undefined : 'Link target is not a file' };
       } catch (error) {

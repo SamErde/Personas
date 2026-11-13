@@ -7,14 +7,19 @@ import type { HostToHome, HomeToHost } from '../protocol';
 
 const helpUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
 export class PowerShellController implements vscode.Disposable {
-  private readonly service = new PowerShellService();
+
   private watchers: vscode.FileSystemWatcher[] = [];
   private watchKey = '';
   private timer?: NodeJS.Timeout;
   private disposed = false;
   private queue: Promise<void> = Promise.resolve();
   private readonly events: vscode.Disposable[];
-  constructor(private readonly post: (message: HostToHome) => void) {
+  constructor(
+    private readonly post: (message: HostToHome) => void,
+    private readonly service = new PowerShellService(),
+    private readonly confirmCreate: (file: string) => Promise<boolean> = async file =>
+      await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
+  ) {
     this.events = [
       vscode.workspace.onDidSaveTextDocument(() => this.schedule()),
       vscode.workspace.onDidCreateFiles(() => this.schedule()),
@@ -54,7 +59,10 @@ export class PowerShellController implements vscode.Disposable {
           try { if ((await fs.stat(directory)).isDirectory()) break; } catch { /* nearest existing parent */ }
           directory = path.dirname(directory);
         }
-        if (directory !== path.parse(directory).root) bases.add(directory);
+        if (directory !== path.parse(directory).root) {
+          // Canonical roots avoid alias-path watcher misses (verified by the macOS integration test).
+          bases.add(await fs.realpath(directory).catch(() => directory));
+        }
       }
     }
     const key = [...bases].sort().join('\n');
@@ -110,7 +118,7 @@ export class PowerShellController implements vscode.Disposable {
         });
       } else if (message.action === 'open') {
         if (row.state === 'missing' && !row.readOnly) {
-          if (await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:row.path}, 'Create and Open') !== 'Create and Open') return;
+          if (!await this.confirmCreate(row.path)) return;
           row = await createProfile(location);
         }
         if (row.state !== 'existing') throw new Error(row.detail ?? 'Profile cannot be opened');

@@ -1,4 +1,4 @@
-import { buildProfileLocations, type EditionInfo, type PowerShellInventory, type ProfileRow } from './profiles';
+import { buildProfileLocations, type PowerShellInventory, type ProfileRow } from './profiles';
 import { discoverPowerShell, probeInstallation } from './discovery';
 import { inspectProfile } from './files';
 
@@ -21,7 +21,7 @@ export class PowerShellService {
           edition.userDirectory ??= result.userDirectory;
         }
       }
-      if (edition.userDirectory && edition.installations.length) edition.reason = undefined;
+      if (edition.userDirectory && edition.reason?.startsWith('Documents location unresolved')) edition.reason = undefined;
     }
     const rows = await Promise.all(buildProfileLocations(this.platform, editions).map(inspectProfile));
     this.current = { editions, rows };

@@ -44,11 +44,23 @@ async function documentsDirectory(): Promise<string | undefined> {
   } catch { return undefined; }
 }
 
-async function exists(file: string): Promise<boolean> {
-  try { return (await fs.stat(file)).isFile(); } catch { return false; }
+type DiscoveryIo = Pick<typeof fs, 'stat' | 'readdir' | 'realpath'>;
+function reportDiscoveryError(file: string, error: unknown, errors: string[]): void {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code !== 'ENOENT' && code !== 'ENOTDIR') errors.push(file + ': ' + String(error));
+}
+async function exists(file: string, io: DiscoveryIo, errors: string[]): Promise<boolean> {
+  try { return (await io.stat(file)).isFile(); }
+  catch (error) { reportDiscoveryError(file, error, errors); return false; }
 }
 
-export async function discoverPowerShell(): Promise<EditionInfo[]> {
+export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionInfo[]> {
+  const errorsByEdition = new Map<Edition, string[]>();
+  const errorsFor = (edition: Edition): string[] => {
+    let errors = errorsByEdition.get(edition);
+    if (!errors) { errors = []; errorsByEdition.set(edition, errors); }
+    return errors;
+  };
   const platform = process.platform;
   const home = process.env.HOME || (platform === 'win32' ? os.homedir() : '');
   const documents = platform === 'win32' ? await documentsDirectory() : undefined;
@@ -57,7 +69,7 @@ export async function discoverPowerShell(): Promise<EditionInfo[]> {
   if (platform === 'win32') {
     for (const base of new Set([process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter((v): v is string => !!v))) {
       const directory = path.join(base, 'PowerShell');
-      const children = await fs.readdir(directory).catch(() => []);
+      const children = await io.readdir(directory).catch(error => {reportDiscoveryError(directory, error, errorsFor('PowerShell 7')); return [];});
       for (const child of children.filter(c => /^7(?:\.\d+)*$/.test(c))) add(path.join(directory, child, 'pwsh.exe'));
     }
     if (process.env.SystemRoot) {
@@ -76,12 +88,13 @@ export async function discoverPowerShell(): Promise<EditionInfo[]> {
   }
   const found = new Map<Edition, Installation[]>();
   for (const candidate of candidates) {
-    if (!await exists(candidate.executable)) continue;
-    const actual = await fs.realpath(candidate.executable).catch(() => candidate.executable);
+    const errors = errorsFor(candidate.edition);
+    if (!await exists(candidate.executable, io, errors)) continue;
+    const actual = await io.realpath(candidate.executable).catch(() => candidate.executable);
     // Preview links must not accidentally bring Preview into the initial scope.
     if (/preview/i.test(actual)) continue;
     const directory = path.dirname(actual);
-    const psHome = await exists(path.join(directory, 'System.Management.Automation.dll')) ? directory : undefined;
+    const psHome = await exists(path.join(directory, 'System.Management.Automation.dll'), io, errors) ? directory : undefined;
     const installation: Installation = {
       id: psHome ?? actual, executable: actual, home: psHome,
       readOnly: /[\\/]WindowsApps[\\/]/i.test(actual),
@@ -92,11 +105,12 @@ export async function discoverPowerShell(): Promise<EditionInfo[]> {
   }
   const editions: Edition[] = platform === 'win32' ? ['PowerShell 7', 'Windows PowerShell'] : ['PowerShell 7'];
   return editions.map(edition => {
+    const errors = errorsFor(edition);
     const installations = found.get(edition) ?? [];
     return {
       edition, installations,
       userDirectory: installations.length ? userProfileDirectory(platform, edition, process.env, home, documents) : undefined,
-      reason: !installations.length ? 'Installation not found'
+      reason: errors.length ? errors.join('; ') : !installations.length ? 'Installation not found'
         : platform === 'win32' && !documents ? 'Documents location unresolved. Use Resolve Using PowerShell….' : undefined,
     };
   });

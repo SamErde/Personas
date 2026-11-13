@@ -1,6 +1,6 @@
 # PowerShell profiles feature plan
 
-**Status:** Implemented on feat/powershell-profiles; review and final validation in progress
+**Status:** Implemented and reviewed; automated checks and macOS PowerShell integration passed
 **Date:** 2026-11-12
 
 ## Goal and terminology (Q1: confirmed)
@@ -291,6 +291,24 @@ No real PowerShell profile was modified during development.
   in-extension deletion is unavailable, as allowed by Q13.
 - The explicit fallback uses a five-second timeout and a 128 KiB output limit.
 - Automated lifecycle tests use disposable temporary files and an injected Trash
-  adapter; platform-native Trash and Windows/Linux UI acceptance require manual
-  verification.
+  adapter; native Trash passed the macOS integration check; Windows/Linux UI acceptance
+  remains unverified.
 
+
+## Validation results
+
+- Typecheck: passed (`npm run lint`).
+- Unit suite: 239 tests passed across 17 files (`npm test`).
+- Extension and webview build: passed (`npm run build`).
+- Isolated PowerShell integration on macOS / VS Code 1.146.0: passed
+  (`PERSONAS_IT_POWERSHELL_ONLY=1 npm run test:integration`). Exercises confirmed
+  creation, editor opening, dirty-file deletion refusal, native Trash, and
+  watcher-driven deletion/external recreation. Watch roots use canonical paths
+  after this test exposed an alias-path refresh failure.
+- The full integration run timed out in the pre-existing CLI install/uninstall
+  test before reaching the new test; it is not reported as passing.
+- Standards review: no findings. Spec findings (discovery errors, linked-target
+  readability, missing integration coverage) addressed; follow-up diagnostic
+  scoping fixed as well.
+- Windows/Linux manual acceptance and Windows known-folder equivalence remain
+  unverified. No real profile files were modified during testing.
