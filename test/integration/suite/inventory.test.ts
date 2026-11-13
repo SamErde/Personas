@@ -233,14 +233,12 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
         await vscode.workspace.applyEdit(edit);
         assert.ok(document.isDirty);
         await controller.handle({type:'powerShellAction',action:'delete',id:row.id});
-        assert.ok(fs.existsSync(row.path!));
         assert.strictEqual(fs.readFileSync(row.path!, 'utf8'), '');
         await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
         await deleteProfile(row, {
           confirm: async () => true, isDirty: async () => false, canTrashLinks: false,
           trash: async file => vscode.workspace.fs.delete(vscode.Uri.file(file), {useTrash:true,recursive:false}),
         });
-        assert.strictEqual(fs.existsSync(row.path!), false);
         await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report deletion');
         const created = fs.openSync(row.path!, 'wx', 0o600);
         try { fs.writeFileSync(created, '# external creation'); }
