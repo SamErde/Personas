@@ -241,16 +241,12 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
           trash: async file => vscode.workspace.fs.delete(vscode.Uri.file(file), {useTrash:true,recursive:false}),
         });
         await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report deletion');
-        const created = fs.openSync(row.path!, 'wx', 0o600);
-        try { fs.writeFileSync(created, '# external creation'); }
-        finally { fs.closeSync(created); }
+        createProfileFixture(row.path!, '# external creation');
         await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report external creation');
         fs.renameSync(directory, directory + '-moved');
         await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report external directory rename');
         fs.mkdirSync(directory);
-        const replacement = fs.openSync(row.path!, 'wx', 0o600);
-        try { fs.writeFileSync(replacement, '# replacement directory'); }
-        finally { fs.closeSync(replacement); }
+        createProfileFixture(row.path!, '# replacement directory');
         await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report directory recreation');
       } finally { controller.dispose(); }
     }));
@@ -264,6 +260,13 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
     });
   });
 });
+
+/** Create the fixture atomically; an existing file or link must fail rather than be overwritten. */
+function createProfileFixture(file: string, content: string): void {
+  const descriptor = fs.openSync(file, 'wx', 0o600);
+  try { fs.writeFileSync(descriptor, content); }
+  finally { fs.closeSync(descriptor); }
+}
 
 function nextExtensionsChange(): Promise<void> {
   return withTimeout(
