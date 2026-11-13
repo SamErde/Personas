@@ -221,6 +221,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
         confirmedPath = file; return true;
       });
       try {
+        controller.setActive(true);
         await controller.refresh();
         assert.ok(messages.includes('powerShellState'));
         const row = service.snapshot.rows.find(item => item.scope === 'Current User' && item.host === 'Console')!;

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
+import { affectsProfile, profileWatchPlan } from '../powershell/watch';
 import * as path from 'node:path';
 import { PowerShellService } from '../powershell/service';
 import { createProfile, deleteProfile, inspectProfile } from '../powershell/files';
@@ -10,6 +11,8 @@ export class PowerShellController implements vscode.Disposable {
 
   private watchers: vscode.FileSystemWatcher[] = [];
   private watchKey = '';
+  private active = false;
+  private dependencies: string[] = [];
   private timer?: NodeJS.Timeout;
   private disposed = false;
   private queue: Promise<void> = Promise.resolve();
@@ -21,15 +24,15 @@ export class PowerShellController implements vscode.Disposable {
       await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
   ) {
     this.events = [
-      vscode.workspace.onDidSaveTextDocument(() => this.schedule()),
-      vscode.workspace.onDidCreateFiles(() => this.schedule()),
-      vscode.workspace.onDidDeleteFiles(() => this.schedule()),
-      vscode.workspace.onDidRenameFiles(() => this.schedule()),
+      vscode.workspace.onDidSaveTextDocument(document => this.changed([document.uri])),
+      vscode.workspace.onDidCreateFiles(event => this.changed(event.files)),
+      vscode.workspace.onDidDeleteFiles(event => this.changed(event.files)),
+      vscode.workspace.onDidRenameFiles(event => this.changed(event.files.flatMap(file => [file.oldUri, file.newUri]))),
     ];
   }
-  refresh(): Promise<void> {
+  refresh(background = false): Promise<void> {
     this.queue = this.queue.then(async () => {
-      if (this.disposed) return;
+      if (this.disposed || background && !this.active) return;
       if (vscode.env.remoteName) {
         this.post({type:'powerShellState', inventory:{editions:[], rows:[], error:'PowerShell profiles support local desktop windows. WSL support is planned next.'}});
         return;
@@ -45,37 +48,41 @@ export class PowerShellController implements vscode.Disposable {
     });
     return this.queue;
   }
+  setActive(active: boolean): void {
+    this.active = active;
+    if (!active) {
+      clearTimeout(this.timer);
+      for (const watcher of this.watchers) watcher.dispose();
+      this.watchers = [];
+      this.watchKey = '';
+    }
+  }
+  private changed(uris: readonly vscode.Uri[]): void {
+    if (this.active && uris.some(uri => uri.scheme === 'file' && affectsProfile(uri.fsPath, this.dependencies))) this.schedule();
+  }
   private schedule(): void {
+    if (!this.active || this.disposed) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.refresh(), 300);
+    this.timer = setTimeout(() => {
+      if (this.active && !this.disposed) void this.refresh(true);
+    }, 300);
   }
   private async watch(): Promise<void> {
-    const bases = new Set<string>();
-    for (const row of this.service.snapshot.rows) {
-      for (const file of [row.path, row.target]) {
-        if (!file) continue;
-        let directory = path.dirname(file);
-        while (directory !== path.dirname(directory)) {
-          try { if ((await fs.stat(directory)).isDirectory()) break; } catch { /* nearest existing parent */ }
-          directory = path.dirname(directory);
-        }
-        if (directory !== path.parse(directory).root) {
-          // Canonical roots avoid alias-path watcher misses (verified by the macOS integration test).
-          bases.add(await fs.realpath(directory).catch(() => directory));
-        }
-      }
-    }
-    const key = [...bases].sort().join('\n');
+    if (!this.active || this.disposed) return;
+    const files = this.service.snapshot.rows.flatMap(row => row.path ? [row.path] : []);
+    const plan = await profileWatchPlan(files);
+    if (!this.active || this.disposed) return;
+    this.dependencies = plan.paths;
+    const key = plan.directories.sort().join('\n');
     if (key === this.watchKey) return;
     this.watchKey = key;
     for (const watcher of this.watchers) watcher.dispose();
     this.watchers = [];
-    for (const base of bases) {
-      // Nonrecursive parent watch notices missing profile directory creation without scanning a home tree.
+    for (const base of plan.directories) {
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), '*'));
-      watcher.onDidCreate(() => this.schedule());
-      watcher.onDidChange(() => this.schedule());
-      watcher.onDidDelete(() => this.schedule());
+      watcher.onDidCreate(uri => this.changed([uri]));
+      watcher.onDidChange(uri => this.changed([uri]));
+      watcher.onDidDelete(uri => this.changed([uri]));
       this.watchers.push(watcher);
     }
   }

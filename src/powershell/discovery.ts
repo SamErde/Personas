@@ -49,7 +49,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
     return errors;
   };
   const platform = process.platform;
-  const home = process.env.HOME || (platform === 'win32' ? os.homedir() : '');
+  const home = platform === 'win32' ? os.homedir() : process.env.HOME || '';
   const documents = platform === 'win32' ? await documentsDirectory() : undefined;
   const candidates: { edition: Edition; executable: string }[] = [];
   const add = (executable: string, edition: Edition = 'PowerShell 7') => candidates.push({ edition, executable });

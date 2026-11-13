@@ -10,8 +10,10 @@ export async function inspectProfile(input: ProfileLocation): Promise<ProfileRow
   try {
     const stat = await fs.lstat(location.path);
     if (stat.isSymbolicLink()) {
-      const target = path.resolve(path.dirname(location.path), await fs.readlink(location.path));
+      const parent = await fs.realpath(path.dirname(location.path));
+      let target = path.resolve(parent, await fs.readlink(location.path));
       try {
+        target = await fs.realpath(location.path);
         const targetStat = await fs.stat(location.path);
         if (targetStat.isFile()) await fs.access(location.path, fs.constants.R_OK);
         return { ...location, target, state: targetStat.isFile() ? 'existing' : 'inaccessible',

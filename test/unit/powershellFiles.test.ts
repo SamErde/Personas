@@ -1,3 +1,4 @@
+import { symlinksAvailable } from './symlinkCapability';
 import { afterEach, expect, it } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -30,7 +31,7 @@ it('blocks deletion of unsaved files and never calls trash', async () => {
   expect(await fs.readFile(location.path!, 'utf8')).toBe('keep me');
 });
 
-it('recognizes broken links and refuses to create over them', async () => {
+it.skipIf(!symlinksAvailable)('recognizes broken links and refuses to create over them', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-profile-')); roots.push(root);
   const file = path.join(root, 'profile.ps1');
   await fs.symlink(path.join(root, 'absent.ps1'), file);
@@ -60,7 +61,7 @@ it('preserves files when Trash fails and respects cancellation', async () => {
   await expect(deleteProfile(location, {...options,confirm:async()=>true})).rejects.toThrow('Trash unavailable');
   expect(await fs.readFile(file,'utf8')).toBe('');
 });
-it('deletes only a link when a recoverable link-aware adapter is available', async () => {
+it.skipIf(!symlinksAvailable)('deletes only a link when a recoverable link-aware adapter is available', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-profile-')); roots.push(root);
   const target=path.join(root,'target.ps1'), file=path.join(root,'profile.ps1');
   await fs.writeFile(target,'keep target'); await fs.symlink(target,file);
@@ -71,7 +72,7 @@ it('deletes only a link when a recoverable link-aware adapter is available', asy
   expect((await fs.lstat(path.join(root,'trash-link'))).isSymbolicLink()).toBe(true);
 });
 
-it.skipIf(process.platform === 'win32')('reports an unreadable linked target without losing the link destination', async () => {
+it.skipIf(!symlinksAvailable || process.platform === 'win32')('reports an unreadable linked target without losing the link destination', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-profile-')); roots.push(root);
   const target=path.join(root,'private.ps1'), file=path.join(root,'profile.ps1');
   await fs.writeFile(target,'private'); await fs.symlink(target,file);
@@ -80,11 +81,11 @@ it.skipIf(process.platform === 'win32')('reports an unreadable linked target wit
   try {
     const row=await inspectProfile(location);
     expect(row.state).toBe('inaccessible');
-    expect(row.target).toBe(target);
+    expect(row.target).toBe(await fs.realpath(target));
   } finally {await fs.chmod(target,0o600);}
 });
 
-it('rejects a regular file replaced by a link during the first dirty check', async () => {
+it.skipIf(!symlinksAvailable)('rejects a regular file replaced by a link during the first dirty check', async () => {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'personas-race-')); roots.push(root);
   const file=path.join(root,'profile.ps1'), target=path.join(root,'target.ps1');
   await fs.writeFile(file,'original'); await fs.writeFile(target,'target');
@@ -96,7 +97,7 @@ it('rejects a regular file replaced by a link during the first dirty check', asy
   })).rejects.toThrow('changed');
   expect(trashed).toBe(false);
 });
-it('drops stale link targets when re-inspecting a cached row', async () => {
+it.skipIf(!symlinksAvailable)('drops stale link targets when re-inspecting a cached row', async () => {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'personas-stale-')); roots.push(root);
   const file=path.join(root,'profile.ps1'), target=path.join(root,'target.ps1');
   await fs.writeFile(target,'target');await fs.symlink(target,file);
@@ -105,4 +106,19 @@ it('drops stale link targets when re-inspecting a cached row', async () => {
   await fs.unlink(file);await fs.writeFile(file,'replacement',{flag:'wx'});
   const row=await inspectProfile(cached);
   expect(row.state).toBe('existing');expect(row.target).toBeUndefined();expect(row.detail).toBeUndefined();
+});
+
+it.skipIf(!symlinksAvailable).each([true, false])('resolves a relative profile link under a symlinked parent (exists=%s)', async exists => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'personas-parent-link-')); roots.push(root);
+  const canonical=await fs.realpath(root);
+  await fs.mkdir(path.join(root,'dotfiles','powershell'),{recursive:true});
+  await fs.mkdir(path.join(root,'config'));
+  await fs.symlink(path.join(root,'dotfiles','powershell'),path.join(root,'config','powershell'),'dir');
+  const target=path.join(canonical,'dotfiles','shared.ps1');
+  if (exists) await fs.writeFile(target,'target');
+  const file=path.join(root,'config','powershell','profile.ps1');
+  await fs.symlink('../shared.ps1',file);
+  const row=await inspectProfile({id:'parent-link',edition:'PowerShell 7',scope:'Current User',host:'Console',path:file,readOnly:false});
+  expect(row.state).toBe(exists?'existing':'brokenLink');
+  expect(row.target).toBe(target);
 });

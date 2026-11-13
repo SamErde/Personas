@@ -35,6 +35,8 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    this.powerShell.setActive(webviewView.visible);
+    if (webviewView.visible) void this.powerShell.refresh(true);
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist')],
@@ -49,14 +51,19 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     this.maybeAutoOpen();
     void this.render();
     const visibilityListener = webviewView.onDidChangeVisibility(() => {
+      this.powerShell.setActive(webviewView.visible);
       if (webviewView.visible) {
+        void this.powerShell.refresh(true);
         this.maybeAutoOpen();
         void this.render();
       }
     });
     webviewView.onDidDispose(() => {
       visibilityListener.dispose();
-      if (this.view === webviewView) this.view = undefined;
+      if (this.view === webviewView) {
+        this.view = undefined;
+        this.powerShell.setActive(false);
+      }
     });
     this.context.subscriptions.push(visibilityListener);
   }
@@ -83,7 +90,6 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async render(): Promise<void> {
-    void this.powerShell.refresh();
     const generation = ++this.renderGeneration;
     const setup = await getOrBuildServices(this.context);
     if (generation !== this.renderGeneration) return;
@@ -161,6 +167,7 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     }
     switch (m.type) {
       case 'ready':
+        if (this.view?.visible) void this.powerShell.refresh(true);
         await this.render();
         return;
       case 'openMatrix':

@@ -300,7 +300,7 @@ No real PowerShell profile was modified during development.
 ## Validation results
 
 - Typecheck: passed (`npm run lint`).
-- Unit suite after PR review fixes: 251 tests passed across 19 files (`npm test`).
+- Unit suite after PR review fixes: 265 tests passed across 22 files (`npm test`).
 - Extension and webview build: passed (`npm run build`).
 - Isolated PowerShell integration on macOS / VS Code 1.146.0: passed
   (`PERSONAS_IT_POWERSHELL_ONLY=1 npm run test:integration`). Exercises confirmed
@@ -329,3 +329,18 @@ No real PowerShell profile was modified during development.
 - The external-creation integration fixture writes through an exclusively opened
   file descriptor to address
   the CodeQL filesystem-race finding.
+
+### Follow-up review fixes (2026-11-13)
+
+- Existing profile links resolve through the filesystem. Broken-link reporting
+  resolves relative destinations from the canonical parent directory.
+- Background discovery runs only while Home is visible. Unrelated editor and file
+  events are ignored; profile/link changes and relevant ancestor changes refresh
+  the inventory. Showing Home refreshes it again after a hidden interval.
+- Watch dependencies include intermediate links, directory links, final targets,
+  and missing destinations. Traversal detects cycles and limits link hops; watches
+  use the nearest existing parent and filter unrelated sibling events.
+- Windows global-tool discovery uses the Windows account home even when HOME
+  points elsewhere. Documents comparison ignores insignificant trailing separators.
+- Symlink-dependent tests probe file/directory-link capability and skip only when
+  the OS denies or lacks that capability; unexpected fixture errors still fail.

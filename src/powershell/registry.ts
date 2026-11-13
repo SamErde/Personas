@@ -42,7 +42,13 @@ export async function readRegistryDocuments(
       values.push(registryExportPersonal(await fs.readFile(file), key, env));
     }
     const [configured, effective] = values;
-    return configured && effective && path.win32.normalize(configured).toLowerCase() === path.win32.normalize(effective).toLowerCase()
+    return configured && effective && directoryKey(configured) === directoryKey(effective)
       ? effective : undefined;
   } finally { await fs.rm(temporary, {recursive:true, force:true}); }
+}
+
+function directoryKey(value: string): string {
+  const normalized = path.win32.normalize(value).toLowerCase();
+  const root = path.win32.parse(normalized).root;
+  return normalized.length > root.length ? normalized.replace(/[\\\\]+$/, '') : normalized;
 }
