@@ -25,9 +25,9 @@ export class PowerShellController implements vscode.Disposable {
   ) {
     this.events = [
       vscode.workspace.onDidSaveTextDocument(document => this.changed([document.uri])),
-      vscode.workspace.onDidCreateFiles(event => this.changed(event.files)),
-      vscode.workspace.onDidDeleteFiles(event => this.changed(event.files)),
-      vscode.workspace.onDidRenameFiles(event => this.changed(event.files.flatMap(file => [file.oldUri, file.newUri]))),
+      vscode.workspace.onDidCreateFiles(event => this.changed(event.files, true)),
+      vscode.workspace.onDidDeleteFiles(event => this.changed(event.files, true)),
+      vscode.workspace.onDidRenameFiles(event => this.changed(event.files.flatMap(file => [file.oldUri, file.newUri]), true)),
     ];
   }
   refresh(background = false): Promise<void> {
@@ -57,8 +57,12 @@ export class PowerShellController implements vscode.Disposable {
       this.watchKey = '';
     }
   }
-  private changed(uris: readonly vscode.Uri[]): void {
-    if (this.active && uris.some(uri => uri.scheme === 'file' && affectsProfile(uri.fsPath, this.dependencies))) this.schedule();
+  private changed(uris: readonly vscode.Uri[], structural = false): void {
+    if (this.active && uris.some(uri => uri.scheme === 'file' && affectsProfile(uri.fsPath, this.dependencies))) {
+      // The paths may be unchanged while a directory's underlying identity has changed.
+      if (structural) this.watchKey = '';
+      this.schedule();
+    }
   }
   private schedule(): void {
     if (!this.active || this.disposed) return;
@@ -80,9 +84,9 @@ export class PowerShellController implements vscode.Disposable {
     this.watchers = [];
     for (const base of plan.directories) {
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), '*'));
-      watcher.onDidCreate(uri => this.changed([uri]));
+      watcher.onDidCreate(uri => this.changed([uri], true));
       watcher.onDidChange(uri => this.changed([uri]));
-      watcher.onDidDelete(uri => this.changed([uri]));
+      watcher.onDidDelete(uri => this.changed([uri], true));
       this.watchers.push(watcher);
     }
   }

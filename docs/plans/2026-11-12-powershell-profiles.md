@@ -300,7 +300,7 @@ No real PowerShell profile was modified during development.
 ## Validation results
 
 - Typecheck: passed (`npm run lint`).
-- Unit suite after PR review fixes: 265 tests passed across 22 files (`npm test`).
+- Unit suite after PR review fixes: 269 tests passed across 22 files (`npm test`, macOS).
 - Extension and webview build: passed (`npm run build`).
 - Isolated PowerShell integration on macOS / VS Code 1.146.0: passed
   (`PERSONAS_IT_POWERSHELL_ONLY=1 npm run test:integration`). Exercises confirmed
@@ -344,3 +344,12 @@ No real PowerShell profile was modified during development.
   points elsewhere. Documents comparison ignores insignificant trailing separators.
 - Symlink-dependent tests probe file/directory-link capability and skip only when
   the OS denies or lacks that capability; unexpected fixture errors still fail.
+
+### Directory replacement and macOS event matching
+
+- Watch each profile dependency's nearest existing directory and its parent, so
+  external replacement of the directory is observed. Relevant create/delete/rename
+  events invalidate existing watches even when the replacement has the same path.
+- Refresh-event matching ignores filename case on macOS and Windows, including
+  deleted paths. This can cause an extra refresh on case-sensitive macOS volumes;
+  file-action targets are unchanged. Linux matching remains case-sensitive.

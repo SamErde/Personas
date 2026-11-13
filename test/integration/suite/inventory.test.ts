@@ -245,6 +245,13 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
         try { fs.writeFileSync(created, '# external creation'); }
         finally { fs.closeSync(created); }
         await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report external creation');
+        fs.renameSync(directory, directory + '-moved');
+        await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report external directory rename');
+        fs.mkdirSync(directory);
+        const replacement = fs.openSync(row.path!, 'wx', 0o600);
+        try { fs.writeFileSync(replacement, '# replacement directory'); }
+        finally { fs.closeSync(replacement); }
+        await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report directory recreation');
       } finally { controller.dispose(); }
     }));
 

@@ -55,6 +55,8 @@ export async function profileWatchPlan(files: string[]): Promise<{paths:string[]
         if ((await fs.stat(directory)).isDirectory()) {
           const canonical = await fs.realpath(directory);
           directories.add(canonical);
+          // A nonrecursive watch inside a directory misses replacement of that directory itself.
+          directories.add(path.dirname(canonical));
           // Watcher events use canonical directory names (including Windows 8.3 aliases).
           paths.add(path.join(canonical, path.relative(directory, file)));
           break;
@@ -69,7 +71,10 @@ export async function profileWatchPlan(files: string[]): Promise<{paths:string[]
 }
 
 export function affectsProfile(changed: string, dependencies: readonly string[]): boolean {
-  const normalize = (file:string) => process.platform === 'win32' ? path.resolve(file).toLowerCase() : path.resolve(file);
+  // Deleted paths cannot be inspected for volume case sensitivity. Extra refreshes on
+  // case-sensitive macOS volumes are preferable to missing events on insensitive ones.
+  const ignoreCase = process.platform === 'win32' || process.platform === 'darwin';
+  const normalize = (file:string) => ignoreCase ? path.resolve(file).toLowerCase() : path.resolve(file);
   const source = normalize(changed);
   return dependencies.some(file => {
     const relative = path.relative(source, normalize(file));

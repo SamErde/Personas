@@ -53,3 +53,11 @@ it('filters events using the canonical parent spelling returned by the filesyste
   expect(plan.directories).toContain(canonical);
   expect(affectsProfile(path.join(canonical,'profile.ps1'),plan.paths)).toBe(true);
 });
+
+it.skipIf(path.sep==='\\').each(['darwin','linux'])('matches case variants conservatively on %s', platform=>{
+  vi.spyOn(process,'platform','get').mockReturnValue(platform as NodeJS.Platform);
+  const file=path.resolve('profiles','profile.ps1');
+  expect(affectsProfile(file.toUpperCase(),[file])).toBe(platform!=='linux');
+  expect(affectsProfile(path.dirname(file).toUpperCase(),[file])).toBe(platform!=='linux');
+  expect(affectsProfile(path.resolve('profiles','unrelated.ps1'),[file])).toBe(false);
+});

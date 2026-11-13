@@ -125,3 +125,27 @@ it('drops queued automatic refreshes after Home is hidden',async()=>{
   expect(discover).toHaveBeenCalledTimes(1);
   expect(mock.watchers).toHaveLength(0);
 });
+
+it('reattaches watches when a profile directory is externally replaced at the same path',async()=>{
+  const {root,controller,service,discover}=await setup();
+  const file=path.join(root,'profile.ps1'), moved=root+'-moved';
+  roots.push(moved);
+  await fs.writeFile(file,'original',{flag:'wx'});
+  controller.setActive(true);
+  await controller.refresh();
+  const original=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
+  const parent=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===path.dirname(root));
+  expect(parent).toBeDefined();
+  discover.mockClear();
+  // Replacement completes before the debounced refresh; the set of watch paths is unchanged.
+  await fs.rename(root,moved);
+  await fs.mkdir(root);
+  await fs.writeFile(file,'replacement',{flag:'wx'});
+  parent.Delete(uri(root)); parent.Create(uri(root));
+  await vi.waitFor(()=>expect(discover).toHaveBeenCalled(),{timeout:3000});
+  await vi.waitFor(()=>expect(original.disposed).toBe(true));
+  const replacement=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
+  expect(replacement).toBeDefined();
+  await fs.unlink(file); replacement.Delete(uri(file));
+  await vi.waitFor(()=>expect(service.snapshot.rows.find(row=>row.host==='All Hosts')?.state).toBe('missing'),{timeout:3000});
+});
