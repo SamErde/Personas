@@ -2,7 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ProfileLocation, ProfileRow } from './profiles';
 
-export async function inspectProfile(location: ProfileLocation): Promise<ProfileRow> {
+export async function inspectProfile(input: ProfileLocation): Promise<ProfileRow> {
+  // Cached rows carry derived fields; rebuild from location data only.
+  const {id, edition, scope, host, path: filePath, installation, readOnly, reason} = input;
+  const location: ProfileLocation = {id, edition, scope, host, path:filePath, installation, readOnly, reason};
   if (!location.path) return { ...location, state: 'unresolved', detail: location.reason ?? 'Profile directory unresolved' };
   try {
     const stat = await fs.lstat(location.path);
@@ -50,12 +53,13 @@ async function fingerprint(file: string): Promise<string> {
   return [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs, s.isSymbolicLink() ? await fs.readlink(file) : ''].join(':');
 }
 export async function deleteProfile(location: ProfileLocation, options: DeleteProfileOptions): Promise<void> {
+  if (!location.path) throw new Error('Profile cannot be deleted');
+  const before = await fingerprint(location.path);
   const row = await inspectProfile(location);
   if (!row.path || row.readOnly || !['existing', 'brokenLink'].includes(row.state)) throw new Error('Profile cannot be deleted');
   if (row.target && !options.canTrashLinks) throw new Error('Recoverable link-only deletion is unavailable. Reveal this link in the file manager instead.');
   const dirty = () => options.isDirty(row.path!);
   if (await dirty() || row.target && await options.isDirty(row.target)) throw new Error('Save or revert unsaved edits before deleting this profile');
-  const before = await fingerprint(row.path);
   if (!await options.confirm(row)) return;
   if (await dirty() || row.target && await options.isDirty(row.target)) throw new Error('Profile has unsaved edits');
   if (before !== await fingerprint(row.path)) throw new Error('Profile changed during confirmation; refresh and try again');

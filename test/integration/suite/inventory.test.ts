@@ -242,7 +242,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
         });
         assert.strictEqual(fs.existsSync(row.path!), false);
         await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report deletion');
-        fs.writeFileSync(row.path!, '# external creation');
+        fs.writeFileSync(row.path!, '# external creation', {flag:'wx'});
         await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report external creation');
       } finally { controller.dispose(); }
     }));

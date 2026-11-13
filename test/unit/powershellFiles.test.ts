@@ -83,3 +83,26 @@ it.skipIf(process.platform === 'win32')('reports an unreadable linked target wit
     expect(row.target).toBe(target);
   } finally {await fs.chmod(target,0o600);}
 });
+
+it('rejects a regular file replaced by a link during the first dirty check', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'personas-race-')); roots.push(root);
+  const file=path.join(root,'profile.ps1'), target=path.join(root,'target.ps1');
+  await fs.writeFile(file,'original'); await fs.writeFile(target,'target');
+  const location: ProfileLocation={id:'race',edition:'PowerShell 7',scope:'Current User',host:'Console',path:file,readOnly:false};
+  let first=true, trashed=false;
+  await expect(deleteProfile(location,{
+    confirm:async()=>true,canTrashLinks:false,trash:async()=>{trashed=true;},
+    isDirty:async()=>{if(first){first=false;await fs.unlink(file);await fs.symlink(target,file);}return false;},
+  })).rejects.toThrow('changed');
+  expect(trashed).toBe(false);
+});
+it('drops stale link targets when re-inspecting a cached row', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'personas-stale-')); roots.push(root);
+  const file=path.join(root,'profile.ps1'), target=path.join(root,'target.ps1');
+  await fs.writeFile(target,'target');await fs.symlink(target,file);
+  const location: ProfileLocation={id:'stale',edition:'PowerShell 7',scope:'Current User',host:'Console',path:file,readOnly:false};
+  const cached=await inspectProfile(location);
+  await fs.unlink(file);await fs.writeFile(file,'replacement',{flag:'wx'});
+  const row=await inspectProfile(cached);
+  expect(row.state).toBe('existing');expect(row.target).toBeUndefined();expect(row.detail).toBeUndefined();
+});

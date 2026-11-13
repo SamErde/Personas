@@ -279,7 +279,8 @@ No real PowerShell profile was modified during development.
 ### Implementation notes
 
 - Windows passive Documents resolution reads configured and shell-resolved Personal
-  registry values through bounded reg.exe queries. It accepts only matching absolute
+  registry values through bounded reg.exe exports decoded as BOM-marked UTF-16.
+  Temporary exports are removed after each lookup. It accepts only matching absolute
   expanded paths. Disagreement or lookup failure leaves the path unresolved and
   offers the explicit PowerShell fallback. Native known-folder equivalence and
   Windows manual acceptance remain to be verified.
@@ -289,7 +290,8 @@ No real PowerShell profile was modified during development.
 - VS Code's public Trash API does not guarantee recoverable link-only deletion on
   every platform. Linked profiles therefore expose Reveal in File Manager while
   in-extension deletion is unavailable, as allowed by Q13.
-- The explicit fallback uses a five-second timeout and a 128 KiB output limit.
+- The explicit fallback requests UTF-8 output and uses a five-second timeout and
+  a 128 KiB output limit.
 - Automated lifecycle tests use disposable temporary files and an injected Trash
   adapter; native Trash passed the macOS integration check; Windows/Linux UI acceptance
   remains unverified.
@@ -298,7 +300,7 @@ No real PowerShell profile was modified during development.
 ## Validation results
 
 - Typecheck: passed (`npm run lint`).
-- Unit suite: 239 tests passed across 17 files (`npm test`).
+- Unit suite after PR review fixes: 251 tests passed across 19 files (`npm test`).
 - Extension and webview build: passed (`npm run build`).
 - Isolated PowerShell integration on macOS / VS Code 1.146.0: passed
   (`PERSONAS_IT_POWERSHELL_ONLY=1 npm run test:integration`). Exercises confirmed
@@ -312,3 +314,17 @@ No real PowerShell profile was modified during development.
   scoping fixed as well.
 - Windows/Linux manual acceptance and Windows known-folder equivalence remain
   unverified. No real profile files were modified during testing.
+
+### PR review fixes (2026-11-13)
+
+- Registry paths are decoded from Unicode exports, and explicit probes request
+  UTF-8 output. Unicode parsing and probe-command regressions are covered by tests;
+  real Windows registry/probe behavior still needs platform acceptance.
+- Preview detection uses recognized installation segments, preserving stable
+  installations under user directories containing the word preview.
+- Deletion captures its fingerprint before asynchronous safety checks, and
+  reinspection discards stale link metadata. Regression tests reproduce both cases.
+- Automatic refresh preserves open menus and keyboard focus without taking focus
+  from outside the section. DOM regression tests cover both behaviors.
+- The external-creation integration fixture uses exclusive creation to address
+  the CodeQL filesystem-race finding.

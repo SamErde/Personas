@@ -5,6 +5,7 @@ import { el } from './ui';
 type Send = (message: HomeToHost) => void;
 function button(label: string, action: () => void, title = label): HTMLButtonElement {
   const result = el('button', 'ps-action', label) as HTMLButtonElement;
+  result.dataset.psAction = label === '+' || label === '✎' ? 'open-icon' : label === 'Resolve Using PowerShell…' ? title : label;
   result.type = 'button'; result.title = title; result.setAttribute('aria-label', title);
   result.addEventListener('click', action);
   return result;
@@ -12,13 +13,14 @@ function button(label: string, action: () => void, title = label): HTMLButtonEle
 export function renderPowerShell(inventory: PowerShellInventory, send: Send): void {
   const root = document.getElementById('powershell');
   if (!root) return;
+  const restoreInteraction = preserveInteraction(root);
   const dispatch = (action: Extract<HomeToHost, {type:'powerShellAction'}>['action'], id?: string) =>
     send({type:'powerShellAction', action, id});
   root.replaceChildren();
   const toolbar = el('div', 'ps-toolbar');
   toolbar.append(button('Refresh', () => dispatch('refresh')), button('Help', () => dispatch('help'), 'About PowerShell profiles'));
   root.append(toolbar);
-  if (inventory.error) { root.append(el('p', '', inventory.error)); return; }
+  if (inventory.error) { root.append(el('p', '', inventory.error)); restoreInteraction(); return; }
   const order = el('p', 'profile-counts', 'Load order for one host: All Users / All Hosts → All Users / host → Current User / All Hosts → Current User / host. Changes apply to subsequent sessions.');
   root.append(order);
   for (const edition of inventory.editions) {
@@ -44,11 +46,13 @@ export function renderPowerShell(inventory: PowerShellInventory, send: Send): vo
       root.append(el('h4', '', 'All Users'), ...rows.filter(row => row.scope === 'All Users').map(row => renderRow(row, dispatch)));
     }
   }
+  restoreInteraction();
 }
 function renderRow(
   row: ProfileRow, dispatch: (action: Extract<HomeToHost, {type:'powerShellAction'}>['action'], id?: string) => void,
 ): HTMLElement {
   const root = el('div', 'ps-row');
+  root.dataset.psRow = row.id;
   const standard = (row.scope === 'Current User' ? 'CurrentUser' : 'AllUsers') + (row.host === 'All Hosts' ? 'AllHosts' : 'CurrentHost');
   const hint = row.host === 'VS Code' ? '\nUsed by the PowerShell extension session, not an ordinary pwsh terminal.' : '';
   const tooltip = [row.edition, standard + ' — ' + row.host, row.path ?? row.detail ?? 'Path unresolved',
@@ -65,7 +69,7 @@ function renderRow(
   if (status) { const description = el('span', 'profile-counts', status); description.title = row.detail ?? tooltip; root.append(description); }
   if (row.path) {
     const menu = document.createElement('details'); menu.className = 'ps-menu';
-    const summary = document.createElement('summary'); summary.textContent = '⋯';
+    const summary = document.createElement('summary'); summary.textContent = '⋯'; summary.dataset.psAction = 'menu';
     summary.title = 'Actions for ' + row.host; summary.setAttribute('aria-label', summary.title);
     menu.append(summary);
     const actions = el('div', 'ps-menu-actions');
@@ -85,4 +89,24 @@ function renderRow(
     });
   }
   return root;
+}
+
+/** Restore only controls that survive a refresh; never steal focus from elsewhere. */
+function preserveInteraction(root: HTMLElement): () => void {
+  const rowId = (element: Element): string => (element.closest('[data-ps-row]') as HTMLElement | null)?.dataset.psRow ?? '';
+  const key = (element: HTMLElement): string => JSON.stringify([rowId(element), element.dataset.psAction]);
+  const active = document.activeElement;
+  const focused = active instanceof HTMLElement && root.contains(active) ? active : undefined;
+  const focusedKey = focused ? key(focused) : undefined;
+  const focusedRow = focused ? rowId(focused) : undefined;
+  const openRows = new Set(Array.from(root.querySelectorAll('details[open]')).map(rowId));
+  return () => {
+    for (const menu of root.querySelectorAll('details')) menu.open = openRows.has(rowId(menu));
+    if (!focusedKey) return;
+    const controls = Array.from(root.querySelectorAll<HTMLElement>('button, summary')).filter(control => !control.matches(':disabled'));
+    const replacement = controls.find(control => key(control) === focusedKey)
+      ?? controls.find(control => focusedRow && rowId(control) === focusedRow)
+      ?? controls[0];
+    replacement?.focus({preventScroll:true});
+  };
 }

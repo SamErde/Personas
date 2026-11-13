@@ -1,3 +1,4 @@
+import { readRegistryDocuments } from './registry';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -19,29 +20,15 @@ export function runFile(executable: string, args: string[]): Promise<string> {
   }, (error, stdout) => error ? reject(error) : resolve(stdout)));
 }
 
-export function registryPersonal(output: string, env: NodeJS.ProcessEnv): string | undefined {
-  const raw = /^\s*Personal\s+REG_(?:EXPAND_)?SZ\s+(.+)$/mi.exec(output)?.[1]?.trim();
-  if (!raw) return undefined;
-  const expanded = raw.replace(/%([^%]+)%/g, (match, key: string) =>
-    Object.entries(env).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1] ?? match);
-  return !expanded.includes('%') && path.win32.isAbsolute(expanded) ? expanded : undefined;
-}
-
 /** Read both configured and shell-resolved Documents; disagreement requires explicit resolution.
- * reg.exe is a bounded OS metadata query, never a PowerShell launch.
+ * reg.exe exports BOM-marked Unicode metadata to a private temporary directory; it never launches PowerShell.
  */
 async function documentsDirectory(): Promise<string | undefined> {
   const root = process.env.SystemRoot;
   if (!root || !path.win32.isAbsolute(root)) return undefined;
   const registry = path.win32.join(root, 'System32', 'reg.exe');
-  const key = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\';
-  try {
-    const results = await Promise.all(['User Shell Folders', 'Shell Folders'].map(async folder =>
-      registryPersonal(await runFile(registry, ['query', key + folder, '/v', 'Personal']), process.env)));
-    const [configured, effective] = results;
-    return configured && effective && path.win32.normalize(configured).toLowerCase() === path.win32.normalize(effective).toLowerCase()
-      ? effective : undefined;
-  } catch { return undefined; }
+  try { return await readRegistryDocuments(registry, runFile, process.env); }
+  catch { return undefined; }
 }
 
 type DiscoveryIo = Pick<typeof fs, 'stat' | 'readdir' | 'realpath'>;
@@ -92,7 +79,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
     if (!await exists(candidate.executable, io, errors)) continue;
     const actual = await io.realpath(candidate.executable).catch(() => candidate.executable);
     // Preview links must not accidentally bring Preview into the initial scope.
-    if (/preview/i.test(actual)) continue;
+    if (isPreviewInstallation(actual)) continue;
     const directory = path.dirname(actual);
     const psHome = await exists(path.join(directory, 'System.Management.Automation.dll'), io, errors) ? directory : undefined;
     const installation: Installation = {
@@ -117,9 +104,9 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
 }
 
 /** Only the explicit UI action calls this function. No profile scripts or policy changes. */
-export async function probeInstallation(installation: Installation, edition: Edition): Promise<{ home: string; userDirectory: string }> {
-  const command = '[pscustomobject]@{home=$PSHOME;user=$PROFILE.CurrentUserAllHosts;major=$PSVersionTable.PSVersion.Major;preview=$PSVersionTable.PSVersion.PreReleaseLabel}|ConvertTo-Json -Compress';
-  const output = await runFile(installation.executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command]);
+export async function probeInstallation(installation: Installation, edition: Edition, run = runFile): Promise<{ home: string; userDirectory: string }> {
+  const command = '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [pscustomobject]@{home=$PSHOME;user=$PROFILE.CurrentUserAllHosts;major=$PSVersionTable.PSVersion.Major;preview=$PSVersionTable.PSVersion.PreReleaseLabel}|ConvertTo-Json -Compress';
+  const output = await run(installation.executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command]);
   const data: unknown = JSON.parse(output.replace(/^\uFEFF/, '').trim());
   if (!data || typeof data !== 'object') throw new Error('Invalid PowerShell discovery response');
   const value = data as Record<string, unknown>;
@@ -129,4 +116,12 @@ export async function probeInstallation(installation: Installation, edition: Edi
     throw new Error('PowerShell returned unsupported or unresolved profile paths');
   }
   return { home: value.home, userDirectory: path.dirname(value.user) };
+}
+
+export function isPreviewInstallation(executable: string): boolean {
+  const normalized = executable.replace(/\\/g, '/');
+  return /(?:^|\/)powershell\/7(?:\.\d+)*(?:-preview[^/]*)\//i.test(normalized)
+    || /(?:^|\/)Caskroom\/powershell-preview\//i.test(normalized)
+    || /(?:^|\/)\.store\/powershell\/7\.\d+\.\d+-preview[^/]*\//i.test(normalized)
+    || /(?:^|\/)WindowsApps\/Microsoft\.PowerShellPreview_/i.test(normalized);
 }
