@@ -1,11 +1,12 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { affectsProfile, profileDependencies } from '../../src/powershell/watch';
+import { affectsProfile, profileDependencies, profileWatchPlan } from '../../src/powershell/watch';
 import { symlinksAvailable } from './symlinkCapability';
+vi.mock('node:fs/promises', {spy:true});
 const roots:string[]=[];
-afterEach(async()=>{for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});});
+afterEach(async()=>{vi.restoreAllMocks();for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});});
 async function root() {
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'personas-chain-'));roots.push(temp);
   return fs.realpath(temp);
@@ -40,4 +41,15 @@ it.skipIf(!symlinksAvailable)('retains a missing component before dot-dot so its
   const afterCreation=await profileDependencies(file);
   await fs.rmdir(path.join(base,'missing'));
   expect(affectsProfile(path.join(base,'missing'),afterCreation)).toBe(true);
+});
+
+it('filters events using the canonical parent spelling returned by the filesystem',async()=>{
+  const base=await root();
+  const {realpath}=await vi.importActual<typeof fs>('node:fs/promises');
+  const canonical=base+'-canonical';
+  vi.spyOn(fs,'realpath').mockImplementation(async directory=>
+    String(directory)===base ? canonical : realpath(directory));
+  const plan=await profileWatchPlan([path.join(base,'profile.ps1')]);
+  expect(plan.directories).toContain(canonical);
+  expect(affectsProfile(path.join(canonical,'profile.ps1'),plan.paths)).toBe(true);
 });

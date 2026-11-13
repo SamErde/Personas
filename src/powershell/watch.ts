@@ -48,12 +48,15 @@ export async function profileWatchPlan(files: string[]): Promise<{paths:string[]
   const paths = new Set<string>();
   for (const file of files) for (const dependency of await profileDependencies(file)) paths.add(dependency);
   const directories = new Set<string>();
-  for (const file of paths) {
+  for (const file of [...paths]) {
     let directory = path.dirname(file);
     while (true) {
       try {
         if ((await fs.stat(directory)).isDirectory()) {
-          directories.add(await fs.realpath(directory));
+          const canonical = await fs.realpath(directory);
+          directories.add(canonical);
+          // Watcher events use canonical directory names (including Windows 8.3 aliases).
+          paths.add(path.join(canonical, path.relative(directory, file)));
           break;
         }
       } catch { /* A missing or inaccessible parent needs a watch farther up. */ }
