@@ -36,6 +36,12 @@ _Avoid_: disabled, disabled (workspace)
 A Personas bulk operation that installs an extension separately into each profile; distinct from an extension being applied to all profiles.
 _Avoid_: install everywhere, install in all profiles
 
+### PowerShell
+
+**PowerShell profile**:
+A startup script stored at a standard, user- and host-scoped location that PowerShell loads automatically when starting a session with profile loading enabled. It customizes the shell through variables, functions, modules, prompts, and other session settings.
+_Avoid_: unqualified "profile", VS Code profile, persona
+
 ### Product surfaces
 
 **Home**:

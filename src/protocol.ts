@@ -1,3 +1,4 @@
+import type { PowerShellInventory } from './powershell/profiles';
 // Message formats between the extension host and its two webviews (the Extension Matrix and
 // Home). Kept apart from the domain types in core/types.ts: these change with the UI, not the data.
 import type {
@@ -69,6 +70,7 @@ export interface HomeWorkspaceVm {
 }
 
 export type HostToHome =
+  | { type: 'powerShellState'; inventory: PowerShellInventory }
   | {
       type: 'state';
       profiles: HomeProfileVm[];
@@ -80,6 +82,7 @@ export type HostToHome =
   | { type: 'unsupported'; reason: string };
 
 export type HomeToHost =
+  | { type: 'powerShellAction'; action: 'refresh' | 'help' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal'; id?: string }
   | { type: 'ready' }
   | { type: 'openMatrix' }
   | { type: 'openProfileReadOnly'; profileId: string }

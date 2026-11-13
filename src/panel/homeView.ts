@@ -1,3 +1,4 @@
+import { PowerShellController } from './powerShellController';
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { asError } from '../core/errors';
@@ -26,7 +27,11 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   private workspaceManifestPath: string | undefined;
   private renderGeneration = 0;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private readonly powerShell: PowerShellController;
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.powerShell = new PowerShellController(message => this.post(message));
+    context.subscriptions.push(this.powerShell);
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -78,6 +83,7 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async render(): Promise<void> {
+    void this.powerShell.refresh();
     const generation = ++this.renderGeneration;
     const setup = await getOrBuildServices(this.context);
     if (generation !== this.renderGeneration) return;
@@ -138,6 +144,7 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async onMessage(m: HomeToHost): Promise<void> {
+    if (m.type === 'powerShellAction') { await this.powerShell.handle(m); return; }
     if (m.type === 'openWorkspaceReadOnly' || m.type === 'editWorkspaceFile') {
       const action = resolveWorkspaceManifestAction(m, this.workspaceManifestPath);
       if (!action) return;
@@ -281,6 +288,18 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   .workspace-warning { margin: 0.25rem 0 0; font-size: 0.85em; }
   #extra p { margin: 0.4rem 0; }
   .warning-line { opacity: 0.9; }
+
+  .ps-toolbar, .ps-row { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+  .ps-row { margin: .4rem 0; }
+  .ps-action { border-radius: 3px; padding: .2rem .35rem; }
+  .ps-name { background: transparent; color: var(--vscode-textLink-foreground); }
+  .ps-missing { color: var(--vscode-descriptionForeground); }
+  button:disabled { opacity: .65; cursor: default; }
+  button:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+  .ps-menu { margin-left: auto; }
+  .ps-menu summary { cursor: pointer; }
+  .ps-menu-actions { display: flex; flex-direction: column; gap: .3rem; padding: .3rem; }
+  #powershell h4 { margin: .75rem 0 .3rem; font-size: .9em; }
 </style>
 </head>
 <body>
@@ -295,6 +314,10 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
 <div id="workspace"></div>
 <div id="extra"></div>
 </div>
+</section>
+<section class="home-section" aria-labelledby="powershell-heading">
+<h2 id="powershell-heading">PowerShell Profiles</h2>
+<div id="powershell" aria-live="polite">Discovering profiles…</div>
 </section>
 <script nonce="${nonce}" src="${script}"></script>
 </body>
