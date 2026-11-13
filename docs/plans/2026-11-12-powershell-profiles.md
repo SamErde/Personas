@@ -326,5 +326,6 @@ No real PowerShell profile was modified during development.
   reinspection discards stale link metadata. Regression tests reproduce both cases.
 - Automatic refresh preserves open menus and keyboard focus without taking focus
   from outside the section. DOM regression tests cover both behaviors.
-- The external-creation integration fixture uses exclusive creation to address
+- The external-creation integration fixture writes through an exclusively opened
+  file descriptor to address
   the CodeQL filesystem-race finding.
