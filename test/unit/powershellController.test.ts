@@ -144,6 +144,7 @@ it('reattaches watches when a profile directory is externally replaced at the sa
   parent.Delete(uri(root)); parent.Create(uri(root));
   await vi.waitFor(()=>expect(discover).toHaveBeenCalled(),{timeout:3000});
   await vi.waitFor(()=>expect(original.disposed).toBe(true));
+  expect(parent.disposed).toBe(false);
   const replacement=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
   expect(replacement).toBeDefined();
   await fs.unlink(file); replacement.Delete(uri(file));

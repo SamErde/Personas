@@ -9,8 +9,8 @@ import type { HostToHome, HomeToHost } from '../protocol';
 const helpUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
 export class PowerShellController implements vscode.Disposable {
 
-  private watchers: vscode.FileSystemWatcher[] = [];
-  private watchKey = '';
+  private watchers = new Map<string, vscode.FileSystemWatcher>();
+  private staleWatchRoots = new Set<string>();
   private active = false;
   private dependencies: string[] = [];
   private timer?: NodeJS.Timeout;
@@ -40,8 +40,8 @@ export class PowerShellController implements vscode.Disposable {
       try {
         const inventory = await this.service.refresh();
         if (this.disposed) return;
-        this.post({type:'powerShellState', inventory});
         await this.watch();
+        if (!this.disposed) this.post({type:'powerShellState', inventory});
       } catch (error) {
         this.post({type:'powerShellState', inventory:{editions:[],rows:[],error:String(error)}});
       }
@@ -52,15 +52,17 @@ export class PowerShellController implements vscode.Disposable {
     this.active = active;
     if (!active) {
       clearTimeout(this.timer);
-      for (const watcher of this.watchers) watcher.dispose();
-      this.watchers = [];
-      this.watchKey = '';
+      for (const watcher of this.watchers.values()) watcher.dispose();
+      this.watchers.clear();
+      this.staleWatchRoots.clear();
     }
   }
   private changed(uris: readonly vscode.Uri[], structural = false): void {
     if (this.active && uris.some(uri => uri.scheme === 'file' && affectsProfile(uri.fsPath, this.dependencies))) {
-      // The paths may be unchanged while a directory's underlying identity has changed.
-      if (structural) this.watchKey = '';
+      // Reattach replaced directories, keeping their unaffected parent watches alive.
+      if (structural) for (const base of this.watchers.keys()) {
+        if (uris.some(uri => uri.scheme === 'file' && affectsProfile(uri.fsPath, [base]))) this.staleWatchRoots.add(base);
+      }
       this.schedule();
     }
   }
@@ -77,17 +79,21 @@ export class PowerShellController implements vscode.Disposable {
     const plan = await profileWatchPlan(files);
     if (!this.active || this.disposed) return;
     this.dependencies = plan.paths;
-    const key = plan.directories.sort().join('\n');
-    if (key === this.watchKey) return;
-    this.watchKey = key;
-    for (const watcher of this.watchers) watcher.dispose();
-    this.watchers = [];
+    const bases = new Set(plan.directories);
+    for (const [base, watcher] of this.watchers) {
+      if (!bases.has(base) || this.staleWatchRoots.has(base)) {
+        watcher.dispose();
+        this.watchers.delete(base);
+      }
+    }
+    this.staleWatchRoots.clear();
     for (const base of plan.directories) {
+      if (this.watchers.has(base)) continue;
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), '*'));
       watcher.onDidCreate(uri => this.changed([uri], true));
       watcher.onDidChange(uri => this.changed([uri]));
       watcher.onDidDelete(uri => this.changed([uri], true));
-      this.watchers.push(watcher);
+      this.watchers.set(base, watcher);
     }
   }
   async handle(message: Extract<HomeToHost, {type:'powerShellAction'}>): Promise<void> {
@@ -145,6 +151,6 @@ export class PowerShellController implements vscode.Disposable {
   dispose(): void {
     this.disposed = true;
     clearTimeout(this.timer);
-    for (const item of [...this.watchers, ...this.events]) item.dispose();
+    for (const item of [...this.watchers.values(), ...this.events]) item.dispose();
   }
 }
