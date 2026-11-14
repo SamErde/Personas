@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import { affectsProfile, profileWatchPlan } from '../powershell/watch';
 import * as path from 'node:path';
 import { PowerShellService } from '../powershell/service';
-import { createProfile, deleteProfile, inspectProfile } from '../powershell/files';
+import { createProfile, deleteProfile, inspectProfile, nearestExistingDirectory } from '../powershell/files';
 import type { HostToHome, HomeToHost } from '../protocol';
 
 const helpUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
@@ -112,7 +112,9 @@ export class PowerShellController implements vscode.Disposable {
       if (!row.path) throw new Error('Profile path is unresolved');
       if (message.action === 'copy') { await vscode.env.clipboard.writeText(row.path); return; }
       if (message.action === 'reveal') {
-        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(row.state === 'missing' ? path.dirname(row.path) : row.path)); return;
+        // A missing profile's own folder may not exist yet, for example before the first one is created.
+        const target = row.state === 'missing' ? await nearestExistingDirectory(path.dirname(row.path)) : row.path;
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(target)); return;
       }
       if (message.action === 'delete') {
         await deleteProfile(location, {

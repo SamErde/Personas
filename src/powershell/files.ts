@@ -68,3 +68,15 @@ export async function deleteProfile(location: ProfileLocation, options: DeletePr
   // The adapter must use Trash and must propagate failure, never permanently delete.
   await options.trash(row.path);
 }
+
+/** The closest directory at or above a path that exists. Nothing is created. */
+export async function nearestExistingDirectory(start: string): Promise<string> {
+  let directory = start;
+  while (true) {
+    try { if ((await fs.stat(directory)).isDirectory()) return directory; }
+    catch { /* A missing or inaccessible directory: look farther up. */ }
+    const parent = path.dirname(directory);
+    if (parent === directory) return directory;
+    directory = parent;
+  }
+}

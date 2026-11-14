@@ -12,6 +12,7 @@ const mock = vi.hoisted(() => ({
   documents: [] as any[],
   errors: [] as string[],
   trashed: [] as string[],
+  commands: [] as any[][],
 }));
 vi.mock('vscode', () => {
   const register = (name:string) => (callback:(event:any)=>void) => {
@@ -22,6 +23,7 @@ vi.mock('vscode', () => {
     env: {},
     Uri: {file:(fsPath:string)=>({scheme:'file',fsPath})},
     RelativePattern: class { constructor(public baseUri:any, public pattern:string) {} },
+    commands: {executeCommand: async (...args:any[]) => {mock.commands.push(args);}},
     window: {
       showErrorMessage: (message:string) => {mock.errors.push(message);},
       showWarningMessage: async () => 'Move to Trash',
@@ -45,7 +47,7 @@ const controllers:PowerShellController[]=[];
 afterEach(async()=>{
   controllers.splice(0).forEach(controller=>controller.dispose());
   mock.events.clear();mock.watchers.length=0;vi.useRealTimers();
-  mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;
+  mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;mock.commands.length=0;
   for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});
 });
 async function setup() {
@@ -176,4 +178,18 @@ it('blocks deletion while a hard-linked alias of the profile has unsaved edits',
   mock.documents.splice(0,1,{isDirty:true,uri:uri(unrelated)});
   await controller.handle({type:'powerShellAction',action:'delete',id});
   expect(mock.trashed).toHaveLength(1);
+});
+
+it('reveals the nearest existing folder when a missing profile has no folder yet',async()=>{
+  const {root}=await setup();
+  const service=new PowerShellService(async()=>[{edition:'PowerShell 7' as const,userDirectory:path.join(root,'absent','powershell'),installations:[]}],undefined,'linux');
+  const controller=new PowerShellController(()=>{},service);
+  controllers.push(controller);
+  await controller.refresh();
+  const row=service.snapshot.rows.find(row=>row.host==='All Hosts')!;
+  expect(row.state).toBe('missing');
+  await controller.handle({type:'powerShellAction',action:'reveal',id:row.id});
+  expect(mock.commands).toEqual([['revealFileInOS',uri(root)]]);
+  expect(mock.errors).toEqual([]);
+  expect(await fs.readdir(root)).toEqual([]);
 });

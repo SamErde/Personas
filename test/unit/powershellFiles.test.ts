@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { createProfile, inspectProfile, deleteProfile } from '../../src/powershell/files';
+import { createProfile, inspectProfile, deleteProfile, nearestExistingDirectory } from '../../src/powershell/files';
 import type { ProfileLocation } from '../../src/powershell/profiles';
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await fs.rm(root, {recursive:true, force:true}); });
@@ -121,4 +121,13 @@ it.skipIf(!symlinksAvailable).each([true, false])('resolves a relative profile l
   const row=await inspectProfile({id:'parent-link',edition:'PowerShell 7',scope:'Current User',host:'Console',path:file,readOnly:false});
   expect(row.state).toBe(exists?'existing':'brokenLink');
   expect(row.target).toBe(target);
+});
+
+it('finds the nearest existing directory without creating the missing ones', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-profile-')); roots.push(root);
+  await fs.writeFile(path.join(root, 'file.txt'), 'not a directory');
+  expect(await nearestExistingDirectory(root)).toBe(root);
+  expect(await nearestExistingDirectory(path.join(root, 'absent', 'powershell'))).toBe(root);
+  expect(await nearestExistingDirectory(path.join(root, 'file.txt', 'nested'))).toBe(root);
+  expect(await fs.readdir(root)).toEqual(['file.txt']);
 });
