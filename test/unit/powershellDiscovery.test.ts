@@ -55,3 +55,20 @@ it('uses the Windows user profile for .NET tools even when HOME points elsewhere
     expect(seen.some(file=>file.includes('git-home'))).toBe(false);
   } finally {platform.mockRestore();home.mockRestore();vi.unstubAllEnvs();}
 });
+
+it.each(['/opt/homebrew','/usr/local'])('discovers the Homebrew LTS launcher under %s and resolves its installation root',async prefix=>{
+  const launcher=prefix+'/bin/pwsh-lts', libexec=prefix+'/Cellar/powershell-lts/7.4.0/libexec';
+  const posix=(file:unknown)=>String(file).replaceAll('\\','/');
+  const platform=vi.spyOn(process,'platform','get').mockReturnValue('darwin');
+  try {
+    const editions=await discoverPowerShell({...fs,
+      stat:async file=>{
+        if([launcher,libexec+'/System.Management.Automation.dll'].includes(posix(file))) return {isFile:()=>true} as never;
+        throw Object.assign(new Error('missing'),{code:'ENOENT'});
+      },
+      realpath:async file=>(posix(file)===launcher ? libexec+'/pwsh' : String(file)) as never,
+    });
+    expect(editions[0]?.installations.map(i=>[posix(i.executable),posix(i.home)])).toEqual([[libexec+'/pwsh',libexec]]);
+    expect(editions[0]?.reason).toBeUndefined();
+  } finally {platform.mockRestore();}
+});

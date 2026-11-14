@@ -69,6 +69,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
     for (const executable of [
       '/usr/local/microsoft/powershell/7/pwsh', '/opt/microsoft/powershell/7/pwsh',
       '/usr/local/bin/pwsh', '/opt/homebrew/bin/pwsh', '/usr/bin/pwsh',
+      '/usr/local/bin/pwsh-lts', '/opt/homebrew/bin/pwsh-lts',
       '/snap/powershell/current/opt/powershell/pwsh',
       ...(home ? [path.join(home, '.dotnet', 'tools', 'pwsh')] : []),
     ]) add(executable);
