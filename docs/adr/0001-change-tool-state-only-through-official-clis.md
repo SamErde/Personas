@@ -18,8 +18,9 @@ Exceptions:
   directly, while users edit their contents in the VS Code editor. These are
   user-authored startup scripts rather than tool-managed metadata; direct file
   management follows their normal editing model. Managing a file does not
-  automatically execute it. See the PowerShell feature plan for scope and
-  lifecycle decisions: `docs/plans/2026-11-12-powershell-profiles.md`.
+  automatically execute it. See the README's "PowerShell profiles" section for
+  scope, and `docs/spikes/powershell-profile-discovery.md` for the discovery
+  research.
 
 ## Reason
 
