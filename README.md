@@ -53,22 +53,27 @@ Personas reads the same files VS Code itself maintains: the profile registry and
 
 ## PowerShell profiles
 
-The Personas Home sidebar includes PowerShell Profiles with Current User and
-All Users groups. PowerShell 7 is supported on Windows, macOS, and Linux; Windows
-PowerShell and ISE rows appear only on Windows. Current-user files are listed
-once per edition, while distinct installations have separate all-users paths.
+The Personas Home sidebar includes a PowerShell Profiles section. It lists the
+PowerShell profiles that exist, grouped by edition and labeled by host and
+scope, in the order PowerShell loads them. Locations that have no script yet
+fold into one collapsed line per edition. PowerShell 7 is supported on Windows,
+macOS, and Linux; Windows PowerShell and ISE rows appear only on Windows.
+Current-user files are listed once per edition, while distinct installations
+have separate all-users paths.
 
-Open existing scripts in the editor or confirm Create and Open for a missing
-file. Row actions include Copy Path, Reveal in File Manager, and confirmed
-deletion to Trash/Recycle Bin. Deletion stops for unsaved edits or unavailable
-Trash. Linked profiles can be edited, but use the file manager to remove a link:
-the extension cannot guarantee link-only Trash behavior on every platform.
+Select a row to open its script in the editor, or to confirm Create and Open
+for a missing file. Each row's menu offers Copy Path, Reveal in File Manager,
+and confirmed deletion to Trash/Recycle Bin. Deletion stops for unsaved edits
+or unavailable Trash. Linked profiles can be edited, but use the file manager
+to remove a link: the extension cannot guarantee link-only Trash behavior on
+every platform.
 
 Discovery is passive by default and respects redirected Documents information.
-When a location cannot be resolved, Resolve Using PowerShell… explicitly launches
-the detected executable with profiles disabled and a five-second timeout.
-Successful results are cached for the session. Refresh never launches PowerShell.
-Help opens Microsoft's about_Profiles documentation.
+When a location cannot be resolved, the section says so and offers to run the
+detected executable (for example, "Run pwsh.exe to resolve"). That action
+launches it once with profiles disabled and a five-second timeout. Successful
+results are cached for the session. Refresh never launches PowerShell. Help
+opens Microsoft's about_Profiles documentation.
 
 This feature currently supports local desktop windows. WSL is the next planned
 scope; SSH and container windows may follow. Preview and custom installations,

@@ -99,7 +99,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
       edition, installations,
       userDirectory: installations.length ? userProfileDirectory(platform, edition, process.env, home, documents) : undefined,
       reason: errors.length ? errors.join('; ') : !installations.length ? 'Installation not found'
-        : platform === 'win32' && !documents ? 'Documents location unresolved. Use Resolve Using PowerShell….' : undefined,
+        : platform === 'win32' && !documents ? 'Documents location unresolved. Run PowerShell from this section to resolve it.' : undefined,
     };
   });
 }
