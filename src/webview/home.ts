@@ -1,3 +1,4 @@
+import { renderPowerShell } from './powershell';
 import type { ParseWarning } from '../core/types';
 import type { HomeProfileVm, HomeToHost, HomeWorkspaceVm, HostToHome } from '../protocol';
 import { isTrustedHostMessageOrigin } from './messageSecurity';
@@ -26,6 +27,9 @@ window.addEventListener('message', (event: MessageEvent<HostToHome>) => {
   if (!isTrustedHostMessageOrigin(event.origin, window.location.origin)) return;
   const m = event.data;
   switch (m.type) {
+    case 'powerShellState':
+      renderPowerShell(m.inventory, message => vscode.postMessage(message));
+      return;
     case 'state':
       state = m;
       orphanSizeText = '';

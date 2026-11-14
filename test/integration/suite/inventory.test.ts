@@ -1,3 +1,6 @@
+import { PowerShellController } from '../../../src/panel/powerShellController';
+import { PowerShellService } from '../../../src/powershell/service';
+import { deleteProfile } from '../../../src/powershell/files';
 import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -139,7 +142,7 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 /** Resolves once every test in the suite has run, with `true` if any of them failed. */
 export const done: Promise<boolean> = new Promise((resolveDone) => {
   describe('Personas end-to-end against a sandboxed VS Code', { timeout: SUITE_TIMEOUT_MS }, () => {
-    it('reads an inventory with the default profile from a fresh sandbox', guard(async () => {
+    it('reads an inventory with the default profile from a fresh sandbox', {skip:!!process.env.PERSONAS_IT_POWERSHELL_ONLY}, guard(async () => {
       const inventory = await new InventoryService(testPaths(), io).getInventory();
       assert.ok(inventory.profiles.some((p) => p.isDefault));
       assert.deepStrictEqual(inventory.warnings, []);
@@ -160,7 +163,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.strictEqual(candidate.profileBacked, false);
     }));
 
-    it('CLI changes fire the stable event and the installed fixture becomes positively enabled', guard(async () => {
+    it('CLI changes fire the stable event and the installed fixture becomes positively enabled', {skip:!!process.env.PERSONAS_IT_POWERSHELL_ONLY}, guard(async () => {
       const cliPath = findCli(vscode.env.appRoot, process.platform as Platform, (p) => fs.existsSync(p));
       assert.ok(cliPath, 'CLI not found from appRoot');
       const mutations = new MutationService({
@@ -205,6 +208,49 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.strictEqual(remaining, undefined);
     }));
 
+    it('opens a disposable PowerShell profile and blocks deletion of unsaved editor contents', guard(async () => {
+      const directory = path.join(workspaceDir, 'powershell-fixture');
+      const service = new PowerShellService(async () => [{
+        edition: 'PowerShell 7',
+        userDirectory: directory,
+        installations: [{ id: 'fixture', executable: path.join(directory, 'pwsh'), home: directory }],
+      }]);
+      const messages: string[] = [];
+      let confirmedPath: string | undefined;
+      const controller = new PowerShellController(message => messages.push(message.type), service, async file => {
+        confirmedPath = file; return true;
+      });
+      try {
+        controller.setActive(true);
+        await controller.refresh();
+        assert.ok(messages.includes('powerShellState'));
+        const row = service.snapshot.rows.find(item => item.scope === 'Current User' && item.host === 'Console')!;
+        await controller.handle({type:'powerShellAction',action:'open',id:row.id});
+        assert.strictEqual(confirmedPath, row.path);
+        const document = vscode.window.activeTextEditor!.document;
+        assert.strictEqual(comparableFsPath(document.uri.fsPath), comparableFsPath(row.path!));
+        const edit = new vscode.WorkspaceEdit();
+        edit.insert(document.uri, new vscode.Position(0,0), '# unsaved');
+        await vscode.workspace.applyEdit(edit);
+        assert.ok(document.isDirty);
+        await controller.handle({type:'powerShellAction',action:'delete',id:row.id});
+        assert.strictEqual(fs.readFileSync(row.path!, 'utf8'), '');
+        await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+        await deleteProfile(row, {
+          confirm: async () => true, isDirty: async () => false, canTrashLinks: false,
+          trash: async file => vscode.workspace.fs.delete(vscode.Uri.file(file), {useTrash:true,recursive:false}),
+        });
+        await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report deletion');
+        createProfileFixture(row.path!, '# external creation');
+        await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report external creation');
+        fs.renameSync(directory, directory + '-moved');
+        await waitFor(() => service.row(row.id)?.state === 'missing', 'Watcher did not report external directory rename');
+        fs.mkdirSync(directory);
+        createProfileFixture(row.path!, '# replacement directory');
+        await waitFor(() => service.row(row.id)?.state === 'existing', 'Watcher did not report directory recreation');
+      } finally { controller.dispose(); }
+    }));
+
     after(async () => {
       // Give the default reporter's still-pending stdout writes (e.g. this test's own pass/fail
       // line and the final summary) a chance to flush before index.ts's run() resolves and
@@ -214,6 +260,13 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
     });
   });
 });
+
+/** Create the fixture atomically; an existing file or link must fail rather than be overwritten. */
+function createProfileFixture(file: string, content: string): void {
+  const descriptor = fs.openSync(file, 'wx', 0o600);
+  try { fs.writeFileSync(descriptor, content); }
+  finally { fs.closeSync(descriptor); }
+}
 
 function nextExtensionsChange(): Promise<void> {
   return withTimeout(

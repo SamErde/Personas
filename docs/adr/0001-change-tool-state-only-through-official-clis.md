@@ -9,9 +9,17 @@ extension lists on disk; Git config), but changes that state only through the to
 official CLI: `code` for VS Code profiles and extensions, and `git config --local` for a
 repository's Git identity.
 
-The one exception is deleting orphaned extension folders: extension folders on disk that no
-profile references. No CLI command removes them, so Personas deletes them itself, to the
-trash and only after the user confirms.
+Exceptions:
+
+- Deleting orphaned extension folders: extension folders on disk that no profile
+  references. No CLI command removes them, so Personas deletes them itself, to the
+  trash and only after the user confirms.
+- Managing PowerShell profile scripts: Personas may create and delete these files
+  directly, while users edit their contents in the VS Code editor. These are
+  user-authored startup scripts rather than tool-managed metadata; direct file
+  management follows their normal editing model. Managing a file does not
+  automatically execute it. See the PowerShell feature plan for scope and
+  lifecycle decisions: `docs/plans/2026-11-12-powershell-profiles.md`.
 
 ## Reason
 
@@ -23,5 +31,5 @@ the reads are in `docs/spikes/findings.md`.
 ## Consequences
 
 - Personas never writes `storage.json`, any `extensions.json`, or a Git config file directly.
-- A change that no official CLI supports (for example, toggling "Apply Extension to all
+- Outside the exceptions above, a change that no official CLI supports (for example, toggling "Apply Extension to all
   Profiles") ships as a guided hand-off to the tool's own UI instead.

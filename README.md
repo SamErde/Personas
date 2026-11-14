@@ -50,3 +50,26 @@ or install state.
 ## How It Works
 
 Personas reads the same files VS Code itself maintains: the profile registry and each profile's extension list. All installs and uninstalls run through the official `code` command-line interface, scoped to the right profile (and, when applicable, the right `--user-data-dir`/`--extensions-dir`). Workspace status additionally uses the stable `vscode.extensions` API and a bounded read-only scan of immediate child directories under each local workspace root's `.vscode/extensions` folder. Personas does not read or write VS Code's SQLite state.
+
+## PowerShell profiles
+
+The Personas Home sidebar includes PowerShell Profiles with Current User and
+All Users groups. PowerShell 7 is supported on Windows, macOS, and Linux; Windows
+PowerShell and ISE rows appear only on Windows. Current-user files are listed
+once per edition, while distinct installations have separate all-users paths.
+
+Open existing scripts in the editor or confirm Create and Open for a missing
+file. Row actions include Copy Path, Reveal in File Manager, and confirmed
+deletion to Trash/Recycle Bin. Deletion stops for unsaved edits or unavailable
+Trash. Linked profiles can be edited, but use the file manager to remove a link:
+the extension cannot guarantee link-only Trash behavior on every platform.
+
+Discovery is passive by default and respects redirected Documents information.
+When a location cannot be resolved, Resolve Using PowerShell… explicitly launches
+the detected executable with profiles disabled and a five-second timeout.
+Successful results are cached for the session. Refresh never launches PowerShell.
+Help opens Microsoft's about_Profiles documentation.
+
+This feature currently supports local desktop windows. WSL is the next planned
+scope; SSH and container windows may follow. Preview and custom installations,
+profile execution/reload, templates, and content synchronization are deferred.
