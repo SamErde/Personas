@@ -72,3 +72,27 @@ it.each(['/opt/homebrew','/usr/local'])('discovers the Homebrew LTS launcher und
     expect(editions[0]?.reason).toBeUndefined();
   } finally {platform.mockRestore();}
 });
+
+it('uses the system folders as Windows PowerShell homes while a PowerShell 7 shim stays unresolved',async()=>{
+  const posix=(file:unknown)=>String(file).replaceAll('\\','/');
+  const platform=vi.spyOn(process,'platform','get').mockReturnValue('win32');
+  const home=vi.spyOn(os,'homedir').mockReturnValue('X:\\Users\\me');
+  // No drive X: exists, so the Documents lookup cannot start reg.exe on any platform.
+  vi.stubEnv('SystemRoot','X:\\Windows'); vi.stubEnv('LOCALAPPDATA','X:\\Local');
+  const executables=['System32','SysWOW64'].map(system=>'X:/Windows/'+system+'/WindowsPowerShell/v1.0/powershell.exe');
+  const shim='X:/Local/Microsoft/WindowsApps/pwsh.exe';
+  try {
+    // Only the executables exist: no System.Management.Automation.dll sits beside any of them.
+    const editions=await discoverPowerShell({...fs,readdir:async()=>[] as never,
+      stat:async file=>{
+        if([...executables,shim].includes(posix(file))) return {isFile:()=>true} as never;
+        throw Object.assign(new Error('missing'),{code:'ENOENT'});
+      },
+      realpath:async file=>String(file) as never,
+    });
+    const windows=editions.find(edition=>edition.edition==='Windows PowerShell');
+    expect(windows?.installations.map(i=>posix(i.home))).toEqual(executables.map(file=>file.replace('/powershell.exe','')));
+    const seven=editions.find(edition=>edition.edition==='PowerShell 7');
+    expect(seven?.installations.map(i=>[posix(i.executable),i.home])).toEqual([[shim,undefined]]);
+  } finally {platform.mockRestore();home.mockRestore();vi.unstubAllEnvs();}
+});

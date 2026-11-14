@@ -82,7 +82,10 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
     // Preview links must not accidentally bring Preview into the initial scope.
     if (isPreviewInstallation(actual)) continue;
     const directory = path.dirname(actual);
-    const psHome = await exists(path.join(directory, 'System.Management.Automation.dll'), io, errors) ? directory : undefined;
+    // The assembly check tells a real PowerShell 7 home from a shim. Windows PowerShell keeps that
+    // assembly in the GAC, and its system executables always sit in their own $PSHOME.
+    const psHome = candidate.edition === 'Windows PowerShell'
+      || await exists(path.join(directory, 'System.Management.Automation.dll'), io, errors) ? directory : undefined;
     const installation: Installation = {
       id: psHome ?? actual, executable: actual, home: psHome,
       readOnly: /[\\/]WindowsApps[\\/]/i.test(actual),
