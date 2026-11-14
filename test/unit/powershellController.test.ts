@@ -9,6 +9,9 @@ import { PowerShellService } from '../../src/powershell/service';
 const mock = vi.hoisted(() => ({
   events: new Map<string, (event: any) => void>(),
   watchers: [] as any[],
+  documents: [] as any[],
+  errors: [] as string[],
+  trashed: [] as string[],
 }));
 vi.mock('vscode', () => {
   const register = (name:string) => (callback:(event:any)=>void) => {
@@ -19,7 +22,13 @@ vi.mock('vscode', () => {
     env: {},
     Uri: {file:(fsPath:string)=>({scheme:'file',fsPath})},
     RelativePattern: class { constructor(public baseUri:any, public pattern:string) {} },
+    window: {
+      showErrorMessage: (message:string) => {mock.errors.push(message);},
+      showWarningMessage: async () => 'Move to Trash',
+    },
     workspace: {
+      textDocuments: mock.documents,
+      fs: {delete: async (file:any) => {mock.trashed.push(file.fsPath);}},
       onDidSaveTextDocument: register('save'), onDidCreateFiles: register('create'),
       onDidDeleteFiles: register('delete'), onDidRenameFiles: register('rename'),
       createFileSystemWatcher: (pattern:any) => {
@@ -36,6 +45,7 @@ const controllers:PowerShellController[]=[];
 afterEach(async()=>{
   controllers.splice(0).forEach(controller=>controller.dispose());
   mock.events.clear();mock.watchers.length=0;vi.useRealTimers();
+  mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;
   for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});
 });
 async function setup() {
@@ -149,4 +159,21 @@ it('reattaches watches when a profile directory is externally replaced at the sa
   expect(replacement).toBeDefined();
   await fs.unlink(file); replacement.Delete(uri(file));
   await vi.waitFor(()=>expect(service.snapshot.rows.find(row=>row.host==='All Hosts')?.state).toBe('missing'),{timeout:3000});
+});
+
+it('blocks deletion while a hard-linked alias of the profile has unsaved edits',async()=>{
+  const {root,controller,service}=await setup();
+  const file=path.join(root,'profile.ps1'), alias=path.join(root,'dotfiles.ps1'), unrelated=path.join(root,'unrelated.ps1');
+  await fs.writeFile(file,'content',{flag:'wx'}); await fs.link(file,alias);
+  await fs.writeFile(unrelated,'other',{flag:'wx'});
+  await controller.refresh();
+  const id=service.snapshot.rows.find(row=>row.host==='All Hosts')!.id;
+  mock.documents.push({isDirty:true,uri:uri(alias)});
+  await controller.handle({type:'powerShellAction',action:'delete',id});
+  expect(mock.errors.at(-1)).toContain('Save or revert unsaved edits');
+  expect(mock.trashed).toEqual([]);
+  // A dirty file with a different identity must not block the hard-linked profile.
+  mock.documents.splice(0,1,{isDirty:true,uri:uri(unrelated)});
+  await controller.handle({type:'powerShellAction',action:'delete',id});
+  expect(mock.trashed).toHaveLength(1);
 });

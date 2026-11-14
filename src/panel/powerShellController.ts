@@ -120,10 +120,15 @@ export class PowerShellController implements vscode.Disposable {
           canTrashLinks: false,
           isDirty: async file => {
             const target = await fs.realpath(file).catch(() => file);
+            // Hard links keep distinct canonical paths, so an alias is recognized by filesystem identity.
+            const identity = await fs.stat(file, {bigint:true}).catch(() => undefined);
             for (const document of vscode.workspace.textDocuments) {
               if (!document.isDirty || document.uri.scheme !== 'file') continue;
               const documentPath = await fs.realpath(document.uri.fsPath).catch(() => document.uri.fsPath);
               if (process.platform === 'win32' ? documentPath.toLowerCase() === target.toLowerCase() : documentPath === target) return true;
+              if (!identity || identity.nlink < 2n) continue;
+              const other = await fs.stat(document.uri.fsPath, {bigint:true}).catch(() => undefined);
+              if (other && other.dev === identity.dev && other.ino === identity.ino) return true;
             }
             return false;
           },
