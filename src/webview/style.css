@@ -23,7 +23,7 @@ body {
 }
 .chip.active {
   background: var(--vscode-button-background); color: var(--vscode-button-foreground);
-  border-color: var(--vscode-contrastActiveBorder, transparent);
+  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
 }
 .chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
 .chip.refresh { margin-left: auto; }
