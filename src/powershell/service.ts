@@ -16,8 +16,9 @@ export class PowerShellService {
       for (const installation of edition.installations) {
         const result = this.cached.get(installation.executable);
         if (result) {
-          installation.home = result.home;
-          // An authoritative passive user directory always wins over cached fallback.
+          // Authoritative passive results always win over the cached fallback. A Microsoft Store
+          // update, for example, moves the home while the launcher that keys the cache stays the same.
+          installation.home ??= result.home;
           edition.userDirectory ??= result.userDirectory;
         }
       }

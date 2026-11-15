@@ -25,3 +25,17 @@ it('keeps unresolved paths after a failed probe and rejects unknown installation
   await service.refresh();
   expect(service.snapshot.rows.every(r=>r.state==='unresolved')).toBe(true);
 });
+it('prefers a newly discovered installation home over the cached probe result', async () => {
+  // A Microsoft Store update replaces the package folder while the launcher alias stays the same.
+  let home='/package-1';
+  const discover = async (): Promise<EditionInfo[]> => [{
+    edition:'PowerShell 7', installations:[{id:home,executable:'/alias/pwsh',home}],
+  }];
+  const probe = vi.fn(async () => ({home:'/package-1',userDirectory:'/user/powershell'}));
+  const service = new PowerShellService(discover,probe,'linux');
+  await service.refresh(); await service.resolve('/package-1');
+  home='/package-2'; await service.refresh();
+  expect(probe).toHaveBeenCalledTimes(1);
+  expect(service.snapshot.rows.find(r=>r.host==='Console' && r.scope==='All Users')?.path).toBe('/package-2/Microsoft.PowerShell_profile.ps1');
+  expect(service.snapshot.rows.find(r=>r.host==='Console' && r.scope==='Current User')?.path).toBe('/user/powershell/Microsoft.PowerShell_profile.ps1');
+});
