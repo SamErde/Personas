@@ -1,3 +1,4 @@
+import { PowerShellController } from './powerShellController';
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { asError } from '../core/errors';
@@ -26,10 +27,16 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   private workspaceManifestPath: string | undefined;
   private renderGeneration = 0;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  private readonly powerShell: PowerShellController;
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.powerShell = new PowerShellController(message => this.post(message));
+    context.subscriptions.push(this.powerShell);
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    this.powerShell.setActive(webviewView.visible);
+    if (webviewView.visible) void this.powerShell.refresh(true);
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist')],
@@ -44,14 +51,19 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     this.maybeAutoOpen();
     void this.render();
     const visibilityListener = webviewView.onDidChangeVisibility(() => {
+      this.powerShell.setActive(webviewView.visible);
       if (webviewView.visible) {
+        void this.powerShell.refresh(true);
         this.maybeAutoOpen();
         void this.render();
       }
     });
     webviewView.onDidDispose(() => {
       visibilityListener.dispose();
-      if (this.view === webviewView) this.view = undefined;
+      if (this.view === webviewView) {
+        this.view = undefined;
+        this.powerShell.setActive(false);
+      }
     });
     this.context.subscriptions.push(visibilityListener);
   }
@@ -138,6 +150,7 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async onMessage(m: HomeToHost): Promise<void> {
+    if (m.type === 'powerShellAction') { await this.powerShell.handle(m); return; }
     if (m.type === 'openWorkspaceReadOnly' || m.type === 'editWorkspaceFile') {
       const action = resolveWorkspaceManifestAction(m, this.workspaceManifestPath);
       if (!action) return;
@@ -154,6 +167,7 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     }
     switch (m.type) {
       case 'ready':
+        if (this.view?.visible) void this.powerShell.refresh(true);
         await this.render();
         return;
       case 'openMatrix':
@@ -281,6 +295,157 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   .workspace-warning { margin: 0.25rem 0 0; font-size: 0.85em; }
   #extra p { margin: 0.4rem 0; }
   .warning-line { opacity: 0.9; }
+
+  button:disabled { opacity: .65; cursor: default; }
+  button:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+
+  /* PowerShell Profiles: a compact list in the manner of VS Code's own views. */
+  .ps-header { display: flex; align-items: center; gap: 2px; }
+  .ps-header h2 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ps-toolbar { display: flex; flex: none; gap: 2px; }
+  /* VS Code dims secondary list text by opacity; several themes give description text the foreground color. */
+  #powershell { margin: 0 -1rem; --ps-quiet: color-mix(in srgb, var(--vscode-foreground) 72%, transparent); }
+  #powershell [hidden] { display: none; }
+  .ps-message { margin: 0; padding: 0.15rem 1rem; color: var(--ps-quiet); }
+  .ps-edition + .ps-edition { margin-top: 6px; }
+  .ps-edition-name {
+    margin: 0;
+    padding: 0 1rem;
+    line-height: 22px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ps-list { list-style: none; margin: 0; padding: 0; }
+  .ps-icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.25;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ps-icon-more { stroke-width: 1.75; }
+  button.ps-tool, button.ps-more, button.ps-open, button.ps-fold, button.ps-resolve, button.ps-menu-item {
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+  button.ps-tool, button.ps-more {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    color: var(--vscode-icon-foreground);
+  }
+  button.ps-tool:hover, button.ps-more:hover, button.ps-more[aria-expanded="true"] {
+    background: var(--vscode-toolbar-hoverBackground);
+    outline: 1px dashed var(--vscode-contrastActiveBorder, transparent);
+    outline-offset: -1px;
+  }
+  button.ps-tool:focus-visible, button.ps-more:focus-visible, button.ps-fold:focus-visible, button.ps-resolve:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+  }
+
+  .ps-row, button.ps-fold, button.ps-resolve, .ps-note { height: 22px; line-height: 22px; }
+  .ps-row { position: relative; display: flex; align-items: center; padding: 0 calc(1rem - 4px) 0 1rem; }
+  .ps-row.ps-inert { padding-right: calc(1rem + 18px); }
+  .ps-row:not(.ps-inert):hover, .ps-row:focus-within, .ps-row.ps-menu-open, button.ps-fold:hover, button.ps-resolve:hover {
+    background: var(--vscode-list-hoverBackground);
+    outline: 1px dashed var(--vscode-contrastActiveBorder, transparent);
+    outline-offset: -1px;
+  }
+  .ps-row:has(button.ps-open:focus-visible) { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+  button.ps-open { flex: 1 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; gap: 6px; }
+  button.ps-open:focus-visible { outline: none; }
+  button.ps-open:disabled { opacity: 1; }
+  .ps-label, .ps-description, .ps-fold-label, .ps-note-text, .ps-resolve-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ps-label { flex: 0 1 auto; }
+  .ps-description { flex: 1 1 0; font-size: 0.9em; color: var(--ps-quiet); }
+  .ps-tag { flex: none; font-size: 0.85em; color: var(--ps-quiet); }
+  .ps-row[data-ps-state="missing"] button.ps-open, .ps-row[data-ps-state="unresolved"] button.ps-open {
+    color: var(--ps-quiet);
+  }
+  .ps-row[data-ps-state="missing"] button.ps-open:enabled:hover, .ps-row[data-ps-state="missing"] button.ps-open:focus-visible {
+    color: var(--vscode-foreground);
+  }
+  .ps-row[data-ps-state="brokenLink"] .ps-icon, .ps-row[data-ps-state="brokenLink"] .ps-tag, .ps-warning .ps-icon {
+    color: var(--vscode-list-warningForeground);
+  }
+  .ps-row[data-ps-state="inaccessible"] .ps-icon, .ps-row[data-ps-state="inaccessible"] .ps-tag {
+    color: var(--vscode-list-errorForeground);
+  }
+  button.ps-more { opacity: 0; }
+  .ps-row:hover button.ps-more, .ps-row:focus-within button.ps-more, .ps-row.ps-menu-open button.ps-more { opacity: 1; }
+  .ps-row[data-ps-state="brokenLink"] button.ps-more .ps-icon, .ps-row[data-ps-state="inaccessible"] button.ps-more .ps-icon {
+    color: inherit;
+  }
+
+  button.ps-fold, button.ps-resolve, .ps-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0 1rem;
+    font-size: 0.9em;
+    color: var(--ps-quiet);
+  }
+  button.ps-fold:hover, button.ps-fold:focus-visible { color: var(--vscode-foreground); }
+  button.ps-fold[aria-expanded="true"] .ps-icon { transform: rotate(90deg); }
+  button.ps-resolve { padding-left: calc(1rem + 22px); color: var(--vscode-textLink-foreground); }
+
+  .ps-menu {
+    position: absolute;
+    z-index: 10;
+    top: 100%;
+    right: 8px;
+    box-sizing: border-box;
+    max-width: calc(100% - 16px);
+    padding: 4px;
+    line-height: normal;
+    border: 1px solid var(--vscode-menu-border, var(--vscode-contrastBorder, transparent));
+    border-radius: 5px;
+    background: var(--vscode-menu-background);
+    color: var(--vscode-menu-foreground);
+    box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+  }
+  .ps-menu.ps-menu-up { top: auto; bottom: 100%; }
+  button.ps-menu-item {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  button.ps-menu-item:enabled:hover, button.ps-menu-item:focus-visible {
+    background: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+    outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+    outline-offset: -1px;
+  }
+  button.ps-menu-item:disabled { opacity: 1; color: var(--vscode-disabledForeground); }
+  .ps-menu-separator { margin: 4px 0; border: none; border-top: 1px solid var(--vscode-menu-separatorBackground); }
 </style>
 </head>
 <body>
@@ -295,6 +460,13 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
 <div id="workspace"></div>
 <div id="extra"></div>
 </div>
+</section>
+<section class="home-section" aria-labelledby="powershell-heading">
+<div class="ps-header">
+<h2 id="powershell-heading">PowerShell Profiles</h2>
+<div id="powershell-toolbar" class="ps-toolbar" role="toolbar" aria-label="PowerShell Profiles actions"></div>
+</div>
+<div id="powershell" aria-live="polite"><p class="ps-message">Discovering PowerShell profiles…</p></div>
 </section>
 <script nonce="${nonce}" src="${script}"></script>
 </body>
