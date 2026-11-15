@@ -218,11 +218,14 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
     background: var(--vscode-sideBar-background);
     padding: 0.5rem 1rem;
   }
+  /* High-contrast themes can color a button the same as the surface behind it and rely on
+   * contrastBorder for its edge. Other themes leave contrastBorder unset, so the border stays
+   * transparent there, and the padding gives back the border's 1px to keep the button's size. */
   button {
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
-    border: none;
-    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--vscode-contrastBorder, transparent);
+    padding: calc(0.3rem - 1px) calc(0.7rem - 1px);
     border-radius: 1rem;
     cursor: pointer;
   }

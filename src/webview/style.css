@@ -11,12 +11,20 @@ body {
   border: 1px solid var(--vscode-input-border, transparent);
   padding: 0.3rem 0.5rem;
 }
+/* High-contrast themes can color a button the same as the surface behind it (or leave its
+ * background unset) and rely on contrastBorder for its edge, with contrastActiveBorder marking the
+ * active one. Other themes leave both unset, so the border stays transparent there. Wherever a
+ * button draws this border, its padding gives back the border's 1px to keep the button's size. */
 .chip {
   background: var(--vscode-button-secondaryBackground);
   color: var(--vscode-button-secondaryForeground);
-  border: none; padding: 0.3rem 0.7rem; border-radius: 1rem; cursor: pointer;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  padding: calc(0.3rem - 1px) calc(0.7rem - 1px); border-radius: 1rem; cursor: pointer;
 }
-.chip.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.chip.active {
+  background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+}
 .chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
 .chip.refresh { margin-left: auto; }
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -93,7 +101,8 @@ th.ext-col { left: 0; z-index: 3; }
 .name[tabindex]:hover { text-decoration: underline; }
 .name[tabindex]:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
 .badge {
-  margin-left: 0.5rem; font-size: 0.7em; padding: 0.1rem 0.4rem; border-radius: 0.5rem; border: none; cursor: pointer;
+  margin-left: 0.5rem; font-size: 0.7em; padding: calc(0.1rem - 1px) calc(0.4rem - 1px); border-radius: 0.5rem; cursor: pointer;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
 }
 .muted { opacity: 0.55; }
@@ -164,7 +173,8 @@ td.crosshair-cell { outline: 1px solid var(--vscode-focusBorder); outline-offset
 .ext-card-meta { opacity: 0.7; font-size: 0.8em; margin-bottom: 0.5rem; }
 .ext-card-actions { display: flex; gap: 0.3rem; flex-wrap: wrap; }
 .ext-card-actions button {
-  font-size: 0.8em; padding: 0.2rem 0.5rem; border-radius: 0.5rem; border: none; cursor: pointer;
+  font-size: 0.8em; padding: calc(0.2rem - 1px) calc(0.5rem - 1px); border-radius: 0.5rem; cursor: pointer;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
 }
 .ext-card-actions button:disabled { cursor: not-allowed; opacity: 0.5; }
