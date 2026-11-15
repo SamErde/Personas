@@ -74,6 +74,13 @@ all-users profiles is not.
 Sources: [macOS installation paths](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-macos),
 [Windows installation limitations](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
 
+The Microsoft Store installation is started through the app execution alias
+`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`. Node cannot `stat` or `realpath`
+that alias (both fail with `EACCES`), but `readlink` returns the executable inside
+the package folder, and that folder is the PSHOME the installation reports.
+Verified on Windows with Node 24.22.3 and the Microsoft.PowerShell 7.7.0 Store
+package (2026-11-14).
+
 The .NET tool entry-point path must not be mistaken for PSHOME. Released source
 explicitly distinguishes the global-tool launcher location from the actual
 application directory.

@@ -73,14 +73,14 @@ it.each(['/opt/homebrew','/usr/local'])('discovers the Homebrew LTS launcher und
   } finally {platform.mockRestore();}
 });
 
-it('uses the system folders as Windows PowerShell homes while a PowerShell 7 shim stays unresolved',async()=>{
+it('uses the system folders as Windows PowerShell homes while a .NET tool shim stays unresolved',async()=>{
   const posix=(file:unknown)=>String(file).replaceAll('\\','/');
   const platform=vi.spyOn(process,'platform','get').mockReturnValue('win32');
   const home=vi.spyOn(os,'homedir').mockReturnValue('X:\\Users\\me');
   // No drive X: exists, so the Documents lookup cannot start reg.exe on any platform.
   vi.stubEnv('SystemRoot','X:\\Windows'); vi.stubEnv('LOCALAPPDATA','X:\\Local');
   const executables=['System32','SysWOW64'].map(system=>'X:/Windows/'+system+'/WindowsPowerShell/v1.0/powershell.exe');
-  const shim='X:/Local/Microsoft/WindowsApps/pwsh.exe';
+  const shim='X:/Users/me/.dotnet/tools/pwsh.exe';
   try {
     // Only the executables exist: no System.Management.Automation.dll sits beside any of them.
     const editions=await discoverPowerShell({...fs,readdir:async()=>[] as never,
@@ -95,4 +95,50 @@ it('uses the system folders as Windows PowerShell homes while a PowerShell 7 shi
     const seven=editions.find(edition=>edition.edition==='PowerShell 7');
     expect(seven?.installations.map(i=>[posix(i.executable),i.home])).toEqual([[shim,undefined]]);
   } finally {platform.mockRestore();home.mockRestore();vi.unstubAllEnvs();}
+});
+
+/** Windows with only the Microsoft Store alias, which stat cannot follow (EACCES) but readlink can. */
+async function discoverThroughStoreAlias(target:string,targetFiles:string[]){
+  const posix=(file:unknown)=>String(file).replaceAll('\\','/');
+  const alias='X:/Local/Microsoft/WindowsApps/pwsh.exe';
+  const platform=vi.spyOn(process,'platform','get').mockReturnValue('win32');
+  const home=vi.spyOn(os,'homedir').mockReturnValue('X:\\Users\\me');
+  // No drive X: exists, so the Documents lookup cannot start reg.exe on any platform.
+  vi.stubEnv('SystemRoot','X:\\Windows'); vi.stubEnv('LOCALAPPDATA','X:\\Local');
+  try {
+    const editions=await discoverPowerShell({...fs,readdir:async()=>[] as never,
+      stat:async file=>{
+        if(posix(file)===alias) throw Object.assign(new Error('access denied'),{code:'EACCES'});
+        if(targetFiles.includes(posix(file))) return {isFile:()=>true} as never;
+        throw Object.assign(new Error('missing'),{code:'ENOENT'});
+      },
+      readlink:async file=>{
+        if(posix(file)===alias) return target as never;
+        throw Object.assign(new Error('not a link'),{code:'EINVAL'});
+      },
+      realpath:async file=>String(file) as never,
+    });
+    const seven=editions.find(edition=>edition.edition==='PowerShell 7');
+    return {alias,reason:seven?.reason,installations:seven?.installations.map(i=>[posix(i.executable),i.home&&posix(i.home),i.readOnly])};
+  } finally {platform.mockRestore();home.mockRestore();vi.unstubAllEnvs();}
+}
+
+it('follows the Microsoft Store alias to its read-only PowerShell 7 home and keeps the alias as the launcher',async()=>{
+  const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe';
+  const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
+  expect(result.installations).toEqual([[result.alias,packaged,true]]);
+  expect(result.reason).not.toContain('access denied');
+});
+
+it('keeps a Microsoft Store alias to PowerShell Preview out of scope',async()=>{
+  const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShellPreview_7.6.0.0_x64__8wekyb3d8bbwe';
+  const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
+  expect(result.installations).toEqual([]);
+  expect(result.reason).toBe('Installation not found');
+});
+
+it('still reports the access failure when a Microsoft Store alias leads nowhere readable',async()=>{
+  const result=await discoverThroughStoreAlias('X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe/pwsh.exe',[]);
+  expect(result.installations).toEqual([]);
+  expect(result.reason).toContain('access denied');
 });

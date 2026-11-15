@@ -31,7 +31,7 @@ async function documentsDirectory(): Promise<string | undefined> {
   catch { return undefined; }
 }
 
-type DiscoveryIo = Pick<typeof fs, 'stat' | 'readdir' | 'realpath'>;
+type DiscoveryIo = Pick<typeof fs, 'stat' | 'readdir' | 'realpath' | 'readlink'>;
 function reportDiscoveryError(file: string, error: unknown, errors: string[]): void {
   const code = (error as NodeJS.ErrnoException).code;
   if (code !== 'ENOENT' && code !== 'ENOTDIR') errors.push(file + ': ' + String(error));
@@ -39,6 +39,20 @@ function reportDiscoveryError(file: string, error: unknown, errors: string[]): v
 async function exists(file: string, io: DiscoveryIo, errors: string[]): Promise<boolean> {
   try { return (await io.stat(file)).isFile(); }
   catch (error) { reportDiscoveryError(file, error, errors); return false; }
+}
+/** The executable behind a candidate. A Microsoft Store installation is started through an app
+ * execution alias, which stat cannot follow on Windows (EACCES) but readlink can.
+ */
+async function locate(file: string, platform: string, io: DiscoveryIo, errors: string[]): Promise<string | undefined> {
+  try { return (await io.stat(file)).isFile() ? file : undefined; }
+  catch (error) {
+    if (platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EACCES') {
+      const target = await io.readlink(file).catch(() => undefined);
+      if (target && path.win32.isAbsolute(target) && await exists(target, io, [])) return target;
+    }
+    reportDiscoveryError(file, error, errors);
+    return undefined;
+  }
 }
 
 export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionInfo[]> {
@@ -77,8 +91,9 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
   const found = new Map<Edition, Installation[]>();
   for (const candidate of candidates) {
     const errors = errorsFor(candidate.edition);
-    if (!await exists(candidate.executable, io, errors)) continue;
-    const actual = await io.realpath(candidate.executable).catch(() => candidate.executable);
+    const located = await locate(candidate.executable, platform, io, errors);
+    if (!located) continue;
+    const actual = await io.realpath(located).catch(() => located);
     // Preview links must not accidentally bring Preview into the initial scope.
     if (isPreviewInstallation(actual)) continue;
     const directory = path.dirname(actual);
@@ -87,7 +102,8 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
     const psHome = candidate.edition === 'Windows PowerShell'
       || await exists(path.join(directory, 'System.Management.Automation.dll'), io, errors) ? directory : undefined;
     const installation: Installation = {
-      id: psHome ?? actual, executable: actual, home: psHome,
+      // An alias stays the launcher: its target sits in a versioned package folder that every update replaces.
+      id: psHome ?? actual, executable: located === candidate.executable ? actual : candidate.executable, home: psHome,
       readOnly: /[\\/]WindowsApps[\\/]/i.test(actual),
     };
     const installs = found.get(candidate.edition) ?? [];
