@@ -2,6 +2,19 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.3.0](https://github.com/SamErde/Personas/compare/v1.2.0...v1.3.0) (2026-11-15)
+
+
+### Features
+
+* manage PowerShell profiles from Personas Home ([#116](https://github.com/SamErde/Personas/issues/116)) ([75e58aa](https://github.com/SamErde/Personas/commit/75e58aa449bf1af85d89cdf1b99a5709e516f2f9))
+* **matrix:** present the Agents window profile for what it is ([#110](https://github.com/SamErde/Personas/issues/110)) ([44e24b8](https://github.com/SamErde/Personas/commit/44e24b82736e9d4cc83994ab99c211ed54b63ac6))
+
+
+### Bug Fixes
+
+* outline buttons in high-contrast themes ([#118](https://github.com/SamErde/Personas/issues/118)) ([30db0de](https://github.com/SamErde/Personas/commit/30db0def88259d52f9271a8e706f97c898bccaa0))
+
 ## [1.2.0](https://github.com/SamErde/Personas/compare/v1.1.3...v1.2.0) (2026-10-23)
 
 
