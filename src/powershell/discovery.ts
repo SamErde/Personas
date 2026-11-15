@@ -123,6 +123,11 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
   });
 }
 
+/** Whether a directory still holds a PowerShell 7 installation: its engine assembly sits in $PSHOME. */
+export async function isPowerShellHome(directory: string): Promise<boolean> {
+  return fs.stat(path.join(directory, 'System.Management.Automation.dll')).then(stat => stat.isFile(), () => false);
+}
+
 /** Only the explicit UI action calls this function. No profile scripts or policy changes. */
 export async function probeInstallation(installation: Installation, edition: Edition, run = runFile): Promise<{ home: string; userDirectory: string }> {
   const command = '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [pscustomobject]@{home=$PSHOME;user=$PROFILE.CurrentUserAllHosts;major=$PSVersionTable.PSVersion.Major;preview=$PSVersionTable.PSVersion.PreReleaseLabel}|ConvertTo-Json -Compress';

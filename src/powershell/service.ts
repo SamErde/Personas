@@ -1,5 +1,5 @@
 import { buildProfileLocations, type PowerShellInventory, type ProfileRow } from './profiles';
-import { discoverPowerShell, probeInstallation } from './discovery';
+import { discoverPowerShell, isPowerShellHome, probeInstallation } from './discovery';
 import { inspectProfile } from './files';
 
 export class PowerShellService {
@@ -9,12 +9,19 @@ export class PowerShellService {
     private readonly discover = discoverPowerShell,
     private readonly probe = probeInstallation,
     private readonly platform = process.platform,
+    private readonly holdsPowerShell = isPowerShellHome,
   ) {}
   async refresh(): Promise<PowerShellInventory> {
     const editions = await this.discover();
     for (const edition of editions) {
       for (const installation of edition.installations) {
-        const result = this.cached.get(installation.executable);
+        let result = this.cached.get(installation.executable);
+        // An update can replace the home behind an unchanged launcher, such as a .NET tool shim.
+        // A cached home that is gone is forgotten, so the installation can be resolved again.
+        if (result && !installation.home && !await this.holdsPowerShell(result.home)) {
+          this.cached.delete(installation.executable);
+          result = undefined;
+        }
         if (result) {
           // Authoritative passive results always win over the cached fallback. A Microsoft Store
           // update, for example, moves the home while the launcher that keys the cache stays the same.
