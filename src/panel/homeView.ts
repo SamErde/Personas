@@ -331,6 +331,7 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   button.ps-tool, button.ps-more, button.ps-open, button.ps-fold, button.ps-resolve, button.ps-menu-item {
     margin: 0;
     padding: 0;
+    border: none;
     border-radius: 0;
     background: transparent;
     color: inherit;
