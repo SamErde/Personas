@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.3.1](https://github.com/SamErde/Personas/compare/v1.3.0...v1.3.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* update vulnerable packaging dependencies ([#121](https://github.com/SamErde/Personas/issues/121)) ([49af2a6](https://github.com/SamErde/Personas/commit/49af2a65f792c00f24a751104c2e5142977e9d37))
+
 ## [1.3.0](https://github.com/SamErde/Personas/compare/v1.2.0...v1.3.0) (2026-11-15)
 
 
