@@ -14,7 +14,7 @@ The work is done when all of the following are true:
 4. A person can group the list by name or publisher, with group headings that assistive technology announces.
 5. Profiles appear in the same order in the Home profile list and the matrix columns: Default first, then the Agents window profile when it is shown, then every other profile in alphanumeric order.
 6. Profile names in Home are plain text, and the pencil icon is the only control beside each name.
-7. Home's buttons use VS Code's standard button shape instead of pills, and the Open Extension Matrix button stays under the section heading.
+7. Home's buttons use VS Code's standard button shape instead of pills, and the Open Extension Matrix button stays under the "VS Code Profiles" heading.
 8. Home's first section is headed "VS Code Profiles," with no "Profiles" subheading above the profile list.
 9. Each change ships with unit tests for its logic, and the existing integration suite still passes.
 
