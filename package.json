@@ -90,5 +90,10 @@
     "jsdom": "^31.0.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "@vscode/vsce": {
+      "minimatch": "^11.0.1"
+    }
   }
 }
