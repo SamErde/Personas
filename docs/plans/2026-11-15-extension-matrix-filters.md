@@ -27,13 +27,17 @@ These facts were checked against `main` at `bbd82a6` (release 1.3.0, which inclu
 | Cells | Writable cells are bare checkboxes with no accessible name. The name cell is a `td`, not a row header. | `renderContent` in `main.ts` |
 | Cell states | Inherited and applied-to-all cells both render a muted check mark, distinguished only by `title`. An inherited cell that is not installed renders an empty string. | `renderContent` |
 | Rendering | Every keystroke and host message tears down and rebuilds the whole table, with listeners attached per row. | `renderContent` |
-| Crosshair | Indexing assumes every row has exactly one cell per column, with no spans. | `src/webview/crosshair.ts`, end of `renderContent` |
-| Extension data | `ExtensionRecord` carries `publisher`, `publisherDisplayName`, `description`, and `installedTimestampMs`. It does not carry `categories` or `metadata.source`. | `src/core/types.ts`, `src/core/inventory.ts` |
+| Focus | A rebuild drops keyboard focus to the page body. Toggling a checkbox rebuilds the table at once and replaces the checkbox with a pending spinner, so focus is lost on every toggle. Focus is restored only for controls inside the hover card. | `renderContent`, `syncOpenCard` in `main.ts` |
+| Crosshair | Indexing assumes every row has exactly one cell per column, with no spans. Hit testing treats every `th` as a column header, and row highlighting selects only `td` cells by column index. `style.css` makes every `th` sticky to the top of the table. | `src/webview/crosshair.ts`, `gridHitAt` and `applyCrosshair` in `main.ts`, `src/webview/style.css` |
+| Disabled cells | A cell is disabled when any warning names its profile, including duplicate-name warnings, but its tooltip always says the extension list could not be read. An unreadable profile counts as having nothing installed. When Default's list is unreadable, profiles that inherit from Default also show nothing installed, while the warning names only Default. | `disabledProfileIds` in `inventoryQueries.ts`, `composeInventory`, `renderContent` |
+| View chips | The view chips are plain buttons whose selection is shown only by a CSS class, so assistive technology cannot tell which view is active. | `updateChipButtons` in `main.ts` |
+| Panel state | The matrix panel uses `retainContextWhenHidden`, so its state survives hiding. Closing the panel disposes it, and webview state is lost with it. | `src/panel/matrixPanel.ts` |
+| Extension data | `ExtensionRecord` carries `publisher`, `publisherDisplayName`, `description`, and `installedTimestampMs`. It does not carry `categories` or `metadata.source`. Each package field comes from the first readable version folder in directory order, including obsolete folders. Manifest entries are parsed in `parsers.ts`, and workspace-only extensions read their metadata through a separate path. | `src/core/types.ts`, `src/core/inventory.ts`, `src/core/parsers.ts`, `src/core/workspace.ts` |
 | Install source | `metadata.source: "gallery"` is confirmed in real manifests. Other values such as `vsix` and `resource` are ASSERTED. | `docs/spikes/findings.md` |
 | Profile counts | Home already computes per-profile counts (`direct`, `fromDefault`, `appliedToAllProfiles`). The matrix headers do not show counts. | `src/protocol.ts` (`HomeProfileVm`) |
 | Profile order | Default comes first, and every other profile follows in VS Code's unsorted registry order. Home and the matrix both use this order. | `composeInventory` in `src/core/inventory.ts` |
 | Home profile names | For a profile with its own extensions, the name is a link that opens its `extensions.json` read-only, and a pencil (an `a` element with `role="button"`) opens the raw file for editing with a caution. A profile that inherits Default's extensions shows a plain-text name and no pencil. | `src/webview/home.ts`, `src/panel/homeView.ts` |
-| Tests | `render.test.ts` covers the view model, and `inventory.test.ts` covers parsing. | `test/unit/` |
+| Tests | `render.test.ts` covers the view model, `inventory.test.ts` covers parsing, and `crosshair.test.ts` covers the pure crosshair logic with pre-classified hits. No test renders the matrix DOM. `powershellRender.test.ts` already renders Home markup under jsdom, which is a pattern the matrix can follow. | `test/unit/` |
 
 ## Scope and non-goals
 
@@ -63,11 +67,11 @@ The work ships as six small PRs, with accessibility first because every later PR
 
 | PR | Change | Main files | Depends on |
 | --- | --- | --- | --- |
-| 1. Accessible cells | Make the name cell a `th scope="row"`, give each checkbox an accessible name ("Install PowerShell in Work"), and give every non-checkbox cell an `aria-label` naming its state. Give inherited, applied-to-all, and not-installed cells distinct glyphs, and add a short legend. | `main.ts`, `style.css`, `render.ts` | None |
-| 2. Extension data | Add `categories` from `package.json` and an install source from `metadata.source` to `ExtensionRecord`, with parser tests. | `types.ts`, `inventory.ts`, `inventory.test.ts` | None |
-| 3. Filter model | Replace the single `chip` value with a filter state that has separate dimensions. Add publisher search, a debounce on the text filter, and an announced result count. | `render.ts`, `main.ts`, `render.test.ts` | 1 |
-| 4. Category, publisher, and source filters | Add the three filter menus and the row of active-filter chips. | `main.ts`, `style.css`, `render.ts` | 2 and 3 |
-| 5. Group by | Add a Group by control (None, Name, or Publisher) that renders a `tbody` per group with a heading row, and update the crosshair to skip heading rows. | `main.ts`, `crosshair.ts`, `crosshair.test.ts` | 1 and 3 |
+| 1. Accessible cells | Make the name cell a `th scope="row"`, and update the crosshair and sticky-header styles so they tell column headers, row headers, and cells apart. Give each checkbox a stable accessible name ("PowerShell in Work") with its native checked state, and give every non-checkbox cell an `aria-label` naming its state. Separate whether an install is known from whether a cell can act, and give each disabled cell its real reason. Give inherited, applied-to-all, not-installed, and unknown cells distinct glyphs, and add a short legend. Preserve keyboard focus across rebuilds. Move the table renderer where a jsdom test can call it. | `main.ts`, `style.css`, `render.ts`, a new matrix DOM test | None |
+| 2. Extension data | Add `categories` from `package.json` and an install source from `metadata.source` to `ExtensionRecord`, with parser and composition tests. | `types.ts`, `parsers.ts`, `inventory.ts`, `parsers.test.ts`, `inventory.test.ts` | None |
+| 3. Filter model | Replace the single `chip` value with a filter state that has separate dimensions, and expose the selected view to assistive technology. Add publisher search, a debounce on the text filter, an announced result count, and session persistence for the view state. | `render.ts`, `main.ts`, `matrixPanel.ts`, `protocol.ts`, `render.test.ts` | 1 |
+| 4. Category, publisher, and source filters | Add the three filter controls and the row of active-filter chips. | `main.ts`, `style.css`, `render.ts` | 2 and 3 |
+| 5. Group by | Add a Group by control (None, Name, or Publisher) that renders a `tbody` per group with a heading row. Update the crosshair to skip heading rows, and keep the hover card's row index in step with the grouped order. | `main.ts`, `render.ts`, `crosshair.ts`, `crosshair.test.ts`, the matrix DOM test | 1 and 3 |
 | 6. Profile order and Home names | Sort profiles once in `composeInventory` so Home and the matrix share one order. Make Home profile names plain text, and make the pencil a native `button` instead of an `a` element with `role="button"`. | `inventory.ts`, `home.ts`, `inventory.test.ts` | None |
 
 PRs 1, 2, and 6 can proceed in parallel, and PR 6 can ship first. If any PR uncovers a larger problem, it pauses and the plan is updated before work continues.
@@ -78,17 +82,23 @@ These decisions are directional. Details that depend on testing are left to the 
 
 **Filter semantics.** Values within one dimension combine with "or," and dimensions combine with "and." The view chips (All, Orphaned, and Applied to all profiles) stay single-select, because each one is a different lens rather than an attribute. All filter logic lives in pure functions in `render.ts`, so it can be unit-tested without a DOM.
 
-**Filter menus.** Category, Publisher, and Source are menu buttons that open a checklist with a count beside each value. A count reflects the other active filters, so it predicts what selecting that value will show. The Publisher menu gets its own search box when it has more than 10 values. Escape closes a menu and returns focus to its button, which matches the PowerShell row menu. Active filters appear as removable chips beside a Clear filters button.
+**Filter controls.** Category, Publisher, and Source are disclosure buttons (with `aria-expanded`) that each open a group of native, labelled checkboxes rather than ARIA menus, so Tab moves through the values and no arrow-key model is needed. Each value shows how many rows match it under the other active filters. The count does not promise the total after a click, and a row with several categories or sources counts once under each of its values. The Publisher group gets its own search box when it has more than 10 values. Escape closes an open group and returns focus to its button. Active filters appear as removable chips with names such as "Remove publisher Microsoft filter," beside a Clear filters button. If the three buttons do not fit the toolbar, a single Filters disclosure holding all three groups is the fallback.
+
+**View chips.** The view chips (All, Orphaned, and Applied to all profiles) expose which one is selected, either as a native radio group or with `aria-pressed`.
+
+**Categories.** PR 2 states which version folder supplies an extension's categories, preferring the versions that the profile manifests point to over obsolete folders, and tests that choice. A row without categories, including a workspace-only row, falls under Unknown.
 
 **Install source.** The record keeps every distinct `metadata.source` value across profiles, because one extension can be installed from the Marketplace in one profile and from a VSIX in another. Labels are Marketplace (`gallery`), VSIX (`vsix`), Other, and Unknown (no value). A row matches the filter when any of its sources matches.
 
 **Publisher.** The filter key is the lowercase publisher ID, and the label is `publisherDisplayName` when present. Workspace-only rows that lack this data fall under Unknown.
 
-**Group by.** Grouping renders one `tbody` per group, headed by a row with a single `th scope="rowgroup"` that spans the table and shows the group's count. Name groups run A to Z, with a final "#" group for names that start with a digit or symbol. Groups are not collapsible in the first version, which keeps the focus model simple.
+**Group by.** Grouping renders one `tbody` per group, headed by a row with a single `th scope="rowgroup"` that spans the table and shows the group's count. Name groups run A to Z by the first character of the trimmed name with accents removed. A final "#" group holds every name whose first character is not a Latin letter, so every row lands in exactly one group. Groups are not collapsible in the first version, which keeps the focus model simple.
 
-**Cell states.** Each state gets a glyph that differs in shape, not only color, plus screen reader text and a legend entry. The glyphs must stay legible in high-contrast themes.
+**Cell states.** The view model separates what is known about an install (installed, not installed, or unknown because a list could not be read) from whether the cell can act and why not. Profiles that inherit from an unreadable Default are unknown too. Each state gets a glyph that differs in shape, not only color, plus screen reader text and a legend entry. Pending, inherited, applied-to-all, unknown, and workspace-only cells each get their own description. The glyphs must stay legible in high-contrast themes.
 
-**State persistence.** The view, filters, and grouping are saved with the webview's `setState` so they survive reopening the panel. They are not saved across VS Code restarts.
+**Focus.** A rebuild restores keyboard focus to the same control, keyed by extension, profile, and control type. When that control is gone, such as a cell that is now pending or a row that was filtered out, focus moves to a defined nearby control, such as the row header or the filter box. A rebuild never moves focus that was outside the matrix.
+
+**State persistence.** The view, filters, and grouping survive hiding the panel, which `retainContextWhenHidden` already provides. To also survive closing and reopening the panel, the extension host keeps them in memory for the session and sends them to the new panel, because webview state is destroyed with its panel. They are not saved across VS Code restarts.
 
 **Performance.** The text filter gets a short debounce, and the hover card uses one delegated listener instead of one per row. Any deeper change to the full-table rebuild waits for a measurement with at least 300 extensions and 6 profiles.
 
@@ -105,12 +115,14 @@ Each PR must pass `npm run lint`, `npm test`, and `npm run test:integration` bef
 | Check | How | PRs |
 | --- | --- | --- |
 | Filter logic | Unit tests in `render.test.ts` for each view, each filter dimension, the and/or combination, inheriting profiles, unreadable profiles, and workspace-only rows. | 3, 4 |
-| Parsing | Unit tests in `inventory.test.ts` for missing `categories`, missing `metadata`, and an extension with different sources in two profiles. | 2 |
+| Parsing | Unit tests in `parsers.test.ts` and `inventory.test.ts` for missing or malformed `categories`, missing `metadata`, an extension with different sources in two profiles, and conflicting categories across current and obsolete version folders. | 2 |
+| Matrix DOM | jsdom tests, following `powershellRender.test.ts`, for focus restoration after a toggle, an unrelated refresh, and removal of the focused row. They also cover row-header classification in the crosshair, accessible names and checked states, filter-chip removal, and grouped row indexing. These tests do not replace the NVDA and theme checks. | 1, 3, 4, 5 |
 | Profile order | Unit tests in `inventory.test.ts` for Default first, the Agents window profile second, natural number order, mixed case, and the Agents window setting turned off, plus a manual check that the Home list and the matrix columns match. | 6 |
-| Grouping and crosshair | Unit tests for group order (including the "#" group) and for crosshair indexing that skips heading rows. | 5 |
+| Grouping and crosshair | Unit tests for group order, the "#" group, accented and non-Latin names, every row appearing exactly once, and crosshair indexing that skips heading rows. | 5 |
 | Screen reader | A manual pass with NVDA on Windows that checks cell names, row headers, group headings, menu focus, the result announcement, and the Home pencil button. | 1, 3, 4, 5, 6 |
-| Keyboard | Every control is reachable by Tab, menus and the Home pencil button open with Enter or Space, and Escape returns focus to the menu button. | 3, 4, 5, 6 |
+| Keyboard | Every control is reachable by Tab, filter groups and the Home pencil button open with Enter or Space, Escape returns focus to the filter button, and toggling a checkbox leaves focus on that cell. | 1, 3, 4, 5, 6 |
 | Themes | Light, dark, and both high-contrast themes, checking glyphs, chips, and focus rings. | 1, 4, 5 |
+| Panel state | Hide and reveal the panel, then close and reopen it, and confirm that the view, filters, and grouping return both times. | 3 |
 | Performance | Time a full render with a fixture of 300 extensions and 6 profiles before and after PR 3. | 3 |
 
 ## Uncertainty log
@@ -120,10 +132,10 @@ These are the assumptions most likely to be wrong, with what would settle each o
 | Assumption | Risk if wrong | How to settle it |
 | --- | --- | --- |
 | `metadata.source` uses `vsix` and `resource` besides `gallery`. | The Source filter mislabels or hides some extensions. | Sideload a VSIX into a test profile and read its manifest entry. |
-| Filter menus fit in the toolbar beside the view chips at a typical panel width. | The toolbar wraps into a cluttered second row. | Prototype the toolbar at 600px and 1,000px widths. |
+| Three filter buttons fit in the toolbar beside the view chips at a typical panel width. | The toolbar wraps into a cluttered second row. | Prototype the toolbar at 600px and 1,000px widths, and use the single Filters disclosure if it wraps. |
 | A `th scope="rowgroup"` heading row announces correctly in NVDA inside a sticky-header table. | Group headings are silent or announced as data. | Test the markup in NVDA before building PR 5. |
 | The full-table rebuild is fast enough at 300 extensions. | Typing in the filter box lags. | Measure as described in the verification plan. |
-| Faceted counts (counts that reflect other filters) are worth their complexity. | The menus are harder to build and test than plain totals. | Decide during PR 4 after seeing real data. |
+| Faceted counts (counts that reflect other filters) are worth their complexity. | The filter groups are harder to build and test than plain totals. | Decide during PR 4 after seeing real data. |
 
 ## Adversarial review brief
 
@@ -144,4 +156,4 @@ Each review round adds a row here, and the plan sections above are revised in pl
 
 | Round | Reviewer | Verdict | Changes made |
 | --- | --- | --- | --- |
-| 1 | gpt-6-astra (Codex CLI, high reasoning) | Not yet run | None |
+| 1 | gpt-6-astra (Codex CLI, high reasoning) | Ready after named changes | Accepted all ten findings after checking them in code. Added focus preservation, crosshair and sticky-header fixes, a cell knowledge model, and a matrix DOM test harness to PR 1. Replaced filter menus with disclosure buttons over native checkboxes, kept a single Filters panel as the fallback, exposed the selected view chip, and corrected the faceted-count promise. Moved session persistence to the extension host. Named `parsers.ts` and category provenance in PR 2, and made name grouping total. |
