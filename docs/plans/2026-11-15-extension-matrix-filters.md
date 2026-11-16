@@ -4,7 +4,7 @@ Drafted 2026-11-15 by Sam Erde with Claude. Sam's working copy of this plan is t
 
 ## Goal
 
-The Extension Matrix shows which extensions are installed in which profile, and it lets a person add or remove an extension in any profile from one place instead of switching profiles to do it. This work keeps that purpose and makes the matrix easier to read, narrow down, and use by keyboard or screen reader. The matrix stays neutral about which profiles should contain which extensions, so nothing in it should imply that profiles ought to match. The work also gives profiles one predictable order in both Home and the matrix, and it simplifies the profile names in Home.
+The Extension Matrix shows which extensions are installed in which profile, and it lets a person add or remove an extension in any profile from one place instead of switching profiles to do it. This work keeps that purpose and makes the matrix easier to read, narrow down, and use by keyboard or screen reader. The matrix stays neutral about which profiles should contain which extensions, so nothing in it should imply that profiles ought to match. The work also gives profiles one predictable order in both Home and the matrix, and it simplifies the profile names and buttons in Home.
 
 The work is done when all of the following are true:
 
@@ -14,7 +14,8 @@ The work is done when all of the following are true:
 4. A person can group the list by name or publisher, with group headings that assistive technology announces.
 5. Profiles appear in the same order in the Home profile list and the matrix columns: Default first, then the Agents window profile when it is shown, then every other profile in alphanumeric order.
 6. Profile names in Home are plain text, and the pencil icon is the only control beside each name.
-7. Each change ships with unit tests for its logic, and the existing integration suite still passes.
+7. Home's buttons use VS Code's standard button shape instead of pills, and the Open Extension Matrix button stays under the Profiles & Extensions heading.
+8. Each change ships with unit tests for its logic, and the existing integration suite still passes.
 
 ## Current state on main
 
@@ -36,6 +37,7 @@ These facts were checked against `main` at `bbd82a6` (release 1.3.0, which inclu
 | Install source | `metadata.source: "gallery"` is confirmed in real manifests. Other values such as `vsix` and `resource` are ASSERTED. | `docs/spikes/findings.md` |
 | Profile counts | Home already computes per-profile counts (`direct`, `fromDefault`, `appliedToAllProfiles`). The matrix headers do not show counts. | `src/protocol.ts` (`HomeProfileVm`) |
 | Profile order | Default comes first, and every other profile follows in VS Code's unsorted registry order. Home and the matrix both use this order. | `composeInventory` in `src/core/inventory.ts` |
+| Home buttons | The base `button` style in Home gives every button a pill shape (`border-radius: 1rem`) with a high-contrast border from [PR #118](https://github.com/SamErde/Personas/pull/118). Open Extension Matrix, under the Profiles & Extensions heading, is the only button that still shows the pill, because the workspace card and PowerShell buttons override it. The workspace card is one card-wide button with 3px top corners, and its Open manifest and Edit manifest buttons are styled as text links. | `src/panel/homeView.ts` styles, `src/webview/home.ts` |
 | Home profile names | For a profile with its own extensions, the name is a link that opens its `extensions.json` read-only, and a pencil (an `a` element with `role="button"`) opens the raw file for editing with a caution. A profile that inherits Default's extensions shows a plain-text name and no pencil. | `src/webview/home.ts`, `src/panel/homeView.ts` |
 | Tests | `render.test.ts` covers the view model, `inventory.test.ts` covers parsing, and `crosshair.test.ts` covers the pure crosshair logic with pre-classified hits. No test renders the matrix DOM. `powershellRender.test.ts` already renders Home markup under jsdom, which is a pattern the matrix can follow. | `test/unit/` |
 
@@ -51,6 +53,7 @@ In scope:
 - Search that also matches the publisher.
 - One shared profile order for Home and the matrix.
 - Plain-text profile names in Home.
+- VS Code's standard button shape for Home's buttons, including a check of the workspace card buttons.
 
 Out of scope:
 
@@ -73,7 +76,7 @@ The work ships as seven small PRs, with accessibility first because every later 
 | 3. Filter model | Replace the single `chip` value with a filter state that has separate dimensions, and expose the selected view to assistive technology. Add publisher search, a debounce on the text filter, an announced result count, and session persistence for the view state. | `render.ts`, `main.ts`, `matrixPanel.ts`, `protocol.ts`, `render.test.ts` | 1 |
 | 4. Category, publisher, and source filters | Add the three filter controls and the row of active-filter chips. | `main.ts`, `style.css`, `render.ts` | 2 and 3 |
 | 5. Group by | Add a Group by control (None, Name, or Publisher) that renders a `tbody` per group with a heading row. Update the crosshair to skip heading rows, and keep the hover card's row index in step with the grouped order. | `main.ts`, `render.ts`, `crosshair.ts`, `crosshair.test.ts`, the matrix DOM test | 1 and 3 |
-| 6. Profile order and Home names | Sort profiles once in `composeInventory` so Home and the matrix share one order. Make Home profile names plain text, and make the pencil a native `button` instead of an `a` element with `role="button"`. | `inventory.ts`, `home.ts`, `inventory.test.ts` | None |
+| 6. Profile order, Home names, and Home buttons | Sort profiles once in `composeInventory` so Home and the matrix share one order. Make Home profile names plain text, and make the pencil a native `button` instead of an `a` element with `role="button"`. Keep Open Extension Matrix under the section heading, restyle Home's buttons to VS Code's standard shape, and check the workspace card buttons against the same style. | `inventory.ts`, `home.ts`, `homeView.ts`, `inventory.test.ts` | None |
 
 PRs 1, 2, and 6 can proceed in parallel, and PR 6 can ship first. PR 1b can proceed in parallel with PRs 3 to 5 once PR 1 merges. If any PR uncovers a larger problem, it pauses and the plan is updated before work continues.
 
@@ -107,6 +110,8 @@ These decisions are directional. Details that depend on testing are left to the 
 
 **Home profile names.** Removing the name link also removes the read-only view of a profile's `extensions.json`, because only the link offers it. Sam accepted that loss on 2026-11-15, so PR 6 is not blocked.
 
+**Home buttons.** Home's buttons take VS Code's standard shape, with a 2px corner radius and full width up to a maximum, instead of pills. The maximum should match the buttons VS Code shows in its own views, which PR 6 confirms rather than guesses. The high-contrast border from PR #118 stays. The workspace card buttons get checked at the same time, and PR 6 decides whether the manifest actions stay as text links or become standard buttons, so that the card reads as one consistent control group.
+
 **Announcements.** A polite live region announces the result count ("42 of 180 extensions") after each filter change.
 
 ## Verification plan
@@ -124,6 +129,7 @@ Each PR must pass `npm run lint`, `npm test`, and `npm run test:integration` bef
 | Screen reader | A manual pass with NVDA on Windows that checks cell names, row headers, group headings, filter group focus, the result announcement, and the Home pencil button. | 1, 1b, 3, 4, 5, 6 |
 | Keyboard | Every control is reachable by Tab, and filter groups and the Home pencil button open with Enter or Space. Toggling a checkbox keeps focus on that cell while it is pending and after it completes, and Escape from the hover card returns focus to the extension name. | 1b, 3, 4, 5, 6 |
 | Themes | Light, dark, and both high-contrast themes, checking glyphs, chips, and focus rings. | 1, 4, 5 |
+| Home buttons | In all four themes and at a narrow and a wide sidebar width, check that Home's buttons have the standard shape, stop growing at the maximum width, keep their high-contrast border, and look consistent with the workspace card buttons. | 6 |
 | Panel state | Hide and reveal the panel, then close and reopen it, and confirm that the view, filters, and grouping return both times. | 3 |
 | Performance | Time a full render with a fixture of 300 extensions and 6 profiles before and after PR 3. | 3 |
 
@@ -162,3 +168,4 @@ Each review round adds a row here, and the plan sections above are revised in pl
 | 2 | gpt-6-astra (Codex CLI, high reasoning, resumed session) | Ready after named changes | Confirmed eight round 1 findings resolved and accepted all three new or remaining findings after checking them in code. Made pending-cell focus one contract that keeps focus on the cell, added hover card Escape to the focus contract, and had PR 2 keep each manifest entry's folder reference so categories come from the right platform folder. |
 | 3 | gpt-6-astra (Codex CLI, high reasoning, resumed session) | Ready to implement | Confirmed all three round 2 findings resolved and raised no new findings. No plan changes were needed. |
 | After 3 | Sam Erde | Not a review round | Split focus restoration and the hover card Escape fix out of PR 1 into PR 1b, trimmed the design decisions back to directional guidance, and accepted losing the read-only `extensions.json` view in Home, which unblocks PR 6. |
+| After 3 | Sam Erde | Not a review round | Added Home's button shape to PR 6: Open Extension Matrix stays under the section heading, Home's buttons change from pills to VS Code's standard shape, and the workspace card buttons get checked at the same time. |
