@@ -131,12 +131,12 @@ Each PR must pass `npm run lint`, `npm test`, and `npm run test:integration` bef
 | Focus | jsdom tests for focus through a toggle from pending to complete, an unrelated refresh, removal of the focused row, and Escape from the hover card. | 1b |
 | Profile order | Unit tests in `inventory.test.ts` for Default first, the Agents window profile second, natural number order, mixed case, and the Agents window setting turned off, plus a manual check that the Home list and the matrix columns match. | 6 |
 | Grouping and crosshair | Unit tests for group order, the "#" group, accented and non-Latin names, every row appearing exactly once, and crosshair indexing that skips heading rows. | 5 |
-| Screen reader | A manual pass with NVDA on Windows that checks cell names, row headers, group headings, filter group focus, the result announcement, and the Home pencil button. | 1, 1b, 3, 4, 5, 6 |
+| Screen reader | A manual pass with NVDA on Windows, where each PR checks only what it adds. PR 1 checks cell names and row headers, PR 1b checks focus after toggles and hover card dismissal, PR 3 checks the selected view and the result announcement, PR 4 checks filter groups and chips, PR 5 checks group headings, and PR 6 checks the Home pencil button. | 1, 1b, 3, 4, 5, 6 |
 | Keyboard | Every control is reachable by Tab, and filter groups and the Home pencil button open with Enter or Space. Toggling a checkbox keeps focus on that cell while it is pending and after it completes, and Escape from the hover card returns focus to the extension name. | 1b, 3, 4, 5, 6 |
 | Themes | Light, dark, and both high-contrast themes, checking glyphs, chips, and focus rings. | 1, 4, 5 |
 | Home section heading | Check that Home's first section reads "VS Code Profiles" with no "Profiles" subheading, and that an NVDA heading list shows the new name. | 6 |
 | Home buttons | In all four themes and at a narrow and a wide sidebar width, check that Home's buttons have the standard shape, stop growing at the maximum width, keep their high-contrast border, and look consistent with the workspace card buttons. | 6 |
-| Panel state | Hide and reveal the panel, then close and reopen it, and confirm that the view, filters, and grouping return both times. | 3 |
+| Panel state | Hide and reveal the panel, then close and reopen it, and confirm that the presentation state returns both times. PR 3 checks the view and text filter, PR 4 adds the category, publisher, and source filters, and PR 5 adds grouping. | 3, 4, 5 |
 | Performance | Time a full render with a fixture of 300 extensions and 6 profiles before and after PR 3. | 3 |
 
 ## Uncertainty log
@@ -176,3 +176,4 @@ Each review round adds a row here, and the plan sections above are revised in pl
 | After 3 | Sam Erde | Not a review round | Split focus restoration and the hover card Escape fix out of PR 1 into PR 1b, trimmed the design decisions back to directional guidance, and accepted losing the read-only `extensions.json` view in Home, which unblocks PR 6. |
 | After 3 | Sam Erde | Not a review round | Added Home's button shape to PR 6: Open Extension Matrix stays under the section heading, Home's buttons change from pills to VS Code's standard shape, and the workspace card buttons get checked at the same time. |
 | After 3 | Sam Erde | Not a review round | Added to PR 6 renaming Home's first section to "VS Code Profiles," removing its "Profiles" subheading, and updating the old name in the `homeView.ts` doc comment and `GLOSSARY.md`, while keeping the section's element IDs. |
+| PR review | CodeRabbit on [PR #120](https://github.com/SamErde/Personas/pull/120) | One finding | Accepted. The Screen reader and Panel state checks now name what each PR verifies, so no PR is gated on a feature that a later PR adds. The result announcement stays with PR 3, which adds it. |
