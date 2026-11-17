@@ -49,7 +49,7 @@ export function composeInventory(input: ComposeInput): Inventory {
         isDefault: false,
         inheritsDefaultExtensions: p.inheritsDefaultExtensions,
       }))
-      .sort(compareNamedProfiles),
+      .sort(compareProfilesForDisplay),
   ];
 
   // Fail closed on duplicate names. VS Code's profile editor rejects duplicates
@@ -219,10 +219,13 @@ export function composeInventory(input: ComposeInput): Inventory {
   return { profiles, extensions, warnings };
 }
 
-const profileNameCollator = new Intl.Collator(undefined, { numeric: true });
+const profileNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-/** The Agents window profile first, then every other profile by name. */
-function compareNamedProfiles(a: Profile, b: Profile): number {
+/**
+ * Orders named profiles for display. The Agents window profile comes first, and the rest follow
+ * in a case-insensitive natural sort, so "Profile 2" comes before "Profile 10".
+ */
+function compareProfilesForDisplay(a: Profile, b: Profile): number {
   const agentsFirst = Number(isAgentsWindowProfile(b)) - Number(isAgentsWindowProfile(a));
   if (agentsFirst !== 0) return agentsFirst;
   return profileNameCollator.compare(a.name, b.name);

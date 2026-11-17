@@ -223,11 +223,13 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
     border: 1px solid var(--vscode-contrastBorder, transparent);
     padding: 4px 8px;
     border-radius: 4px;
+    font: inherit;
     cursor: pointer;
   }
   button:hover { background: var(--vscode-button-hoverBackground); }
-  /* Full width up to the 300px cap VS Code gives the buttons in its views' welcome content
-   * (.welcome-view-content > .button-container in src/vs/workbench/browser/parts/views/media/views.css). */
+  /* A standard button fills the width up to 300px, the cap VS Code gives the buttons in its views'
+   * welcome content (.welcome-view-content > .button-container in
+   * src/vs/workbench/browser/parts/views/media/views.css). */
   .standard-button { display: block; box-sizing: border-box; width: 100%; max-width: 300px; }
   h2 { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; margin: 0.5rem 0 0.5rem; }
   h3 { font-size: 0.95em; margin: 1rem 0 0.25rem; }
@@ -246,7 +248,7 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* An icon button in the manner of VS Code's view toolbar actions. */
+  /* The pencil is an icon button styled like the actions in VS Code's view toolbars. */
   button.edit-icon {
     flex: none;
     display: inline-flex;
@@ -297,6 +299,7 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    box-sizing: border-box;
     max-width: 300px;
     padding: 0 0.65rem 0.55rem;
   }
