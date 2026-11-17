@@ -421,6 +421,7 @@ describe('InventoryService', () => {
     expect(inv.profiles.map((p) => p.id)).toEqual(['default']);
     expect(inv.warnings).toHaveLength(1);
     expect(inv.warnings[0]?.file).toBe('globalStorage/storage.json');
+    expect(inv.warnings[0]?.kind).toBe('profileRegistry');
     expect(inv.warnings[0]?.affectedProfileIds).toEqual(['default']);
   });
 

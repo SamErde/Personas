@@ -1,28 +1,31 @@
 // Read-only questions about a composed Inventory, shared by the host and the webviews. The
 // webview bundles import this module, so it must not import anything that needs Node.
-import type { Inventory, Profile, WorkspaceExtensionStatus } from './types';
+import type { Inventory, ParseWarning, Profile, WorkspaceExtensionStatus } from './types';
 
 /** Profiles a warning disabled: unreadable data, or a name the code CLI cannot tell apart. */
 export function disabledProfileIds(inventory: Inventory): Set<string> {
   return new Set(inventory.warnings.flatMap((w) => w.affectedProfileIds));
 }
 
-/** Profiles whose installed extensions are unknown because a list could not be read. A profile
- * that uses Default's extensions is unknown whenever Default's list is. Duplicate-name warnings
- * are left out: those profiles' lists were read. */
-export function unreadableProfileIds(inventory: Inventory): Set<string> {
-  const ids = new Set(inventory.warnings.filter((w) => w.kind === undefined).flatMap((w) => w.affectedProfileIds));
-  if (ids.has('default')) {
-    for (const profile of inventory.profiles) if (profile.inheritsDefaultExtensions) ids.add(profile.id);
-  }
-  return ids;
+/** Each set holds the profiles that one kind of warning names. */
+export interface ProfileWarnings {
+  /** These profiles' installed extensions are unknown because a list could not be read. A
+   *  profile that uses Default's extensions is in this set whenever Default is. */
+  unreadable: Set<string>;
+  /** The code CLI cannot target these profiles because their name is shared or shadows Default. */
+  duplicateName: Set<string>;
+  /** VS Code's profile registry could not be read, so changes to these profiles are disabled. */
+  profileRegistry: Set<string>;
 }
 
-/** Profiles the code CLI cannot target because their name is shared or shadows Default. */
-export function duplicateNameProfileIds(inventory: Inventory): Set<string> {
-  return new Set(
-    inventory.warnings.filter((w) => w.kind === 'duplicateName').flatMap((w) => w.affectedProfileIds),
-  );
+export function profileWarnings(inventory: Inventory): ProfileWarnings {
+  const named = (kind: ParseWarning['kind']) =>
+    new Set(inventory.warnings.filter((w) => w.kind === kind).flatMap((w) => w.affectedProfileIds));
+  const unreadable = named(undefined);
+  if (unreadable.has('default')) {
+    for (const profile of inventory.profiles) if (profile.inheritsDefaultExtensions) unreadable.add(profile.id);
+  }
+  return { unreadable, duplicateName: named('duplicateName'), profileRegistry: named('profileRegistry') };
 }
 
 export function orphanCount(inventory: Inventory): number {

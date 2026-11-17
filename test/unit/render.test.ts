@@ -50,7 +50,7 @@ function status(
   };
 }
 
-/** Each cell of a row as [what is known about the install, why the cell cannot act]. */
+/** Lists each cell of a row as [what is known about the install, why the cell cannot act]. */
 function cellStates(inventory: Inventory, extId: string): [string, string | undefined][] {
   const row = buildViewModel(inventory, { filter: '', chip: 'all' }).rows.find((r) => r.id === extId);
   if (!row) throw new Error(`No row for ${extId}`);
@@ -66,11 +66,25 @@ describe('cell knowledge and actions', () => {
     ]);
   });
 
-  it('keeps applied-to-all cells read-only, and inheriting profiles read-only for their own reason', () => {
+  it('keeps applied-to-all cells read-only in every profile, including ones that use Default', () => {
     expect(cellStates(inv, 'pub.a')).toEqual([
       ['installed', 'appliedToAllProfiles'],
       ['installed', 'appliedToAllProfiles'],
-      ['installed', 'inheritsDefault'],
+      ['installed', 'appliedToAllProfiles'],
+    ]);
+  });
+
+  it('keeps the install known when only the profile registry could not be read', () => {
+    const unreadableRegistry: Inventory = {
+      ...inv,
+      warnings: [
+        { file: 'globalStorage/storage.json', message: 'bad', affectedProfileIds: ['default', 'aaa', 'bbb'], kind: 'profileRegistry' },
+      ],
+    };
+    expect(cellStates(unreadableRegistry, 'pub.b')).toEqual([
+      ['notInstalled', 'profileRegistry'],
+      ['installed', 'profileRegistry'],
+      ['notInstalled', 'inheritsDefault'],
     ]);
   });
 
@@ -118,7 +132,6 @@ describe('buildViewModel', () => {
     expect(vm.rows[0]?.cells).toHaveLength(3);
   });
 
-
   it('chip=orphaned shows only orphans', () => {
     const vm = buildViewModel(inv, { filter: '', chip: 'orphaned' });
     expect(vm.rows.map((r) => r.id)).toEqual(['pub.c']);
@@ -137,7 +150,6 @@ describe('buildViewModel', () => {
   it('counts orphans in the summary', () => {
     expect(orphanCount(inv)).toBe(1);
   });
-
 
   it('has no workspace column model when no workspace is loaded', () => {
     const vm = buildViewModel(inv, { filter: '', chip: 'all' });

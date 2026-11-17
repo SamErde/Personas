@@ -1,9 +1,9 @@
 import {
-  duplicateNameProfileIds,
   offersWorkspaceEnablementGuide,
   profileLabel,
   profileName,
-  unreadableProfileIds,
+  profileWarnings,
+  type ProfileWarnings,
 } from '../core/inventoryQueries';
 import type { ExtensionRecord, Inventory, Profile, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
@@ -23,13 +23,15 @@ export type ReadOnlyReason =
   | 'unreadable'
   /** The code CLI cannot tell this profile apart by name. */
   | 'duplicateName'
+  /** VS Code's profile registry could not be read, so no change is safe to target. */
+  | 'profileRegistry'
   /** VS Code applies the extension to every profile; only VS Code can change that. */
   | 'appliedToAllProfiles';
 
 export interface CellVm {
   profileId: string;
   install: InstallState;
-  /** Absent when the cell is a writable checkbox. */
+  /** The reason is absent when the cell is a writable checkbox. */
   readOnlyReason?: ReadOnlyReason;
 }
 
@@ -76,8 +78,7 @@ export function buildViewModel(
   workspace?: WorkspaceInventory,
 ): ViewModel {
   const filter = state.filter.trim().toLowerCase();
-  const unreadableIds = unreadableProfileIds(inv);
-  const duplicateNameIds = duplicateNameProfileIds(inv);
+  const warned = profileWarnings(inv);
   const workspaceById = new Map(workspace?.extensions.map((extension) => [extension.id, extension]) ?? []);
   const profileById = new Map(inv.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...workspaceById.keys()]);
@@ -110,7 +111,7 @@ export function buildViewModel(
       applyToAllProfiles,
       orphaned,
       profileBacked,
-      cells: inv.profiles.map((profile) => toCell(profile, extension, unreadableIds, duplicateNameIds)),
+      cells: inv.profiles.map((profile) => toCell(profile, extension, warned)),
       ...(workspaceStatus ? { workspaceCell: toWorkspaceCell(workspaceStatus) } : {}),
       ...(extension?.description ?? workspaceStatus?.description
         ? { description: extension?.description ?? workspaceStatus?.description }
@@ -141,31 +142,27 @@ export function buildViewModel(
   };
 }
 
-function toCell(
-  profile: Profile,
-  extension: ExtensionRecord | undefined,
-  unreadableIds: Set<string>,
-  duplicateNameIds: Set<string>,
-): CellVm {
-  const install: InstallState = !extension
-    ? 'notInstalled'
-    : unreadableIds.has(profile.id)
-      ? 'unknown'
-      : extension.installedIn.includes(profile.id)
-        ? 'installed'
-        : 'notInstalled';
-  const readOnlyReason: ReadOnlyReason | undefined = !extension
-    ? 'workspaceOnly'
-    : profile.inheritsDefaultExtensions
-      ? 'inheritsDefault'
-      : unreadableIds.has(profile.id)
-        ? 'unreadable'
-        : duplicateNameIds.has(profile.id)
-          ? 'duplicateName'
-          : extension.applyToAllProfiles
-            ? 'appliedToAllProfiles'
-            : undefined;
-  return { profileId: profile.id, install, ...(readOnlyReason ? { readOnlyReason } : {}) };
+/** Works out what is known about one cell's install, separately from whether the cell can act.
+ * Checks run from the reason that holds for the whole row to the reasons tied to one profile. */
+function toCell(profile: Profile, extension: ExtensionRecord | undefined, warned: ProfileWarnings): CellVm {
+  const cell = (install: InstallState, readOnlyReason?: ReadOnlyReason): CellVm => ({
+    profileId: profile.id,
+    install,
+    ...(readOnlyReason ? { readOnlyReason } : {}),
+  });
+  if (!extension) return cell('notInstalled', 'workspaceOnly');
+  // VS Code applies these extensions to every profile, whichever manifest carried the flag.
+  if (extension.applyToAllProfiles) return cell('installed', 'appliedToAllProfiles');
+  const install: InstallState = warned.unreadable.has(profile.id)
+    ? 'unknown'
+    : extension.installedIn.includes(profile.id)
+      ? 'installed'
+      : 'notInstalled';
+  if (profile.inheritsDefaultExtensions) return cell(install, 'inheritsDefault');
+  if (warned.unreadable.has(profile.id)) return cell(install, 'unreadable');
+  if (warned.profileRegistry.has(profile.id)) return cell(install, 'profileRegistry');
+  if (warned.duplicateName.has(profile.id)) return cell(install, 'duplicateName');
+  return cell(install);
 }
 
 function toWorkspaceCell(status: WorkspaceExtensionStatus): WorkspaceCellVm {

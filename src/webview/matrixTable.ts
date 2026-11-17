@@ -1,16 +1,17 @@
-// The Extension Matrix table, built from a view model with no module state, so a jsdom test can
-// render it directly. Everything stateful (the hover card, pending markers, posting to the host)
-// stays in main.ts and reaches the table through the hooks below.
-import type { CellVm, RowVm, ViewModel } from './render';
+// The Extension Matrix table is built from a view model with no module state, so a jsdom test can
+// render it directly. Everything stateful (the hover card, pending markers, and posting to the
+// host) stays in main.ts and reaches the table through the hooks below.
+import type { InstallState, ReadOnlyReason, RowVm, ViewModel } from './render';
 import { el } from './ui';
 
 export interface MatrixTableHooks {
-  /** The extension's icon, or a letter tile when it has none. */
+  /** Returns the extension's icon, or a letter tile when it has none. */
   icon(extId: string, displayName: string): HTMLElement;
-  /** True while a change to this cell is in flight. */
+  /** Reports whether a change to this cell is in flight. */
   isPending(extId: string, profileId: string): boolean;
   /** Attaches the hover card's listeners to an extension's name. */
-  wireName(trigger: HTMLElement, row: RowVm): void;
+  attachHoverCard(trigger: HTMLElement, row: RowVm): void;
+  /** Requests an install or uninstall after the user toggles a checkbox. */
   toggleCell(extId: string, profileId: string, install: boolean): void;
   showApplyToAllProfilesGuide(extId: string): void;
   showWorkspaceEnablementGuide(extId: string): void;
@@ -39,22 +40,21 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
     const tr = body.insertRow();
     tr.append(nameCell(row, hooks));
     row.cells.forEach((cell, index) => {
-      const where = `${row.displayName} in ${vm.profileNames[index]?.name ?? cell.profileId}`;
+      // The cell's accessible name pairs the extension with the profile, as in "PowerShell in Work".
+      const cellName = `${row.displayName} in ${vm.profileNames[index]?.name ?? cell.profileId}`;
       const isPending = hooks.isPending(row.id, cell.profileId);
       const td = el('td', isPending ? 'cell pending' : 'cell');
       if (isPending && cell.readOnlyReason !== 'workspaceOnly') {
-        td.append(glyph('spinner', '◐'));
-        td.setAttribute('aria-label', `${where}: change in progress`);
+        labelCell(td, glyph('spinner', '◐'), `${cellName}: change in progress`);
       } else if (cell.readOnlyReason) {
-        const shown = describeReadOnlyCell(cell);
-        td.append(glyph(`glyph ${shown.className}`, shown.glyph));
+        const shown = describeReadOnlyCell(cell.install, cell.readOnlyReason);
+        labelCell(td, glyph(`glyph ${shown.className}`, shown.glyph), `${cellName}: ${shown.state}`);
         td.title = shown.title;
-        td.setAttribute('aria-label', `${where}: ${shown.state}`);
       } else {
         const box = document.createElement('input');
         box.type = 'checkbox';
         box.checked = cell.install === 'installed';
-        box.setAttribute('aria-label', where);
+        box.setAttribute('aria-label', cellName);
         box.addEventListener('change', () => hooks.toggleCell(row.id, cell.profileId, box.checked));
         td.append(box);
       }
@@ -83,14 +83,12 @@ function nameCell(row: RowVm, hooks: MatrixTableHooks): HTMLElement {
   const name = el('th', 'ext-col');
   name.setAttribute('scope', 'row');
   name.append(hooks.icon(row.id, row.displayName));
-  // The name itself is the hover-card trigger: hover (after a short delay) or keyboard focus
-  // (immediate) opens the card with detail + the row's bulk actions.
   const nameTrigger = el('span', row.orphaned ? 'name orphaned' : 'name', row.displayName);
-  nameTrigger.dataset['extId'] = row.id; // lets syncOpenCard re-anchor after a rebuild
+  nameTrigger.dataset['extId'] = row.id; // syncOpenCard uses this to re-anchor the card after a rebuild.
   nameTrigger.tabIndex = 0;
   nameTrigger.setAttribute('role', 'button');
   nameTrigger.setAttribute('aria-haspopup', 'true');
-  hooks.wireName(nameTrigger, row);
+  hooks.attachHoverCard(nameTrigger, row);
   name.append(nameTrigger);
 
   if (row.applyToAllProfiles) {
@@ -113,7 +111,7 @@ function workspaceCell(row: RowVm, hooks: MatrixTableHooks): HTMLElement {
   const guide = status?.offersEnablementGuide ? el('button', 'workspace-guide') : undefined;
   if (guide) {
     td.title += ' Opens the Extensions view to enable or disable it for this workspace.';
-    td.classList.add('workspace-guide-cell'); // the button, not the cell, carries the padding
+    td.classList.add('workspace-guide-cell'); // The button, not the cell, carries the padding.
     guide.addEventListener('click', () => hooks.showWorkspaceEnablementGuide(row.id));
     td.append(guide);
   }
@@ -123,15 +121,23 @@ function workspaceCell(row: RowVm, hooks: MatrixTableHooks): HTMLElement {
   return td;
 }
 
-/** A cell's visible mark. Its meaning is in the cell's label, so assistive technology skips it. */
+/** Labels a cell that has no checkbox. The label is also written as screen-reader text, as the
+ * workspace column does, because some screen readers ignore `aria-label` on a plain table cell. */
+function labelCell(td: HTMLElement, mark: HTMLElement, label: string): void {
+  td.append(mark, el('span', 'sr-only', label));
+  td.setAttribute('aria-label', label);
+}
+
+/** Creates a cell's visible mark. The cell's label carries its meaning, so assistive technology
+ * skips the mark. */
 function glyph(className: string, text: string): HTMLElement {
   const mark = el('span', className, text);
   mark.setAttribute('aria-hidden', 'true');
   return mark;
 }
 
-/** The glyphs for read-only cells. Each differs by shape, not only by color, and the legend
- * explains them. */
+/** These are the glyphs for read-only cells. Each one differs by shape, not only by color, and
+ * the legend explains them. */
 const GLYPHS = {
   appliedToAllProfiles: { glyph: '◆', className: 'glyph-applied', legend: 'Applied to all profiles' },
   inherited: { glyph: '⤷', className: 'glyph-inherited', legend: 'Installed through Default' },
@@ -143,32 +149,42 @@ const GLYPHS = {
 interface ReadOnlyCellView {
   glyph: string;
   className: string;
-  /** Read after "<extension> in <profile>: ". */
+  /** The state is read after "<extension> in <profile>: ". */
   state: string;
-  /** The tooltip, which gives the reason the cell cannot act. */
+  /** The tooltip gives the reason that the cell cannot act. */
   title: string;
 }
 
 const USES_DEFAULT = "This profile uses the Default profile's extensions.";
 
-function describeReadOnlyCell(cell: CellVm): ReadOnlyCellView {
+function describeReadOnlyCell(install: InstallState, reason: ReadOnlyReason): ReadOnlyCellView {
   const show = (kind: keyof typeof GLYPHS, state: string, title: string): ReadOnlyCellView => ({
     glyph: GLYPHS[kind].glyph,
     className: GLYPHS[kind].className,
     state,
     title,
   });
-  const installed = cell.install === 'installed';
-  switch (cell.readOnlyReason) {
+  // A profile whose list was read but which the code CLI cannot target shows its known install.
+  const locked = (why: string, title: string): ReadOnlyCellView =>
+    install === 'installed'
+      ? show('installed', `installed, can't change because ${why}`, title)
+      : show('notInstalled', `not installed, can't change because ${why}`, title);
+  switch (reason) {
+    case 'appliedToAllProfiles':
+      return show(
+        'appliedToAllProfiles',
+        'applied to all profiles',
+        'Applied to all profiles — use the badge next to the name to change.',
+      );
     case 'inheritsDefault':
-      if (cell.install === 'unknown') {
+      if (install === 'unknown') {
         return show(
           'unknown',
           "unknown, Default's extension list could not be read",
           `${USES_DEFAULT} The Default profile's extension list could not be read, so this is unknown.`,
         );
       }
-      return installed
+      return install === 'installed'
         ? show('inherited', 'installed through Default', USES_DEFAULT)
         : show('notInstalled', "not installed, uses Default's extensions", USES_DEFAULT);
     case 'unreadable':
@@ -177,22 +193,19 @@ function describeReadOnlyCell(cell: CellVm): ReadOnlyCellView {
         'unknown, the extension list could not be read',
         "This profile's extension list could not be read, so what is installed is unknown and actions are disabled.",
       );
-    case 'duplicateName': {
-      const title =
+    case 'profileRegistry':
+      return locked(
+        'the profile list could not be read',
+        "VS Code's list of profiles could not be read, so Personas cannot be sure which profile a change " +
+          'would reach, and changes are disabled.',
+      );
+    case 'duplicateName':
+      return locked(
+        'the profile name is ambiguous',
         'The code CLI picks a profile by name, and it cannot target this one by name because another profile ' +
-        'shares it or it is named "Default". Rename the profile in VS Code to change it here.';
-      return installed
-        ? show('installed', "installed, can't change because the profile name is ambiguous", title)
-        : show('notInstalled', "not installed, can't change because the profile name is ambiguous", title);
-    }
-    case 'appliedToAllProfiles':
-      return show(
-        'appliedToAllProfiles',
-        'applied to all profiles',
-        'Applied to all profiles — use the badge next to the name to change.',
+          'shares it or it is named "Default". Rename the profile in VS Code to change it here.',
       );
     case 'workspaceOnly':
-    case undefined:
       return show(
         'notInstalled',
         'not in this profile, read-only workspace extension',
@@ -201,7 +214,7 @@ function describeReadOnlyCell(cell: CellVm): ReadOnlyCellView {
   }
 }
 
-/** A short key to the read-only cell glyphs. */
+/** Renders a short key to the read-only cell glyphs. */
 export function renderMatrixLegend(): HTMLElement {
   const legend = el('ul', 'matrix-legend');
   legend.setAttribute('aria-label', 'Extension Matrix cell legend');

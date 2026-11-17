@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Inventory } from '../../src/core/types';
+import type { Inventory, WorkspaceInventory } from '../../src/core/types';
 import { gridHitAt, paintCrosshair } from '../../src/webview/crosshair';
 import { buildViewModel } from '../../src/webview/render';
 import { renderMatrixLegend, renderMatrixTable, type MatrixTableHooks } from '../../src/webview/matrixTable';
@@ -9,7 +9,7 @@ const inv: Inventory = {
   profiles: [
     { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
     { id: 'aaa', name: 'Work', isDefault: false, inheritsDefaultExtensions: false },
-    { id: 'bbb', name: 'Agents', isDefault: false, inheritsDefaultExtensions: true },
+    { id: 'bbb', name: 'Shared', isDefault: false, inheritsDefaultExtensions: true },
   ],
   extensions: [
     { id: 'pub.a', displayName: 'Alpha', versions: [], applyToAllProfiles: true, installedIn: ['default', 'aaa', 'bbb'], orphaned: false },
@@ -18,13 +18,22 @@ const inv: Inventory = {
   warnings: [],
 };
 
+/** The base inventory plus an extension that the Shared profile has only through Default. */
+const withInherited: Inventory = {
+  ...inv,
+  extensions: [
+    ...inv.extensions,
+    { id: 'pub.g', displayName: 'Gamma', versions: [], applyToAllProfiles: false, installedIn: ['default', 'bbb'], orphaned: false },
+  ],
+};
+
 let toggles: { extId: string; profileId: string; install: boolean }[];
 let pendingCells: Set<string>;
 
 const hooks: MatrixTableHooks = {
   icon: () => document.createElement('span'),
   isPending: (extId, profileId) => pendingCells.has(`${extId}|${profileId}`),
-  wireName: () => undefined,
+  attachHoverCard: () => undefined,
   toggleCell: (extId, profileId, install) => toggles.push({ extId, profileId, install }),
   showApplyToAllProfilesGuide: () => undefined,
   showWorkspaceEnablementGuide: () => undefined,
@@ -86,20 +95,21 @@ describe('read-only cells', () => {
     const table = render();
 
     expect(label(cellAt(table, 'Alpha', 'Work'))).toBe('Alpha in Work: applied to all profiles');
-    expect(label(cellAt(table, 'Alpha', '⤷ Agents'))).toBe('Alpha in Agents: installed through Default');
-    expect(label(cellAt(table, 'Beta', '⤷ Agents'))).toBe("Beta in Agents: not installed, uses Default's extensions");
+    expect(label(cellAt(table, 'Alpha', '⤷ Shared'))).toBe('Alpha in Shared: applied to all profiles');
+    expect(label(cellAt(render(withInherited), 'Gamma', '⤷ Shared'))).toBe('Gamma in Shared: installed through Default');
+    expect(label(cellAt(table, 'Beta', '⤷ Shared'))).toBe("Beta in Shared: not installed, uses Default's extensions");
   });
 
   it('give each state a distinct glyph that assistive technology skips', () => {
     const unreadableWork: Inventory = {
-      ...inv,
+      ...withInherited,
       warnings: [{ file: 'profiles/aaa/extensions.json', message: 'bad', affectedProfileIds: ['aaa'] }],
     };
     const table = render(unreadableWork);
     const glyphs = {
       appliedToAll: glyph(cellAt(table, 'Alpha', 'Default')),
-      inherited: glyph(cellAt(table, 'Alpha', '⤷ Agents')),
-      notInstalled: glyph(cellAt(table, 'Beta', '⤷ Agents')),
+      inherited: glyph(cellAt(table, 'Gamma', '⤷ Shared')),
+      notInstalled: glyph(cellAt(table, 'Beta', '⤷ Shared')),
       unknown: glyph(cellAt(table, 'Beta', 'Work')),
     };
 
@@ -128,10 +138,56 @@ describe('read-only cells', () => {
       ...inv,
       warnings: [{ file: 'extensions.json (default profile)', message: 'bad', affectedProfileIds: ['default'] }],
     };
-    const agents = cellAt(render(unreadableDefault), 'Beta', '⤷ Agents');
+    const shared = cellAt(render(unreadableDefault), 'Beta', '⤷ Shared');
 
-    expect(label(agents)).toBe("Beta in Agents: unknown, Default's extension list could not be read");
-    expect(agents.title).toMatch(/Default profile's extension list could not be read/);
+    expect(label(shared)).toBe("Beta in Shared: unknown, Default's extension list could not be read");
+    expect(shared.title).toMatch(/Default profile's extension list could not be read/);
+  });
+
+  it('carry their label as screen-reader text too, so the cell is never empty to a screen reader', () => {
+    const table = render(withInherited);
+
+    for (const cell of [cellAt(table, 'Alpha', 'Work'), cellAt(table, 'Gamma', '⤷ Shared'), cellAt(table, 'Beta', '⤷ Shared')]) {
+      expect(cell.querySelector('.sr-only')?.textContent).toBe(label(cell));
+    }
+  });
+
+  it('say why changes are disabled when only the profile registry could not be read', () => {
+    const unreadableRegistry: Inventory = {
+      ...inv,
+      warnings: [
+        { file: 'globalStorage/storage.json', message: 'bad', affectedProfileIds: ['default', 'aaa', 'bbb'], kind: 'profileRegistry' },
+      ],
+    };
+    const work = cellAt(render(unreadableRegistry), 'Beta', 'Work');
+
+    expect(work.querySelector('input')).toBeNull();
+    expect(label(work)).toBe("Beta in Work: installed, can't change because the profile list could not be read");
+    expect(work.title).not.toMatch(/extension list could not be read/);
+  });
+
+  it('mark every profile cell of a workspace-only row as read-only, even while a change is pending', () => {
+    pendingCells.add('local.only|aaa');
+    const workspace: WorkspaceInventory = {
+      descriptor: { name: 'Repo', kind: 'folder', rootFsPaths: ['/repo'] },
+      activeProfileId: 'aaa',
+      activeProfileName: 'Work',
+      extensions: [
+        {
+          id: 'local.only', displayName: 'Local Fixture', state: 'enabled', installedInActiveProfile: false,
+          workspaceLocal: 'installed', profileBacked: false, reason: 'local copy',
+        },
+      ],
+      warnings: [],
+    };
+    const table = renderMatrixTable(buildViewModel(inv, { filter: '', chip: 'all' }, workspace), hooks);
+    document.body.replaceChildren(table);
+
+    for (const profile of ['Default', 'Work', '⤷ Shared']) {
+      const cell = cellAt(table, 'Local Fixture', profile);
+      expect(cell.querySelector('input, .spinner')).toBeNull();
+      expect(label(cell)).toMatch(/^Local Fixture in \w+: not in this profile, read-only workspace extension$/);
+    }
   });
 
   it('label a cell whose change is in progress', () => {
@@ -146,20 +202,19 @@ describe('read-only cells', () => {
     const withAgentsWindow: Inventory = {
       ...inv,
       profiles: [...inv.profiles, { id: 'builtin/agents', name: 'Agents', isDefault: false, inheritsDefaultExtensions: true }],
-      extensions: inv.extensions.map((e) => (e.id === 'pub.a' ? { ...e, installedIn: [...e.installedIn, 'builtin/agents'] } : e)),
     };
 
-    expect(label(cellAt(render(withAgentsWindow), 'Alpha', '⤷ Agents window'))).toBe('Alpha in Agents window: installed through Default');
+    expect(label(cellAt(render(withAgentsWindow), 'Alpha', '⤷ Agents window'))).toBe('Alpha in Agents window: applied to all profiles');
   });
 });
 
 describe('legend', () => {
   it('explains every read-only glyph the table uses', () => {
-    const table = render();
+    const table = render(withInherited);
     const legend = renderMatrixLegend();
     const entries = [...legend.querySelectorAll('li')].map((li) => [li.querySelector('.glyph')?.textContent, li.textContent]);
 
-    for (const cell of [cellAt(table, 'Alpha', 'Work'), cellAt(table, 'Alpha', '⤷ Agents'), cellAt(table, 'Beta', '⤷ Agents')]) {
+    for (const cell of [cellAt(table, 'Alpha', 'Work'), cellAt(table, 'Gamma', '⤷ Shared'), cellAt(table, 'Beta', '⤷ Shared')]) {
       expect(entries.map(([shape]) => shape)).toContain(cell.querySelector('.glyph')?.textContent);
     }
     expect(entries.map(([, text]) => text)).toEqual(expect.arrayContaining([expect.stringMatching(/Unknown/)]));

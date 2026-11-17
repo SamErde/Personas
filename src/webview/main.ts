@@ -526,7 +526,7 @@ function renderContent(): void {
         const key = `${extId}|${profileId}`;
         return pending.has(key) || localPending.has(key);
       },
-      wireName,
+      attachHoverCard,
       toggleCell: (extId, profileId, install) => {
         // Immediate "working" feedback, not optimistic UI: the box already reflects the user's
         // click, but the cell renders as pending (spinner and tint), not the new checked state,
@@ -546,9 +546,9 @@ function renderContent(): void {
   applyCrosshair();
 }
 
-/** Hover-card behavior for an extension's name in the table: hover (after a short delay) or
- * keyboard focus (immediate) opens the card with detail and the row's bulk actions. */
-function wireName(nameTrigger: HTMLElement, row: RowVm): void {
+/** Attaches the hover card to an extension's name in the table. Hovering (after a short delay) or
+ * keyboard focus (immediately) opens the card with detail and the row's bulk actions. */
+function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
   nameTrigger.addEventListener('mouseenter', () => scheduleShowCard(row.id, nameTrigger, 250));
   nameTrigger.addEventListener('mouseleave', () => {
     clearShowTimer();
