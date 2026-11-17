@@ -9,6 +9,7 @@ import {
   InventoryService,
   type InventoryIo,
 } from '../../src/core/inventory';
+import { withoutAgentsWindowProfile } from '../../src/core/inventoryQueries';
 import type { ResolvedPaths } from '../../src/core/paths';
 import type { ManifestEntry, RawProfile } from '../../src/core/parsers';
 import type { Inventory, Profile } from '../../src/core/types';
@@ -39,11 +40,11 @@ const baseInput = () => ({
 });
 
 describe('composeInventory', () => {
-  it('lists default profile first, then registry profiles', () => {
+  it('lists the default profile, then the registry profiles in display order', () => {
     const inv = composeInventory(baseInput());
-    expect(inv.profiles.map((p) => p.id)).toEqual(['default', 'aaa', 'builtin/agents']);
+    expect(inv.profiles.map((p) => p.id)).toEqual(['default', 'builtin/agents', 'aaa']);
     expect(inv.profiles[0]?.isDefault).toBe(true);
-    expect(inv.profiles[2]?.inheritsDefaultExtensions).toBe(true);
+    expect(inv.profiles[1]?.inheritsDefaultExtensions).toBe(true);
   });
 
   it('disables changes to every profile sharing a name, since the code CLI targets profiles by name', () => {
@@ -91,7 +92,7 @@ describe('composeInventory', () => {
     const inv = composeInventory(baseInput());
     const everywhere = inv.extensions.find((e) => e.id === 'pub.everywhere');
     expect(everywhere?.applyToAllProfiles).toBe(true);
-    expect(everywhere?.installedIn).toEqual(['default', 'aaa', 'builtin/agents']);
+    expect(everywhere?.installedIn).toEqual(['default', 'builtin/agents', 'aaa']);
     expect(everywhere?.displayName).toBe('Everywhere!');
   });
 
@@ -359,6 +360,58 @@ describe('composeInventory install sources', () => {
   });
 });
 
+describe('composeInventory profile order', () => {
+  const orderOf = (rawProfiles: RawProfile[]): string[] =>
+    composeInventory({ ...baseInput(), rawProfiles, profileManifests: new Map() }).profiles.map((p) => p.name);
+  const named = (location: string, name: string, inheritsDefaultExtensions = false): RawProfile => ({
+    location,
+    name,
+    inheritsDefaultExtensions,
+  });
+
+  it('puts Default first and the Agents window profile second, whatever the registry order', () => {
+    expect(
+      orderOf([named('w', 'Work'), named('a', 'Alpha'), named('builtin/agents', 'Agents', true)]),
+    ).toEqual(['Default', 'Agents', 'Alpha', 'Work']);
+  });
+
+  it('sorts numbered profiles in natural order, so "Profile 2" comes before "Profile 10"', () => {
+    expect(orderOf([named('c', 'Profile 10'), named('a', 'Profile 2'), named('b', 'Profile 1')])).toEqual([
+      'Default',
+      'Profile 1',
+      'Profile 2',
+      'Profile 10',
+    ]);
+  });
+
+  it('ignores case when sorting names', () => {
+    expect(orderOf([named('z', 'zeta'), named('b', 'Beta'), named('a', 'alpha')])).toEqual([
+      'Default',
+      'alpha',
+      'Beta',
+      'zeta',
+    ]);
+  });
+
+  it('keeps Default first and the rest in name order when the Agents window profile is hidden', () => {
+    const inv = composeInventory({
+      ...baseInput(),
+      rawProfiles: [named('w', 'Work'), named('builtin/agents', 'Agents', true), named('a', 'alpha')],
+      profileManifests: new Map(),
+    });
+    expect(withoutAgentsWindowProfile(inv).profiles.map((p) => p.name)).toEqual(['Default', 'alpha', 'Work']);
+  });
+
+  it('sorts a user profile named "Agents" with the others, since only the built-in location is the Agents window', () => {
+    expect(orderOf([named('w', 'Work'), named('x', 'Agents'), named('a', 'Aardvark')])).toEqual([
+      'Default',
+      'Aardvark',
+      'Agents',
+      'Work',
+    ]);
+  });
+});
+
 describe('InventoryService', () => {
   const PATHS: ResolvedPaths = {
     userDataDir: '/data',
@@ -610,6 +663,7 @@ describe('InventoryService', () => {
     expect(inv.profiles.map((p) => p.id)).toEqual(['default']);
     expect(inv.warnings).toHaveLength(1);
     expect(inv.warnings[0]?.file).toBe('globalStorage/storage.json');
+    expect(inv.warnings[0]?.kind).toBe('profileRegistry');
     expect(inv.warnings[0]?.affectedProfileIds).toEqual(['default']);
   });
 
