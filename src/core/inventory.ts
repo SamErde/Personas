@@ -28,6 +28,8 @@ export interface ComposeInput {
   /** extension id -> package.json publisher, from the first disk version folder whose
    *  package.json carries one (each field is resolved independently, like displayNames) */
   publishers?: Map<string, string>;
+  /** extension folder name -> package.json categories, for every listed folder that has them */
+  folderCategories?: Map<string, string[]>;
   extensionsDir: string;
   platform: Platform;
   /**
@@ -96,9 +98,7 @@ export function composeInventory(input: ComposeInput): Inventory {
   const appliedToAll = new Set<string>();
   const appliedToAllEntries = new Map<string, ManifestEntry>();
   const add = (entry: ManifestEntry, profileId: string) => {
-    let set = membership.get(entry.id);
-    if (!set) membership.set(entry.id, (set = new Set()));
-    set.add(profileId);
+    addToSetMap(membership, entry.id, profileId);
     let versions = profileVersions.get(entry.id);
     if (!versions) profileVersions.set(entry.id, (versions = new Map()));
     if (!versions.has(profileId)) versions.set(profileId, entry.version);
@@ -110,7 +110,31 @@ export function composeInventory(input: ComposeInput): Inventory {
   // id necessarily carries both.
   const publisherDisplayNames = new Map<string, string>();
   const installedTimestamps = new Map<string, number>();
+  // The folders that the manifests actually point to, per extension id. Categories come only from
+  // these, so an obsolete or unrelated folder for the same id cannot leak its package.json in.
+  // An entry without a folder reference is resolved later, against current (non-obsolete) disk
+  // folders with its version, so that a stale folder for the same version is never used.
+  const referencedFolders = new Map<string, Set<string>>();
+  const unreferencedVersions = new Map<string, Set<string>>();
+  const noteFolder = (e: ManifestEntry) => {
+    if (e.relativeLocation !== undefined) addToSetMap(referencedFolders, e.id, e.relativeLocation);
+    else addToSetMap(unreferencedVersions, e.id, e.version);
+  };
+
+  // Every distinct metadata.source across the manifest entries for an id, since one extension can
+  // come from the Marketplace in one profile and from a VSIX in another.
+  // A missing value is tracked apart from the values, so that it stays distinguishable from an
+  // unrecognized one.
+  const installSources = new Map<string, Set<string>>();
+  const missingSourceIds = new Set<string>();
+  const noteSource = (e: ManifestEntry) => {
+    if (e.source === undefined) missingSourceIds.add(e.id);
+    else addToSetMap(installSources, e.id, e.source);
+  };
+
   const noteExtras = (e: ManifestEntry) => {
+    noteFolder(e);
+    noteSource(e);
     if (e.publisherDisplayName !== undefined && !publisherDisplayNames.has(e.id)) {
       publisherDisplayNames.set(e.id, e.publisherDisplayName);
     }
@@ -179,10 +203,10 @@ export function composeInventory(input: ComposeInput): Inventory {
   // from extensions belonging to the unreadable data — a corrupt default manifest also hides
   // applied-to-all-profiles flags, so such an extension could surface as a false orphan.
   // Suppress every disk-only record registry-wide rather than guess.
-  const orphanKnowledgeUnreliable =
-    input.orphanKnowledgeUnreliable === true ||
+  const anyManifestUnreadable =
     input.defaultManifest instanceof Error ||
     input.rawProfiles.some((p) => input.profileManifests.get(p.location) instanceof Error);
+  const orphanKnowledgeUnreliable = input.orphanKnowledgeUnreliable === true || anyManifestUnreadable;
 
   const allIds = new Set([...membership.keys(), ...versionsById.keys()]);
   const extensions: ExtensionRecord[] = [...allIds]
@@ -195,6 +219,14 @@ export function composeInventory(input: ComposeInput): Inventory {
       const publisher = input.publishers?.get(id);
       const publisherDisplayName = publisherDisplayNames.get(id);
       const installedTimestampMs = installedTimestamps.get(id);
+      const categoryFolders = new Set(referencedFolders.get(id));
+      for (const version of unreferencedVersions.get(id) ?? []) {
+        for (const v of versionsById.get(id) ?? []) {
+          if (folderMatchesVersion(v.version, version)) categoryFolders.add(v.folderName);
+        }
+      }
+      const categories = categoriesFor(categoryFolders, input.folderCategories);
+      const sources = sortedCaseInsensitive(installSources.get(id) ?? []);
       const selectedVersions = profiles.flatMap((profile) => {
         const version = profileVersions.get(id)?.get(profile.id);
         return version ? [{ profileId: profile.id, version }] : [];
@@ -212,11 +244,60 @@ export function composeInventory(input: ComposeInput): Inventory {
         ...(publisher !== undefined ? { publisher } : {}),
         ...(publisherDisplayName !== undefined ? { publisherDisplayName } : {}),
         ...(installedTimestampMs !== undefined ? { installedTimestampMs } : {}),
+        ...(categories !== undefined ? { categories } : {}),
+        ...(sources.length > 0 ? { installSources: sources } : {}),
+        ...(sources.length === 0 || missingSourceIds.has(id) || anyManifestUnreadable
+          ? { installSourceMissing: true as const }
+          : {}),
       };
     });
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
 
   return { profiles, extensions, warnings };
+}
+
+/** VS Code's target platforms (its `TargetPlatform` values), which it appends to the folder name of
+ *  a platform-specific extension. Used only by the fallback for an entry without a folder reference. */
+const TARGET_PLATFORMS = new Set([
+  'win32-x64',
+  'win32-arm64',
+  'win32-ia32',
+  'linux-x64',
+  'linux-arm64',
+  'linux-armhf',
+  'alpine-x64',
+  'alpine-arm64',
+  'darwin-x64',
+  'darwin-arm64',
+  'web',
+  'universal',
+]);
+
+/** True when a folder's version part is the manifest version, alone or with a platform suffix. */
+function folderMatchesVersion(folderVersion: string, manifestVersion: string): boolean {
+  if (folderVersion === manifestVersion) return true;
+  const prefix = `${manifestVersion}-`;
+  return folderVersion.startsWith(prefix) && TARGET_PLATFORMS.has(folderVersion.slice(prefix.length));
+}
+
+/** The distinct categories across the given folders, sorted; undefined when none has any. */
+function categoriesFor(
+  folders: Set<string>,
+  folderCategories: Map<string, string[]> | undefined,
+): string[] | undefined {
+  const categories = new Set<string>();
+  for (const folder of folders) for (const c of folderCategories?.get(folder) ?? []) categories.add(c);
+  return categories.size > 0 ? sortedCaseInsensitive(categories) : undefined;
+}
+
+function sortedCaseInsensitive(values: Iterable<string>): string[] {
+  return [...values].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function addToSetMap<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
+  let set = map.get(key);
+  if (!set) map.set(key, (set = new Set()));
+  set.add(value);
 }
 
 const profileNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -343,7 +424,7 @@ export interface InventoryIo {
   /** [] when the folder does not exist; an Error when it exists but could not be listed —
    *  the same "unreadable is not missing" split as readFile. */
   listDirs(p: string): Promise<string[] | Error>;
-  /** displayName/icon/description/publisher from <folder>/package.json; undefined when the file
+  /** displayName/icon/description/publisher/categories from <folder>/package.json; undefined when the file
    *  does not exist, an Error when it exists but could not be read or parsed. */
   readPackageMeta(extFolderPath: string): Promise<PackageMeta | undefined | Error>;
 }
@@ -423,6 +504,8 @@ export class InventoryService {
     const iconFsPaths = new Map<string, string>();
     const descriptions = new Map<string, string>();
     const publishers = new Map<string, string>();
+    // Keyed by folder, not id: composeInventory picks the folders that the manifests point to.
+    const folderCategories = new Map<string, string[]>();
     const packageMetaWarnings: ParseWarning[] = [];
     for (const folderName of diskFolders) {
       const parsed = parseExtensionFolderName(folderName);
@@ -450,6 +533,7 @@ export class InventoryService {
       }
       if (needDescription && meta.description) descriptions.set(parsed.id, meta.description);
       if (needPublisher && meta.publisher) publishers.set(parsed.id, meta.publisher);
+      if (meta.categories) folderCategories.set(folderName, meta.categories);
     }
 
     const inventory = composeInventory({
@@ -462,6 +546,7 @@ export class InventoryService {
       iconFsPaths,
       descriptions,
       publishers,
+      folderCategories,
       extensionsDir: this.paths.extensionsDir,
       platform: this.paths.platform,
       // Without the registry, named profiles (and their manifests) are invisible; without

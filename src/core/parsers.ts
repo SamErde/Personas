@@ -14,12 +14,19 @@ export interface RawProfile {
 export interface ManifestEntry {
   id: string;
   version: string;
+  /** The entry's folder name in the extensions pool, from `relativeLocation`. The version alone
+   *  cannot identify a platform-specific folder such as `pub.ext-1.2.3-win32-x64`, or tell apart
+   *  several folders that share one version. Absent when the entry carries no usable reference. */
+  relativeLocation?: string;
   /** VS Code's on-disk `metadata.isApplicationScoped` ("Apply Extension to all Profiles"). */
   applyToAllProfiles: boolean;
   /** From metadata.publisherDisplayName, when present and string-typed. */
   publisherDisplayName?: string;
   /** From metadata.installedTimestamp, when present and number-typed. */
   installedTimestamp?: number;
+  /** From metadata.source, kept as written so that an unrecognized value stays distinguishable
+   *  from a missing one. Absent when metadata or the value is missing, empty, or not a string. */
+  source?: string;
 }
 
 export interface PackageMeta {
@@ -27,6 +34,9 @@ export interface PackageMeta {
   icon?: string;
   description?: string;
   publisher?: string;
+  /** From package.json `categories`: its distinct non-blank strings. Absent when the field is
+   *  missing, not an array, or holds no usable value. */
+  categories?: string[];
 }
 
 export interface ParsedWorkspaceProfileAssociations {
@@ -117,12 +127,18 @@ export function parseExtensionsManifest(text: string): ManifestEntry[] {
       typeof metaObj?.['publisherDisplayName'] === 'string' ? metaObj['publisherDisplayName'] : undefined;
     const installedTimestamp =
       typeof metaObj?.['installedTimestamp'] === 'number' ? metaObj['installedTimestamp'] : undefined;
+    const relativeLocation =
+      typeof e['relativeLocation'] === 'string' && e['relativeLocation'] !== '' ? e['relativeLocation'] : undefined;
+    const source =
+      typeof metaObj?.['source'] === 'string' && metaObj['source'] !== '' ? metaObj['source'] : undefined;
     entries.push({
       id: normalizeExtensionId(id),
       version: e['version'],
+      ...(relativeLocation !== undefined ? { relativeLocation } : {}),
       applyToAllProfiles,
       ...(publisherDisplayName !== undefined ? { publisherDisplayName } : {}),
       ...(installedTimestamp !== undefined ? { installedTimestamp } : {}),
+      ...(source !== undefined ? { source } : {}),
     });
   }
   return entries;
@@ -133,12 +149,24 @@ export function parsePackageMeta(text: string): PackageMeta {
   const root = parseJson(text, 'package.json');
   if (typeof root !== 'object' || root === null || Array.isArray(root)) throw new ParseError('package.json: not an object');
   const pkg = root as Record<string, unknown>;
+  const categories = parseCategories(pkg['categories']);
   return {
     displayName: unlocalizedString(pkg['displayName']),
     icon: typeof pkg['icon'] === 'string' ? pkg['icon'] : undefined,
     description: unlocalizedString(pkg['description']),
     publisher: typeof pkg['publisher'] === 'string' ? pkg['publisher'] : undefined,
+    ...(categories !== undefined ? { categories } : {}),
   };
+}
+
+/** The distinct trimmed, non-blank strings in a `categories` value; undefined when there are none. */
+function parseCategories(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const categories = new Set<string>();
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim() !== '') categories.add(item.trim());
+  }
+  return categories.size > 0 ? [...categories] : undefined;
 }
 
 /**

@@ -38,6 +38,17 @@ export interface ExtensionRecord {
    *  that carries it — metadata.installedTimestamp. This is the local install time, not a
    *  marketplace publish date; offline data only. */
   installedTimestampMs?: number;
+  /** From package.json `categories` in the folders that the profile manifests point to, merged
+   *  across profiles and sorted. Absent when no such folder declares any, which includes
+   *  disk-only (orphaned) records; consumers treat that as unknown. */
+  categories?: string[];
+  /** Every distinct manifest `metadata.source` value across profiles, as written and sorted, so
+   *  an unrecognized value stays distinguishable from a known one. */
+  installSources?: string[];
+  /** True when at least one manifest entry for this id has no usable `metadata.source`, when no
+   *  manifest entry exists at all (a disk-only record), or when any manifest is unreadable and so
+   *  may hold another source. Consumers treat this as unknown. */
+  installSourceMissing?: true;
 }
 
 export interface ParseWarning {
