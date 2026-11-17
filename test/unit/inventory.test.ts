@@ -211,6 +211,144 @@ describe('composeInventory', () => {
   });
 });
 
+describe('composeInventory categories', () => {
+  const singleProfile = () => {
+    const input = baseInput();
+    input.rawProfiles = [{ location: 'aaa', name: 'Work', inheritsDefaultExtensions: false }];
+    input.profileManifests = new Map();
+    return input;
+  };
+  const categoriesOf = (input: Parameters<typeof composeInventory>[0], id: string) =>
+    composeInventory(input).extensions.find((e) => e.id === id)?.categories;
+
+  it('reads categories from the platform-suffixed folder that the manifest entry points to', () => {
+    const input = singleProfile();
+    input.defaultManifest = [
+      { ...entry('ms-dotnettools.csharp', '2.39.29'), relativeLocation: 'ms-dotnettools.csharp-2.39.29-win32-x64' },
+    ];
+    input.diskFolders = ['ms-dotnettools.csharp-2.39.29', 'ms-dotnettools.csharp-2.39.29-win32-x64'];
+    const folderCategories = new Map([
+      ['ms-dotnettools.csharp-2.39.29', ['Wrong Folder']],
+      ['ms-dotnettools.csharp-2.39.29-win32-x64', ['Programming Languages', 'Debuggers']],
+    ]);
+    expect(categoriesOf({ ...input, folderCategories }, 'ms-dotnettools.csharp')).toEqual([
+      'Debuggers',
+      'Programming Languages',
+    ]);
+  });
+
+  it('falls back to the current folders with the entry version when the entry has no folder reference', () => {
+    const input = singleProfile();
+    input.defaultManifest = [entry('pub.ext', '2.0.0')];
+    input.diskFolders = ['pub.ext-1.0.0', 'pub.ext-2.0.0', 'pub.ext-2.0.0-win32-x64'];
+    input.obsoleteFolderNames = ['pub.ext-2.0.0'];
+    const folderCategories = new Map([
+      ['pub.ext-1.0.0', ['Older Version']],
+      ['pub.ext-2.0.0', ['Obsolete Copy']],
+      ['pub.ext-2.0.0-win32-x64', ['Formatters']],
+    ]);
+    expect(categoriesOf({ ...input, folderCategories }, 'pub.ext')).toEqual(['Formatters']);
+  });
+
+  it('ignores an obsolete version folder whose categories conflict with the current one', () => {
+    const input = singleProfile();
+    input.defaultManifest = [{ ...entry('pub.ext', '2.0.0'), relativeLocation: 'pub.ext-2.0.0' }];
+    // Directory order puts the obsolete folder first.
+    input.diskFolders = ['pub.ext-1.0.0', 'pub.ext-2.0.0'];
+    input.obsoleteFolderNames = ['pub.ext-1.0.0'];
+    const folderCategories = new Map([
+      ['pub.ext-1.0.0', ['Snippets']],
+      ['pub.ext-2.0.0', ['Linters']],
+    ]);
+    expect(categoriesOf({ ...input, folderCategories }, 'pub.ext')).toEqual(['Linters']);
+  });
+
+  it('uses only the referenced folder when several folders share one version', () => {
+    const input = singleProfile();
+    input.defaultManifest = [{ ...entry('pub.ext', '2.0.0'), relativeLocation: 'pub.ext-2.0.0-darwin-arm64' }];
+    input.diskFolders = ['pub.ext-2.0.0', 'pub.ext-2.0.0-darwin-arm64', 'pub.ext-2.0.0-win32-x64'];
+    const folderCategories = new Map([
+      ['pub.ext-2.0.0', ['Universal Build']],
+      ['pub.ext-2.0.0-darwin-arm64', ['Debuggers']],
+      ['pub.ext-2.0.0-win32-x64', ['Windows Build']],
+    ]);
+    expect(categoriesOf({ ...input, folderCategories }, 'pub.ext')).toEqual(['Debuggers']);
+  });
+
+  it('merges the categories of every current folder with the version when an unreferenced entry matches several', () => {
+    const input = singleProfile();
+    input.defaultManifest = [entry('pub.ext', '2.0.0')];
+    // 2.0.0-beta is a different (pre-release) version, not a platform build of 2.0.0.
+    input.diskFolders = ['pub.ext-2.0.0', 'pub.ext-2.0.0-linux-x64', 'pub.ext-2.0.0-beta'];
+    const folderCategories = new Map([
+      ['pub.ext-2.0.0', ['Linters']],
+      ['pub.ext-2.0.0-linux-x64', ['Linters', 'Formatters']],
+      ['pub.ext-2.0.0-beta', ['Pre-release Only']],
+    ]);
+    expect(categoriesOf({ ...input, folderCategories }, 'pub.ext')).toEqual(['Formatters', 'Linters']);
+  });
+
+  it('merges categories across profiles that point to different folders', () => {
+    const input = singleProfile();
+    input.defaultManifest = [{ ...entry('pub.ext', '1.0.0'), relativeLocation: 'pub.ext-1.0.0' }];
+    input.profileManifests = new Map([['aaa', [{ ...entry('pub.ext', '2.0.0'), relativeLocation: 'pub.ext-2.0.0' }]]]);
+    input.diskFolders = ['pub.ext-1.0.0', 'pub.ext-2.0.0'];
+    const folderCategories = new Map([
+      ['pub.ext-1.0.0', ['Themes']],
+      ['pub.ext-2.0.0', ['Themes', 'Other']],
+    ]);
+    expect(categoriesOf({ ...input, folderCategories }, 'pub.ext')).toEqual(['Other', 'Themes']);
+  });
+
+  it('leaves categories absent when the referenced folder declares none, or no manifest points to a folder', () => {
+    const input = singleProfile();
+    input.defaultManifest = [{ ...entry('pub.plain', '1.0.0'), relativeLocation: 'pub.plain-1.0.0' }];
+    input.diskFolders = ['pub.plain-1.0.0', 'pub.orphan-9.9.9', 'pub.missing-folder-1.0.0'];
+    input.defaultManifest.push({ ...entry('pub.missing-folder', '3.0.0') });
+    const folderCategories = new Map([['pub.orphan-9.9.9', ['Linters']]]);
+    const inv = composeInventory({ ...input, folderCategories });
+    for (const id of ['pub.plain', 'pub.orphan', 'pub.missing-folder']) {
+      const record = inv.extensions.find((e) => e.id === id);
+      expect(record).toBeDefined();
+      expect(record).not.toHaveProperty('categories');
+    }
+  });
+});
+
+describe('composeInventory install sources', () => {
+  const recordOf = (input: Parameters<typeof composeInventory>[0], id: string) =>
+    composeInventory(input).extensions.find((e) => e.id === id);
+
+  it('keeps every distinct source when profiles installed the extension differently', () => {
+    const input = baseInput();
+    input.defaultManifest = [{ ...entry('pub.shared', '1.0.0'), source: 'gallery' }];
+    input.profileManifests = new Map([['aaa', [{ ...entry('pub.shared', '1.0.0'), source: 'vsix' }]]]);
+    const shared = recordOf(input, 'pub.shared');
+    expect(shared?.installSources).toEqual(['gallery', 'vsix']);
+    expect(shared).not.toHaveProperty('installSourceMissing');
+  });
+
+  it('marks a missing source separately from the sources that are present', () => {
+    const input = baseInput();
+    // Default's entry has no metadata at all; Work's entry carries a value the parser does not know.
+    input.defaultManifest = [entry('pub.shared', '1.0.0')];
+    input.profileManifests = new Map([['aaa', [{ ...entry('pub.shared', '1.0.0'), source: 'something-new' }]]]);
+    const shared = recordOf(input, 'pub.shared');
+    expect(shared?.installSources).toEqual(['something-new']);
+    expect(shared?.installSourceMissing).toBe(true);
+  });
+
+  it('marks the source missing when no entry carries one, including a disk-only record', () => {
+    const input = baseInput();
+    const noSource = recordOf(input, 'pub.default-only');
+    expect(noSource).not.toHaveProperty('installSources');
+    expect(noSource?.installSourceMissing).toBe(true);
+    const orphan = recordOf(input, 'pub.orphan');
+    expect(orphan).not.toHaveProperty('installSources');
+    expect(orphan?.installSourceMissing).toBe(true);
+  });
+});
+
 describe('InventoryService', () => {
   const PATHS: ResolvedPaths = {
     userDataDir: '/data',
@@ -356,6 +494,47 @@ describe('InventoryService', () => {
     const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
     expect(alpha?.description).toBe('Does alpha things.');
     expect(alpha?.publisher).toBe('pub');
+  });
+
+  it('wires categories from the referenced folders and install sources from the manifests', async () => {
+    const manifest = (entries: unknown[]) => JSON.stringify(entries);
+    const categoriesByFolder: Record<string, string[]> = {
+      '/ext/pub.alpha-0.9.0': ['Obsolete Category'],
+      '/ext/pub.alpha-1.0.0-win32-x64': ['Linters'],
+      '/ext/pub.beta-2.0.0': ['Themes'],
+    };
+    const io: InventoryIo = {
+      readFile: (p) =>
+        Promise.resolve(
+          ({
+            [PATHS.storageJson]: storageJson,
+            [PATHS.obsoleteFile]: '{"pub.alpha-0.9.0": true}',
+            [PATHS.globalExtensionsJson]: manifest([
+              {
+                identifier: { id: 'pub.alpha' },
+                version: '1.0.0',
+                relativeLocation: 'pub.alpha-1.0.0-win32-x64',
+                metadata: { source: 'gallery' },
+              },
+            ]),
+            '/data/User/profiles/aaa/extensions.json': manifest([
+              { identifier: { id: 'pub.alpha' }, version: '1.0.0', metadata: { source: 'vsix' } },
+              { identifier: { id: 'pub.beta' }, version: '2.0.0', relativeLocation: 'pub.beta-2.0.0' },
+            ]),
+          } as Record<string, string>)[p],
+        ),
+      listDirs: () => Promise.resolve(['pub.alpha-0.9.0', 'pub.alpha-1.0.0-win32-x64', 'pub.beta-2.0.0']),
+      readPackageMeta: (p) =>
+        Promise.resolve(categoriesByFolder[p] ? { categories: categoriesByFolder[p] } : undefined),
+    };
+    const inv = await new InventoryService(PATHS, io).getInventory();
+    const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
+    expect(alpha?.categories).toEqual(['Linters']);
+    expect(alpha?.installSources).toEqual(['gallery', 'vsix']);
+    expect(alpha).not.toHaveProperty('installSourceMissing');
+    const beta = inv.extensions.find((e) => e.id === 'pub.beta');
+    expect(beta?.categories).toEqual(['Themes']);
+    expect(beta?.installSourceMissing).toBe(true);
   });
 
   it('rejects icon paths with .. segments or a drive letter — record gets no iconFsPath', async () => {

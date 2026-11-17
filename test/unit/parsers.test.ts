@@ -6,6 +6,7 @@ import {
   parseExtensionFolderName,
   parseExtensionsManifest,
   parseObsolete,
+  parsePackageMeta,
   parseProfileRegistry,
   parseWorkspaceProfileAssociations,
 } from '../../src/core/parsers';
@@ -107,15 +108,19 @@ describe('parseExtensionsManifest', () => {
       {
         id: 'johnpapa.vscode-peacock',
         version: '4.2.2',
+        relativeLocation: 'johnpapa.vscode-peacock-4.2.2',
         applyToAllProfiles: true,
         publisherDisplayName: 'John Papa',
         installedTimestamp: 1771712605225,
+        source: 'gallery',
       },
       {
         id: 'esbenp.prettier-vscode',
         version: '11.0.0',
+        relativeLocation: 'esbenp.prettier-vscode-11.0.0',
         applyToAllProfiles: false,
         installedTimestamp: 1771712605000,
+        source: 'gallery',
       },
     ]);
   });
@@ -135,10 +140,92 @@ describe('parseExtensionsManifest', () => {
     expect(onlyEntry).toEqual({
       id: 'pub.ext',
       version: '1.0.0',
+      relativeLocation: 'pub.ext-1.0.0',
       applyToAllProfiles: false,
     });
     expect(onlyEntry).not.toHaveProperty('publisherDisplayName');
     expect(onlyEntry).not.toHaveProperty('installedTimestamp');
+  });
+});
+
+describe('parseExtensionsManifest folder reference', () => {
+  const manifest = (entries: unknown[]) => JSON.stringify(entries);
+
+  it('keeps a platform-suffixed folder reference that the version alone cannot identify', () => {
+    const [onlyEntry] = parseExtensionsManifest(
+      manifest([
+        {
+          identifier: { id: 'ms-dotnettools.csharp' },
+          version: '2.39.29',
+          relativeLocation: 'ms-dotnettools.csharp-2.39.29-win32-x64',
+        },
+      ]),
+    );
+    expect(onlyEntry?.version).toBe('2.39.29');
+    expect(onlyEntry?.relativeLocation).toBe('ms-dotnettools.csharp-2.39.29-win32-x64');
+  });
+
+  it('omits the folder reference when it is missing, empty, or not a string', () => {
+    const entries = parseExtensionsManifest(
+      manifest([
+        { identifier: { id: 'pub.missing' }, version: '1.0.0' },
+        { identifier: { id: 'pub.empty' }, version: '1.0.0', relativeLocation: '' },
+        { identifier: { id: 'pub.number' }, version: '1.0.0', relativeLocation: 42 },
+      ]),
+    );
+    expect(entries).toHaveLength(3);
+    for (const e of entries) expect(e).not.toHaveProperty('relativeLocation');
+  });
+});
+
+describe('parseExtensionsManifest install source', () => {
+  it('keeps metadata.source as written, including values the parser does not recognize', () => {
+    const entries = parseExtensionsManifest(
+      JSON.stringify([
+        { identifier: { id: 'pub.gallery' }, version: '1.0.0', metadata: { source: 'gallery' } },
+        { identifier: { id: 'pub.novel' }, version: '1.0.0', metadata: { source: 'something-new' } },
+      ]),
+    );
+    expect(entries.map((e) => e.source)).toEqual(['gallery', 'something-new']);
+  });
+
+  it('omits the source when metadata is missing or the value is not a non-empty string', () => {
+    const entries = parseExtensionsManifest(
+      JSON.stringify([
+        { identifier: { id: 'pub.no-metadata' }, version: '1.0.0' },
+        { identifier: { id: 'pub.no-source' }, version: '1.0.0', metadata: {} },
+        { identifier: { id: 'pub.empty' }, version: '1.0.0', metadata: { source: '' } },
+        { identifier: { id: 'pub.number' }, version: '1.0.0', metadata: { source: 7 } },
+      ]),
+    );
+    expect(entries).toHaveLength(4);
+    for (const e of entries) expect(e).not.toHaveProperty('source');
+  });
+});
+
+describe('parsePackageMeta categories', () => {
+  const pkg = (fields: Record<string, unknown>) => JSON.stringify({ name: 'ext', ...fields });
+
+  it('reads the categories array', () => {
+    expect(parsePackageMeta(pkg({ categories: ['Programming Languages', 'Linters'] })).categories).toEqual([
+      'Programming Languages',
+      'Linters',
+    ]);
+  });
+
+  it('has no categories when the field is missing, not an array, or empty', () => {
+    expect(parsePackageMeta(pkg({}))).not.toHaveProperty('categories');
+    expect(parsePackageMeta(pkg({ categories: 'Linters' }))).not.toHaveProperty('categories');
+    expect(parsePackageMeta(pkg({ categories: null }))).not.toHaveProperty('categories');
+    expect(parsePackageMeta(pkg({ categories: [] }))).not.toHaveProperty('categories');
+  });
+
+  it('keeps the usable values of a partly malformed array and drops the rest', () => {
+    expect(parsePackageMeta(pkg({ categories: ['Themes', 3, '', null, '  ', 'Themes', 'Other'] })).categories).toEqual([
+      'Themes',
+      'Other',
+    ]);
+    expect(parsePackageMeta(pkg({ categories: [1, false] }))).not.toHaveProperty('categories');
   });
 });
 
