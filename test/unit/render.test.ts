@@ -50,17 +50,86 @@ function status(
   };
 }
 
+/** Lists each cell of a row as [what is known about the install, why the cell cannot act]. */
+function cellStates(inventory: Inventory, extId: string): [string, string | undefined][] {
+  const row = buildViewModel(inventory, { filter: '', chip: 'all' }).rows.find((r) => r.id === extId);
+  if (!row) throw new Error(`No row for ${extId}`);
+  return row.cells.map((cell) => [cell.install, cell.readOnlyReason]);
+}
+
+describe('cell knowledge and actions', () => {
+  it('leaves directly installed cells writable, with what is installed known', () => {
+    expect(cellStates(inv, 'pub.b')).toEqual([
+      ['notInstalled', undefined],
+      ['installed', undefined],
+      ['notInstalled', 'inheritsDefault'],
+    ]);
+  });
+
+  it('keeps applied-to-all cells read-only in every profile, including ones that use Default', () => {
+    expect(cellStates(inv, 'pub.a')).toEqual([
+      ['installed', 'appliedToAllProfiles'],
+      ['installed', 'appliedToAllProfiles'],
+      ['installed', 'appliedToAllProfiles'],
+    ]);
+  });
+
+  it('keeps the install known when only the profile registry could not be read', () => {
+    const unreadableRegistry: Inventory = {
+      ...inv,
+      warnings: [
+        { file: 'globalStorage/storage.json', message: 'bad', affectedProfileIds: ['default', 'aaa', 'bbb'], kind: 'profileRegistry' },
+      ],
+    };
+    expect(cellStates(unreadableRegistry, 'pub.b')).toEqual([
+      ['notInstalled', 'profileRegistry'],
+      ['installed', 'profileRegistry'],
+      ['notInstalled', 'inheritsDefault'],
+    ]);
+  });
+
+  it('marks the install as unknown, not missing, when a profile list could not be read', () => {
+    const unreadableWork: Inventory = {
+      ...inv,
+      warnings: [{ file: 'profiles/aaa/extensions.json', message: 'bad', affectedProfileIds: ['aaa'] }],
+    };
+    expect(cellStates(unreadableWork, 'pub.b')).toEqual([
+      ['notInstalled', undefined],
+      ['unknown', 'unreadable'],
+      ['notInstalled', 'inheritsDefault'],
+    ]);
+  });
+
+  it('marks profiles that inherit an unreadable Default as unknown too', () => {
+    const unreadableDefault: Inventory = {
+      ...inv,
+      warnings: [{ file: 'extensions.json (default profile)', message: 'bad', affectedProfileIds: ['default'] }],
+    };
+    expect(cellStates(unreadableDefault, 'pub.b')).toEqual([
+      ['unknown', 'unreadable'],
+      ['installed', undefined],
+      ['unknown', 'inheritsDefault'],
+    ]);
+  });
+
+  it('keeps the install known when a duplicate name is what blocks changes', () => {
+    const duplicateWork: Inventory = {
+      ...inv,
+      warnings: [{ file: 'globalStorage/storage.json', message: 'dup', affectedProfileIds: ['aaa'], kind: 'duplicateName' }],
+    };
+    expect(cellStates(duplicateWork, 'pub.b')).toEqual([
+      ['notInstalled', undefined],
+      ['installed', 'duplicateName'],
+      ['notInstalled', 'inheritsDefault'],
+    ]);
+  });
+});
+
 describe('buildViewModel', () => {
   it('produces one row per extension and one cell per profile', () => {
     const vm = buildViewModel(inv, { filter: '', chip: 'all' });
     expect(vm.rows).toHaveLength(3);
     expect(vm.rows[0]?.cells).toHaveLength(3);
-  });
-
-  it('marks inherited cells read-only', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' });
-    const betaAgentsCell = vm.rows.find((r) => r.id === 'pub.b')?.cells[2];
-    expect(betaAgentsCell?.profileInheritsDefault).toBe(true);
   });
 
   it('chip=orphaned shows only orphans', () => {
@@ -80,15 +149,6 @@ describe('buildViewModel', () => {
 
   it('counts orphans in the summary', () => {
     expect(orphanCount(inv)).toBe(1);
-  });
-
-  it('disables cells for profiles named in parse warnings', () => {
-    const warned: Inventory = {
-      ...inv,
-      warnings: [{ file: 'profiles/aaa/extensions.json', message: 'bad', affectedProfileIds: ['aaa'] }],
-    };
-    const vm = buildViewModel(warned, { filter: '', chip: 'all' });
-    expect(vm.rows[0]?.cells.map((c) => c.disabled)).toEqual([false, true, false]);
   });
 
   it('has no workspace column model when no workspace is loaded', () => {
@@ -137,7 +197,7 @@ describe('buildViewModel', () => {
       sourceLabel: 'Workspace-local candidate',
     });
     expect(row?.cells).toHaveLength(inv.profiles.length);
-    expect(row?.cells.every((cell) => cell.workspaceOnly && !cell.installed)).toBe(true);
+    expect(row?.cells.every((cell) => cell.readOnlyReason === 'workspaceOnly' && cell.install === 'notInstalled')).toBe(true);
     expect(row?.workspaceCell).toMatchObject({ state: 'unknown', label: 'Unknown', symbol: '?' });
   });
 
