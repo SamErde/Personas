@@ -38,7 +38,8 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
   for (const row of vm.rows) {
     const tr = body.insertRow();
     tr.append(nameCell(row, hooks));
-    for (const cell of row.cells) {
+    row.cells.forEach((cell, index) => {
+      const where = `${row.displayName} in ${vm.profileNames[index]?.name ?? cell.profileId}`;
       const isPending = hooks.isPending(row.id, cell.profileId);
       const td = el('td', isPending ? 'cell pending' : 'cell');
       if (cell.workspaceOnly) {
@@ -60,11 +61,12 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
         const box = document.createElement('input');
         box.type = 'checkbox';
         box.checked = cell.installed;
+        box.setAttribute('aria-label', where);
         box.addEventListener('change', () => hooks.toggleCell(row.id, cell.profileId, box.checked));
         td.append(box);
       }
       tr.append(td);
-    }
+    });
     if (vm.workspace) tr.append(workspaceCell(row, hooks));
   }
 

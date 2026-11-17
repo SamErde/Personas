@@ -69,6 +69,15 @@ describe('writable cells', () => {
   });
 });
 
+describe('accessible names', () => {
+  it('names each checkbox for the extension and profile it changes', () => {
+    const table = render();
+
+    expect(cellAt(table, 'Beta', 'Default').querySelector('input')!.getAttribute('aria-label')).toBe('Beta in Default');
+    expect(cellAt(table, 'Beta', 'Work').querySelector('input')!.getAttribute('aria-label')).toBe('Beta in Work');
+  });
+});
+
 describe('table headers', () => {
   it('heads each row with its extension name and each column with its profile', () => {
     const table = render();
