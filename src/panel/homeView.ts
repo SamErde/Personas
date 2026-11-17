@@ -295,13 +295,14 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
    * set below it in emphasis, and capped together at the same 300px. */
   .workspace-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
     max-width: 300px;
     padding: 0 0.65rem 0.55rem;
   }
+  /* The pair stacks when the sidebar is too narrow to fit both labels on one line. */
   .workspace-action {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 1 7rem;
     background: var(--vscode-button-secondaryBackground);
     color: var(--vscode-button-secondaryForeground);
   }
