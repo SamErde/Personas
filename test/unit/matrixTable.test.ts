@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Inventory } from '../../src/core/types';
+import { gridHitAt, paintCrosshair } from '../../src/webview/crosshair';
 import { buildViewModel } from '../../src/webview/render';
 import { renderMatrixTable, type MatrixTableHooks } from '../../src/webview/matrixTable';
 
@@ -65,5 +66,62 @@ describe('writable cells', () => {
 
     inDefault.click();
     expect(toggles).toEqual([{ extId: 'pub.b', profileId: 'default', install: true }]);
+  });
+});
+
+describe('table headers', () => {
+  it('heads each row with its extension name and each column with its profile', () => {
+    const table = render();
+    const bodyRows = [...table.tBodies].flatMap((body) => [...body.rows]);
+
+    expect(bodyRows.map((tr) => [tr.cells[0]?.tagName, tr.cells[0]?.getAttribute('scope'), tr.cells[0]?.textContent]))
+      .toEqual([['TH', 'row', 'AlphaALL'], ['TH', 'row', 'Beta']]);
+    expect([...table.tHead!.rows[0]!.cells].map((th) => th.getAttribute('scope'))).toEqual(['col', 'col', 'col', 'col']);
+  });
+});
+
+describe('crosshair hit classification', () => {
+  it('treats a row header as the extension name, not as a column header', () => {
+    const table = render();
+    const betaName = cellAt(table, 'Beta', 'Extension');
+
+    expect(gridHitAt(betaName, table)).toEqual({ kind: 'name', row: 1 });
+    expect(gridHitAt(betaName.querySelector('.name'), table)).toEqual({ kind: 'name', row: 1 });
+    expect(gridHitAt(table.tHead!.rows[0]!.cells[2]!, table)).toEqual({ kind: 'header', col: 2 });
+    expect(gridHitAt(cellAt(table, 'Beta', 'Work').querySelector('input'), table)).toEqual({ kind: 'cell', row: 1, col: 2 });
+  });
+
+  it('ignores elements outside the table', () => {
+    const table = render();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+
+    expect(gridHitAt(outside, table)).toBeUndefined();
+  });
+});
+
+describe('crosshair highlight', () => {
+  const classes = (cell: Element) => [...cell.classList].filter((c) => c.startsWith('crosshair'));
+
+  it("marks the row header and the column header as labels, and outlines the cell where they cross", () => {
+    const table = render();
+
+    paintCrosshair(table, { row: 1, col: 2, outlineCell: true });
+
+    expect(classes(cellAt(table, 'Beta', 'Extension'))).toEqual(['crosshair-label']);
+    expect(classes(table.tHead!.rows[0]!.cells[2]!)).toEqual(['crosshair-label']);
+    expect(classes(cellAt(table, 'Beta', 'Default'))).toEqual(['crosshair']);
+    expect(classes(cellAt(table, 'Beta', 'Work'))).toEqual(['crosshair', 'crosshair-cell']);
+    expect(classes(cellAt(table, 'Alpha', 'Work'))).toEqual(['crosshair']);
+    expect(classes(cellAt(table, 'Alpha', 'Default'))).toEqual([]);
+  });
+
+  it('clears the previous highlight', () => {
+    const table = render();
+    paintCrosshair(table, { row: 1, col: 2, outlineCell: true });
+
+    paintCrosshair(table, {});
+
+    expect(table.querySelectorAll('.crosshair, .crosshair-label, .crosshair-cell')).toHaveLength(0);
   });
 });

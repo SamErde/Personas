@@ -19,14 +19,14 @@ export interface MatrixTableHooks {
 export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLTableElement {
   const table = document.createElement('table');
   const head = table.createTHead().insertRow();
-  head.append(el('th', 'ext-col', 'Extension'));
+  head.append(columnHeader('ext-col', 'Extension'));
   for (const p of vm.profileNames) {
-    const th = el('th', '', p.label);
+    const th = columnHeader('', p.label);
     if (p.tooltip) th.title = p.tooltip;
     head.append(th);
   }
   if (vm.workspace) {
-    const workspaceHead = el('th', 'workspace-col workspace-header');
+    const workspaceHead = columnHeader('workspace-col workspace-header');
     workspaceHead.append(
       el('span', 'workspace-header-title', 'Current workspace'),
       el('span', 'workspace-header-name', vm.workspace.name),
@@ -77,8 +77,16 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
   return table;
 }
 
+function columnHeader(className: string, text?: string): HTMLElement {
+  const th = el('th', className, text);
+  th.setAttribute('scope', 'col');
+  return th;
+}
+
+/** The extension's name heads its row, so a screen reader announces it with every cell. */
 function nameCell(row: RowVm, hooks: MatrixTableHooks): HTMLElement {
-  const name = el('td', 'ext-col');
+  const name = el('th', 'ext-col');
+  name.setAttribute('scope', 'row');
   name.append(hooks.icon(row.id, row.displayName));
   // The name itself is the hover-card trigger: hover (after a short delay) or keyboard focus
   // (immediate) opens the card with detail + the row's bulk actions.
