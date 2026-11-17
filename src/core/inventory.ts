@@ -1,5 +1,5 @@
 import { asError } from './errors';
-import { disabledProfileIds } from './inventoryQueries';
+import { disabledProfileIds, isAgentsWindowProfile } from './inventoryQueries';
 import { pathFor, type Platform, type ResolvedPaths, type WatchTarget } from './paths';
 import {
   type ManifestEntry,
@@ -42,12 +42,14 @@ export function composeInventory(input: ComposeInput): Inventory {
 
   const profiles: Profile[] = [
     { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
-    ...input.rawProfiles.map((p) => ({
-      id: p.location,
-      name: p.name,
-      isDefault: false,
-      inheritsDefaultExtensions: p.inheritsDefaultExtensions,
-    })),
+    ...input.rawProfiles
+      .map((p): Profile => ({
+        id: p.location,
+        name: p.name,
+        isDefault: false,
+        inheritsDefaultExtensions: p.inheritsDefaultExtensions,
+      }))
+      .sort(compareNamedProfiles),
   ];
 
   // Fail closed on duplicate names. VS Code's profile editor rejects duplicates
@@ -215,6 +217,15 @@ export function composeInventory(input: ComposeInput): Inventory {
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
 
   return { profiles, extensions, warnings };
+}
+
+const profileNameCollator = new Intl.Collator(undefined, { numeric: true });
+
+/** The Agents window profile first, then every other profile by name. */
+function compareNamedProfiles(a: Profile, b: Profile): number {
+  const agentsFirst = Number(isAgentsWindowProfile(b)) - Number(isAgentsWindowProfile(a));
+  if (agentsFirst !== 0) return agentsFirst;
+  return profileNameCollator.compare(a.name, b.name);
 }
 
 /**
