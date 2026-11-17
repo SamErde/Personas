@@ -71,35 +71,16 @@ function render(): void {
   for (const p of state.profiles) {
     const li = document.createElement('li');
     const line1 = el('div', 'profile-line1');
-    if (p.inheritsDefaultExtensions) {
-      const nameSpan = el('span', 'profile-name', p.label);
-      nameSpan.title = p.tooltip ?? p.label;
-      line1.append(nameSpan);
-    } else {
-      const link = el('a', 'profile-name', p.label) as HTMLAnchorElement;
-      link.href = '#';
-      link.title = p.tooltip ?? p.label;
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        vscode.postMessage({ type: 'openProfileReadOnly', profileId: p.id });
-      });
-      line1.append(link);
-
-      const edit = el('a', 'edit-icon', '✎') as HTMLAnchorElement;
-      edit.href = '#';
-      edit.tabIndex = 0;
+    const nameSpan = el('span', 'profile-name', p.label);
+    nameSpan.title = p.tooltip ?? p.label;
+    line1.append(nameSpan);
+    // A profile that uses Default's extensions has no file of its own to edit.
+    if (!p.inheritsDefaultExtensions) {
+      const edit = el('button', 'edit-icon', '✎') as HTMLButtonElement;
+      edit.type = 'button';
       edit.title = 'Edit raw file — caution: VS Code owns this file';
-      edit.setAttribute('role', 'button');
       edit.setAttribute('aria-label', `Edit raw file for ${p.name} — caution: VS Code owns this file`);
-      const openEdit = (e: Event) => {
-        e.preventDefault();
-        vscode.postMessage({ type: 'editProfileFile', profileId: p.id });
-      };
-      edit.addEventListener('click', openEdit);
-      edit.addEventListener('keydown', (e) => {
-        const key = (e as KeyboardEvent).key;
-        if (key === 'Enter' || key === ' ') openEdit(e);
-      });
+      edit.addEventListener('click', () => vscode.postMessage({ type: 'editProfileFile', profileId: p.id }));
       line1.append(edit);
     }
     const own = p.agentsWindow

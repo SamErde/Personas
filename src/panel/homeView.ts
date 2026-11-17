@@ -14,10 +14,10 @@ import { openReadOnly } from './readOnlyProvider';
 import { createNonce, homeContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
 /**
- * Home, the Personas sidebar: one section per area, currently only Profiles & Extensions. Owns no
- * business logic of its own: counts, orphan detection and sizing all come from pure/core helpers
- * (`profileExtensionCounts`, `buildOrphanInfos`) — this class only wires services to the webview
- * and reacts to its messages. It reaches the Extension Matrix only through commands, never by
+ * Home, the Personas sidebar: several sections, one per area (VS Code Profiles and PowerShell
+ * Profiles). Owns no business logic of its own: counts, orphan detection and sizing all come from
+ * pure/core helpers (`profileExtensionCounts`, `buildOrphanInfos`) — this class only wires services
+ * to the webview and reacts to its messages. It reaches the Extension Matrix only through commands, never by
  * importing MatrixPanel. The rendering script lives in dist/home.js (built from
  * src/webview/home.ts) rather than inline, to keep this file's HTML skeleton small.
  */
@@ -173,12 +173,6 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
       case 'openMatrix':
         await vscode.commands.executeCommand('personas.showMatrix');
         return;
-      case 'openProfileReadOnly': {
-        const profile = this.profiles.find((p) => p.id === m.profileId);
-        if (!profile?.filePath) return;
-        await openReadOnly(`${profile.name} — extensions.json (read-only)`, profile.filePath);
-        return;
-      }
       case 'editProfileFile': {
         const profile = this.profiles.find((p) => p.id === m.profileId);
         if (!profile?.filePath) return;
@@ -220,16 +214,21 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   }
   /* High-contrast themes can color a button the same as the surface behind it and rely on
    * contrastBorder for its edge. Other themes leave contrastBorder unset, so the border stays
-   * transparent there, and the padding gives back the border's 1px to keep the button's size. */
+   * transparent there. The shape follows VS Code's own text buttons (.monaco-text-button in
+   * src/vs/base/browser/ui/button/button.css): a 1px border outside 4px by 8px padding and a 4px
+   * corner radius. */
   button {
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border: 1px solid var(--vscode-contrastBorder, transparent);
-    padding: calc(0.3rem - 1px) calc(0.7rem - 1px);
-    border-radius: 1rem;
+    padding: 4px 8px;
+    border-radius: 4px;
     cursor: pointer;
   }
   button:hover { background: var(--vscode-button-hoverBackground); }
+  /* Full width up to the 300px cap VS Code gives the buttons in its views' welcome content
+   * (.welcome-view-content > .button-container in src/vs/workbench/browser/parts/views/media/views.css). */
+  .standard-button { display: block; box-sizing: border-box; width: 100%; max-width: 300px; }
   h2 { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; margin: 0.5rem 0 0.5rem; }
   h3 { font-size: 0.95em; margin: 1rem 0 0.25rem; }
   .home-section + .home-section { margin-top: 1.25rem; }
@@ -238,6 +237,7 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   #profiles li:last-child { margin-bottom: 0; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover, a:focus { text-decoration: underline; }
+  #launcher { margin-bottom: 0.75rem; }
   .profile-line1 { display: flex; align-items: center; gap: 0.3rem; }
   .profile-name {
     flex: 1 1 auto;
@@ -246,8 +246,28 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .edit-icon { margin-left: 0.35rem; flex-shrink: 0; }
-  .edit-icon:focus { outline: 1px solid var(--vscode-focusBorder); }
+  /* An icon button in the manner of VS Code's view toolbar actions. */
+  button.edit-icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 0.35rem;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--vscode-icon-foreground);
+    font: inherit;
+  }
+  button.edit-icon:hover {
+    background: var(--vscode-toolbar-hoverBackground);
+    outline: 1px dashed var(--vscode-contrastActiveBorder, transparent);
+    outline-offset: -1px;
+  }
+  button.edit-icon:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
   .profile-counts { margin-top: 0.15rem; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
   .workspace-card {
     width: 100%;
@@ -271,23 +291,21 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
   }
   .workspace-matrix:hover { background: var(--vscode-list-hoverBackground); }
   .workspace-matrix:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+  /* The manifest actions are VS Code's secondary buttons: the same shape as Open Extension Matrix,
+   * set below it in emphasis, and capped together at the same 300px. */
   .workspace-actions {
     display: flex;
     gap: 0.35rem;
+    max-width: 300px;
     padding: 0 0.65rem 0.55rem;
   }
   .workspace-action {
-    padding: 0;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    color: var(--vscode-textLink-foreground);
-    font-size: 0.85em;
+    flex: 1 1 0;
+    min-width: 0;
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
   }
-  .workspace-action:hover, .workspace-action:focus {
-    background: transparent;
-    text-decoration: underline;
-  }
+  .workspace-action:hover { background: var(--vscode-button-secondaryHoverBackground); }
   .workspace-title { font-weight: 600; }
   .workspace-name { color: var(--vscode-textLink-foreground); margin-top: 0.15rem; }
   .workspace-readonly, .workspace-counts, .workspace-profile {
@@ -453,12 +471,11 @@ ${renderContentSecurityPolicyMeta(homeContentSecurityPolicy(nonce))}
 </head>
 <body>
 <section class="home-section" aria-labelledby="profiles-extensions-heading">
-<h2 id="profiles-extensions-heading">Profiles &amp; Extensions</h2>
+<h2 id="profiles-extensions-heading">VS Code Profiles</h2>
 <div id="launcher">
-<button id="open">Open Extension Matrix</button>
+<button id="open" class="standard-button" type="button">Open Extension Matrix</button>
 </div>
 <div id="profiles-extensions">
-<h3>Profiles</h3>
 <ul id="profiles"></ul>
 <div id="workspace"></div>
 <div id="extra"></div>
