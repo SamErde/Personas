@@ -1,5 +1,5 @@
 import { asError } from './errors';
-import { disabledProfileIds } from './inventoryQueries';
+import { disabledProfileIds, isAgentsWindowProfile } from './inventoryQueries';
 import { pathFor, type Platform, type ResolvedPaths, type WatchTarget } from './paths';
 import {
   type ManifestEntry,
@@ -42,12 +42,14 @@ export function composeInventory(input: ComposeInput): Inventory {
 
   const profiles: Profile[] = [
     { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
-    ...input.rawProfiles.map((p) => ({
-      id: p.location,
-      name: p.name,
-      isDefault: false,
-      inheritsDefaultExtensions: p.inheritsDefaultExtensions,
-    })),
+    ...input.rawProfiles
+      .map((p): Profile => ({
+        id: p.location,
+        name: p.name,
+        isDefault: false,
+        inheritsDefaultExtensions: p.inheritsDefaultExtensions,
+      }))
+      .sort(compareProfilesForDisplay),
   ];
 
   // Fail closed on duplicate names. VS Code's profile editor rejects duplicates
@@ -215,6 +217,18 @@ export function composeInventory(input: ComposeInput): Inventory {
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
 
   return { profiles, extensions, warnings };
+}
+
+const profileNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/**
+ * Orders named profiles for display. The Agents window profile comes first, and the rest follow
+ * in a case-insensitive natural sort, so "Profile 2" comes before "Profile 10".
+ */
+function compareProfilesForDisplay(a: Profile, b: Profile): number {
+  const agentsFirst = Number(isAgentsWindowProfile(b)) - Number(isAgentsWindowProfile(a));
+  if (agentsFirst !== 0) return agentsFirst;
+  return profileNameCollator.compare(a.name, b.name);
 }
 
 /**

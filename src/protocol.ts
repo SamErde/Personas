@@ -85,7 +85,6 @@ export type HomeToHost =
   | { type: 'powerShellAction'; action: 'refresh' | 'help' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal'; id?: string }
   | { type: 'ready' }
   | { type: 'openMatrix' }
-  | { type: 'openProfileReadOnly'; profileId: string }
   | { type: 'editProfileFile'; profileId: string }
   | { type: 'openWorkspaceReadOnly' }
   | { type: 'editWorkspaceFile' }

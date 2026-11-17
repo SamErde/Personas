@@ -45,7 +45,7 @@ _Avoid_: unqualified "profile", VS Code profile, persona
 ### Product surfaces
 
 **Home**:
-The Personas sidebar, divided into one section per area, including Profiles & Extensions and PowerShell Profiles.
+The Personas sidebar, divided into one section per area, including VS Code Profiles and PowerShell Profiles.
 _Avoid_: welcome view, dashboard
 
 **Extension Matrix**:
