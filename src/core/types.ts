@@ -46,8 +46,10 @@ export interface ParseWarning {
   /** Profiles whose data could not be read; mutations for these are disabled. */
   affectedProfileIds: string[];
   /** 'duplicateName': the profiles' data is readable, but the code CLI can't tell them apart by
-   *  name, so changes are disabled. Absent: the affected profiles' data could not be read. */
-  kind?: 'duplicateName';
+   *  name, so changes are disabled. 'profileRegistry': VS Code's profile registry could not be
+   *  read, so changes are disabled even though each listed profile's extensions were read.
+   *  Absent: the affected profiles' data could not be read. */
+  kind?: 'duplicateName' | 'profileRegistry';
 }
 
 export interface Inventory {

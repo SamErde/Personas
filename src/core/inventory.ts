@@ -486,6 +486,7 @@ export class InventoryService {
         file: 'globalStorage/storage.json',
         message: registryError.message,
         affectedProfileIds: inventory.profiles.map((p) => p.id),
+        kind: 'profileRegistry',
       });
     }
     return inventory;
