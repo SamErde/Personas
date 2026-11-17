@@ -7,6 +7,24 @@ export function disabledProfileIds(inventory: Inventory): Set<string> {
   return new Set(inventory.warnings.flatMap((w) => w.affectedProfileIds));
 }
 
+/** Profiles whose installed extensions are unknown because a list could not be read. A profile
+ * that uses Default's extensions is unknown whenever Default's list is. Duplicate-name warnings
+ * are left out: those profiles' lists were read. */
+export function unreadableProfileIds(inventory: Inventory): Set<string> {
+  const ids = new Set(inventory.warnings.filter((w) => w.kind === undefined).flatMap((w) => w.affectedProfileIds));
+  if (ids.has('default')) {
+    for (const profile of inventory.profiles) if (profile.inheritsDefaultExtensions) ids.add(profile.id);
+  }
+  return ids;
+}
+
+/** Profiles the code CLI cannot target because their name is shared or shadows Default. */
+export function duplicateNameProfileIds(inventory: Inventory): Set<string> {
+  return new Set(
+    inventory.warnings.filter((w) => w.kind === 'duplicateName').flatMap((w) => w.affectedProfileIds),
+  );
+}
+
 export function orphanCount(inventory: Inventory): number {
   return inventory.extensions.filter((e) => e.orphaned).length;
 }
@@ -28,12 +46,18 @@ export function isAgentsWindowProfile(profile: Profile): boolean {
   return !profile.isDefault && profile.id === AGENTS_WINDOW_PROFILE_LOCATION;
 }
 
-/** How a profile is named in the matrix and Home: a leading ⤷ marks one that uses Default's
- * extensions, and the Agents window profile is named for the window it serves. */
+/** A profile's plain name, as read aloud and in accessible names: the Agents window profile is
+ * named for the window it serves. */
+export function profileName(profile: Profile): string {
+  return isAgentsWindowProfile(profile) ? 'Agents window' : profile.name;
+}
+
+/** How a profile is named in the matrix and Home: its plain name, with a leading ⤷ marking one
+ * that uses Default's extensions. */
 export function profileLabel(profile: Profile): { label: string; tooltip?: string } {
   if (isAgentsWindowProfile(profile)) {
     return {
-      label: '⤷ Agents window',
+      label: `⤷ ${profileName(profile)}`,
       tooltip:
         "VS Code's built-in profile for its separate Agents window. It uses the Default profile's extensions, " +
         'so this column always matches Default. Extensions removed from Default are removed here too.',

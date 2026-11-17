@@ -108,7 +108,21 @@ thead th.ext-col { left: 0; z-index: 3; }
   border: 1px solid var(--vscode-contrastBorder, transparent);
   background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
 }
-.muted { opacity: 0.55; }
+/* Read-only cell glyphs differ by shape, so they need no color of their own. Opacity would fade
+ * them in high-contrast themes, so they use the description color, which those themes keep
+ * legible. */
+.glyph { color: var(--vscode-descriptionForeground); font-weight: 600; }
+.matrix-legend {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.6rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+}
+.cell input:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .spinner { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* In-flight mutation feedback: shown the instant a checkbox is toggled (localPending) or once

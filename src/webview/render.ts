@@ -1,17 +1,36 @@
-import { disabledProfileIds, offersWorkspaceEnablementGuide, profileLabel } from '../core/inventoryQueries';
-import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
+import {
+  duplicateNameProfileIds,
+  offersWorkspaceEnablementGuide,
+  profileLabel,
+  profileName,
+  unreadableProfileIds,
+} from '../core/inventoryQueries';
+import type { ExtensionRecord, Inventory, Profile, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
 export type Chip = 'all' | 'orphaned' | 'appliedToAllProfiles';
 
+/** What is known about an extension's install in one profile. Unknown means the profile's list,
+ * or the Default list it uses, could not be read. */
+export type InstallState = 'installed' | 'notInstalled' | 'unknown';
+
+/** Why a cell cannot install or uninstall. */
+export type ReadOnlyReason =
+  /** The row exists only in the current workspace, so no profile action applies. */
+  | 'workspaceOnly'
+  /** The profile uses the Default profile's extensions instead of its own. */
+  | 'inheritsDefault'
+  /** The profile's extension list could not be read. */
+  | 'unreadable'
+  /** The code CLI cannot tell this profile apart by name. */
+  | 'duplicateName'
+  /** VS Code applies the extension to every profile; only VS Code can change that. */
+  | 'appliedToAllProfiles';
+
 export interface CellVm {
   profileId: string;
-  installed: boolean;
-  /** True when this cell's profile uses the Default profile's extensions instead of its own. */
-  profileInheritsDefault: boolean;
-  /** True when this profile's extensions.json failed to parse — mutations disabled. */
-  disabled: boolean;
-  /** Workspace-only rows never expose a profile mutation, even when the id exists in a gallery. */
-  workspaceOnly: boolean;
+  install: InstallState;
+  /** Absent when the cell is a writable checkbox. */
+  readOnlyReason?: ReadOnlyReason;
 }
 
 export interface WorkspaceCellVm {
@@ -42,7 +61,8 @@ export interface RowVm {
 }
 
 export interface ViewModel {
-  /** Column headers in profile order; `label`/`tooltip` come from profileLabel. */
+  /** Column headers in profile order. `name` is the plain name used in accessible names (from
+   *  profileName); `label`/`tooltip` come from profileLabel. */
   profileNames: { id: string; name: string; label: string; tooltip?: string }[];
   workspace?: { name: string; kind: WorkspaceInventory['descriptor']['kind'] };
   rows: RowVm[];
@@ -56,7 +76,8 @@ export function buildViewModel(
   workspace?: WorkspaceInventory,
 ): ViewModel {
   const filter = state.filter.trim().toLowerCase();
-  const disabledIds = disabledProfileIds(inv);
+  const unreadableIds = unreadableProfileIds(inv);
+  const duplicateNameIds = duplicateNameProfileIds(inv);
   const workspaceById = new Map(workspace?.extensions.map((extension) => [extension.id, extension]) ?? []);
   const profileById = new Map(inv.extensions.map((extension) => [extension.id, extension]));
   const allIds = new Set([...profileById.keys(), ...workspaceById.keys()]);
@@ -89,13 +110,7 @@ export function buildViewModel(
       applyToAllProfiles,
       orphaned,
       profileBacked,
-      cells: inv.profiles.map((profile) => ({
-        profileId: profile.id,
-        installed: extension?.installedIn.includes(profile.id) ?? false,
-        profileInheritsDefault: profile.inheritsDefaultExtensions,
-        disabled: profileBacked && disabledIds.has(profile.id),
-        workspaceOnly: !profileBacked,
-      })),
+      cells: inv.profiles.map((profile) => toCell(profile, extension, unreadableIds, duplicateNameIds)),
       ...(workspaceStatus ? { workspaceCell: toWorkspaceCell(workspaceStatus) } : {}),
       ...(extension?.description ?? workspaceStatus?.description
         ? { description: extension?.description ?? workspaceStatus?.description }
@@ -118,12 +133,39 @@ export function buildViewModel(
   );
 
   return {
-    profileNames: inv.profiles.map((profile) => ({ id: profile.id, name: profile.name, ...profileLabel(profile) })),
+    profileNames: inv.profiles.map((profile) => ({ id: profile.id, name: profileName(profile), ...profileLabel(profile) })),
     ...(workspace ? { workspace: { name: workspace.descriptor.name, kind: workspace.descriptor.kind } } : {}),
     rows,
     warnings: inv.warnings,
     workspaceWarnings: workspace?.warnings ?? [],
   };
+}
+
+function toCell(
+  profile: Profile,
+  extension: ExtensionRecord | undefined,
+  unreadableIds: Set<string>,
+  duplicateNameIds: Set<string>,
+): CellVm {
+  const install: InstallState = !extension
+    ? 'notInstalled'
+    : unreadableIds.has(profile.id)
+      ? 'unknown'
+      : extension.installedIn.includes(profile.id)
+        ? 'installed'
+        : 'notInstalled';
+  const readOnlyReason: ReadOnlyReason | undefined = !extension
+    ? 'workspaceOnly'
+    : profile.inheritsDefaultExtensions
+      ? 'inheritsDefault'
+      : unreadableIds.has(profile.id)
+        ? 'unreadable'
+        : duplicateNameIds.has(profile.id)
+          ? 'duplicateName'
+          : extension.applyToAllProfiles
+            ? 'appliedToAllProfiles'
+            : undefined;
+  return { profileId: profile.id, install, ...(readOnlyReason ? { readOnlyReason } : {}) };
 }
 
 function toWorkspaceCell(status: WorkspaceExtensionStatus): WorkspaceCellVm {

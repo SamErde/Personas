@@ -3,7 +3,7 @@ import type { HostToMatrix, MatrixToHost } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
-import { renderMatrixTable } from './matrixTable';
+import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -518,6 +518,7 @@ function renderContent(): void {
     contentEl.append(legend);
   }
 
+  contentEl.append(renderMatrixLegend());
   contentEl.append(
     renderMatrixTable(vm, {
       icon: extIcon,
