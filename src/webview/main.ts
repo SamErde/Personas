@@ -3,6 +3,7 @@ import type { HostToMatrix, MatrixToHost } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
 import { crosshairFor, type GridHit } from './crosshair';
+import { renderMatrixTable } from './matrixTable';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -540,144 +541,65 @@ function renderContent(): void {
     contentEl.append(legend);
   }
 
-  const table = document.createElement('table');
-  const head = document.createElement('tr');
-  head.append(el('th', 'ext-col', 'Extension'));
-  for (const p of vm.profileNames) {
-    const th = el('th', '', p.label);
-    if (p.tooltip) th.title = p.tooltip;
-    head.append(th);
-  }
-  if (vm.workspace) {
-    const workspaceHead = el('th', 'workspace-col workspace-header');
-    workspaceHead.append(
-      el('span', 'workspace-header-title', 'Current workspace'),
-      el('span', 'workspace-header-name', vm.workspace.name),
-    );
-    head.append(workspaceHead);
-  }
-  table.append(head);
-
-  for (const row of vm.rows) {
-    const tr = document.createElement('tr');
-    const name = el('td', 'ext-col');
-    name.append(extIcon(row.id, row.displayName));
-
-    // The name itself is the hover-card trigger: hover (after a short delay) or keyboard focus
-    // (immediate) opens the card with detail + the row's bulk actions.
-    const nameTrigger = el('span', row.orphaned ? 'name orphaned' : 'name', row.displayName);
-    nameTrigger.dataset['extId'] = row.id; // lets syncOpenCard re-anchor after a rebuild
-    nameTrigger.tabIndex = 0;
-    nameTrigger.setAttribute('role', 'button');
-    nameTrigger.setAttribute('aria-haspopup', 'true');
-    nameTrigger.addEventListener('mouseenter', () => scheduleShowCard(row.id, nameTrigger, 250));
-    nameTrigger.addEventListener('mouseleave', () => {
-      clearShowTimer();
-      scheduleHideCard();
-    });
-    nameTrigger.addEventListener('focus', () => scheduleShowCard(row.id, nameTrigger, 0));
-    nameTrigger.addEventListener('blur', (e) => {
-      // Removal-fired blur: renderContent()'s replaceChildren() detaches this element while it
-      // holds keyboard focus, and Chromium fires blur with relatedTarget null before
-      // syncOpenCard can re-anchor the open card. That is not the user tabbing away — bail, or
-      // the keyboard path would lose the card on every live refresh (the pointer path never
-      // routes through blur).
-      if (!nameTrigger.isConnected) return;
-      const related = (e as FocusEvent).relatedTarget;
-      if (related instanceof Node && card.contains(related)) return;
-      hideCard();
-    });
-    // Redirect a forward Tab from the name into the open card instead of the next table cell —
-    // otherwise the card's action buttons would be unreachable by keyboard even while visible.
-    nameTrigger.addEventListener('keydown', (e) => {
-      const ke = e as KeyboardEvent;
-      if (ke.key === 'Tab' && !ke.shiftKey && cardOwnerExtId === row.id) {
-        const firstFocusable = card.querySelector<HTMLElement>('a, button');
-        if (firstFocusable) {
-          ke.preventDefault();
-          firstFocusable.focus();
-        }
-      }
-    });
-    name.append(nameTrigger);
-
-    if (row.applyToAllProfiles) {
-      const badge = el('button', 'badge', 'ALL');
-      badge.title = 'Applied to all profiles — click for how to change';
-      badge.addEventListener('click', () => post({ type: 'showApplyToAllProfilesGuide', extId: row.id }));
-      name.append(badge);
-    }
-
-    tr.append(name);
-    for (const cell of row.cells) {
-      const key = `${row.id}|${cell.profileId}`;
-      const isPending = pending.has(key) || localPending.has(key);
-      const td = el('td', isPending ? 'cell pending' : 'cell');
-      if (cell.workspaceOnly) {
-        td.append(el('span', 'muted', '—'));
-        td.title = 'Workspace-only extension — profile installation actions are unavailable.';
-        td.setAttribute('aria-label', 'Not represented in this profile; read-only workspace extension');
-      } else if (isPending) {
-        td.append(el('span', 'spinner', '◐'));
-      } else if (cell.disabled) {
-        td.append(el('span', 'muted', cell.installed ? '✓' : '—'));
-        td.title = 'This profile\'s extension list could not be read — actions are disabled.';
-      } else if (cell.profileInheritsDefault) {
-        td.append(el('span', 'muted', cell.installed ? '✓' : ''));
-        td.title = 'This profile inherits the default profile\'s extensions.';
-      } else if (row.applyToAllProfiles) {
-        td.append(el('span', 'muted', '✓'));
-        td.title = 'Applied to all profiles — use the badge next to the name to change.';
-      } else {
-        const box = document.createElement('input');
-        box.type = 'checkbox';
-        box.checked = cell.installed;
-        box.addEventListener('change', () => {
-          // Immediate "working" feedback — not optimistic UI: box.checked already reflects the
-          // user's click, but the cell itself renders as pending (spinner + amber tint), not the
-          // new checked state, the moment renderContent() below rebuilds it.
-          localPending.add(key);
-          renderContent();
-          post({ type: 'toggleCell', extId: row.id, profileId: cell.profileId, install: box.checked });
-        });
-        td.append(box);
-      }
-      tr.append(td);
-    }
-    if (vm.workspace) {
-      const status = row.workspaceCell;
-      const td = el('td', `workspace-col workspace-state workspace-${status?.state ?? 'unknown'}`);
-      const label = status?.label ?? 'Unknown';
-      const symbol = status?.symbol ?? '?';
-      td.title = status?.tooltip ?? 'Unknown — no supported workspace status evidence was available.';
-      // Guided hand-off (ADR-0003): no CLI persists workspace enablement, so the cell becomes a
-      // button that opens the extension in VS Code's Extensions view instead of changing it.
-      const guide = status?.offersEnablementGuide ? el('button', 'workspace-guide') : undefined;
-      if (guide) {
-        td.title += ' Opens the Extensions view to enable or disable it for this workspace.';
-        td.classList.add('workspace-guide-cell'); // the button, not the cell, carries the padding
-        guide.addEventListener('click', () => post({ type: 'showWorkspaceEnablementGuide', extId: row.id }));
-        td.append(guide);
-      }
-      const labelled = guide ?? td;
-      labelled.append(el('span', 'workspace-symbol', symbol), el('span', 'sr-only', label));
-      labelled.setAttribute('aria-label', `${label}. ${td.title}`);
-      tr.append(td);
-    }
-    table.append(tr);
-  }
-  // Indexes for the crosshair highlight: every row has one cell per column (no spans), so a
-  // cell's position is its column. Body rows count from 0, after the header row.
-  [...table.rows].forEach((tr, i) => {
-    if (i > 0) tr.dataset['row'] = String(i - 1);
-    [...tr.cells].forEach((cellEl, col) => (cellEl.dataset['col'] = String(col)));
-  });
-  contentEl.append(table);
+  contentEl.append(
+    renderMatrixTable(vm, {
+      icon: extIcon,
+      isPending: (extId, profileId) => {
+        const key = `${extId}|${profileId}`;
+        return pending.has(key) || localPending.has(key);
+      },
+      wireName,
+      toggleCell: (extId, profileId, install) => {
+        // Immediate "working" feedback, not optimistic UI: the box already reflects the user's
+        // click, but the cell renders as pending (spinner and tint), not the new checked state,
+        // the moment renderContent() below rebuilds it.
+        localPending.add(`${extId}|${profileId}`);
+        renderContent();
+        post({ type: 'toggleCell', extId, profileId, install });
+      },
+      showApplyToAllProfilesGuide: (extId) => post({ type: 'showApplyToAllProfilesGuide', extId }),
+      showWorkspaceEnablementGuide: (extId) => post({ type: 'showWorkspaceEnablementGuide', extId }),
+    }),
+  );
 
   // An open card survives the rebuild: re-anchored to the re-created name element and its
   // contents (including pending-disabled buttons) refreshed from the new state.
   syncOpenCard();
   applyCrosshair();
+}
+
+/** Hover-card behavior for an extension's name in the table: hover (after a short delay) or
+ * keyboard focus (immediate) opens the card with detail and the row's bulk actions. */
+function wireName(nameTrigger: HTMLElement, row: RowVm): void {
+  nameTrigger.addEventListener('mouseenter', () => scheduleShowCard(row.id, nameTrigger, 250));
+  nameTrigger.addEventListener('mouseleave', () => {
+    clearShowTimer();
+    scheduleHideCard();
+  });
+  nameTrigger.addEventListener('focus', () => scheduleShowCard(row.id, nameTrigger, 0));
+  nameTrigger.addEventListener('blur', (e) => {
+    // Removal-fired blur: renderContent()'s replaceChildren() detaches this element while it
+    // holds keyboard focus, and Chromium fires blur with relatedTarget null before
+    // syncOpenCard can re-anchor the open card. That is not the user tabbing away — bail, or
+    // the keyboard path would lose the card on every live refresh (the pointer path never
+    // routes through blur).
+    if (!nameTrigger.isConnected) return;
+    const related = (e as FocusEvent).relatedTarget;
+    if (related instanceof Node && card.contains(related)) return;
+    hideCard();
+  });
+  // Redirect a forward Tab from the name into the open card instead of the next table cell —
+  // otherwise the card's action buttons would be unreachable by keyboard even while visible.
+  nameTrigger.addEventListener('keydown', (e) => {
+    const ke = e as KeyboardEvent;
+    if (ke.key === 'Tab' && !ke.shiftKey && cardOwnerExtId === row.id) {
+      const firstFocusable = card.querySelector<HTMLElement>('a, button');
+      if (firstFocusable) {
+        ke.preventDefault();
+        firstFocusable.focus();
+      }
+    }
+  });
 }
 
 function renderCleanup(list: OrphanInfo[]): void {
