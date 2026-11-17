@@ -159,6 +159,7 @@ export function parsePackageMeta(text: string): PackageMeta {
   };
 }
 
+/** The distinct trimmed, non-blank strings in a `categories` value; undefined when there are none. */
 function parseCategories(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const categories = new Set<string>();

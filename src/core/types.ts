@@ -45,8 +45,9 @@ export interface ExtensionRecord {
   /** Every distinct manifest `metadata.source` value across profiles, as written and sorted, so
    *  an unrecognized value stays distinguishable from a known one. */
   installSources?: string[];
-  /** True when at least one manifest entry for this id has no usable `metadata.source`, or when
-   *  no manifest entry exists at all (a disk-only record). Consumers treat this as unknown. */
+  /** True when at least one manifest entry for this id has no usable `metadata.source`, when no
+   *  manifest entry exists at all (a disk-only record), or when any manifest is unreadable and so
+   *  may hold another source. Consumers treat this as unknown. */
   installSourceMissing?: true;
 }
 

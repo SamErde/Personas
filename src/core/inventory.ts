@@ -96,9 +96,7 @@ export function composeInventory(input: ComposeInput): Inventory {
   const appliedToAll = new Set<string>();
   const appliedToAllEntries = new Map<string, ManifestEntry>();
   const add = (entry: ManifestEntry, profileId: string) => {
-    let set = membership.get(entry.id);
-    if (!set) membership.set(entry.id, (set = new Set()));
-    set.add(profileId);
+    addToSetMap(membership, entry.id, profileId);
     let versions = profileVersions.get(entry.id);
     if (!versions) profileVersions.set(entry.id, (versions = new Map()));
     if (!versions.has(profileId)) versions.set(profileId, entry.version);
@@ -117,11 +115,8 @@ export function composeInventory(input: ComposeInput): Inventory {
   const referencedFolders = new Map<string, Set<string>>();
   const unreferencedVersions = new Map<string, Set<string>>();
   const noteFolder = (e: ManifestEntry) => {
-    const [target, key] =
-      e.relativeLocation !== undefined ? [referencedFolders, e.relativeLocation] : [unreferencedVersions, e.version];
-    let set = target.get(e.id);
-    if (!set) target.set(e.id, (set = new Set()));
-    set.add(key);
+    if (e.relativeLocation !== undefined) addToSetMap(referencedFolders, e.id, e.relativeLocation);
+    else addToSetMap(unreferencedVersions, e.id, e.version);
   };
 
   // Every distinct metadata.source across the manifest entries for an id, since one extension can
@@ -131,13 +126,8 @@ export function composeInventory(input: ComposeInput): Inventory {
   const installSources = new Map<string, Set<string>>();
   const missingSourceIds = new Set<string>();
   const noteSource = (e: ManifestEntry) => {
-    if (e.source === undefined) {
-      missingSourceIds.add(e.id);
-      return;
-    }
-    let sources = installSources.get(e.id);
-    if (!sources) installSources.set(e.id, (sources = new Set()));
-    sources.add(e.source);
+    if (e.source === undefined) missingSourceIds.add(e.id);
+    else addToSetMap(installSources, e.id, e.source);
   };
 
   const noteExtras = (e: ManifestEntry) => {
@@ -211,10 +201,10 @@ export function composeInventory(input: ComposeInput): Inventory {
   // from extensions belonging to the unreadable data — a corrupt default manifest also hides
   // applied-to-all-profiles flags, so such an extension could surface as a false orphan.
   // Suppress every disk-only record registry-wide rather than guess.
-  const orphanKnowledgeUnreliable =
-    input.orphanKnowledgeUnreliable === true ||
+  const anyManifestUnreadable =
     input.defaultManifest instanceof Error ||
     input.rawProfiles.some((p) => input.profileManifests.get(p.location) instanceof Error);
+  const orphanKnowledgeUnreliable = input.orphanKnowledgeUnreliable === true || anyManifestUnreadable;
 
   const allIds = new Set([...membership.keys(), ...versionsById.keys()]);
   const extensions: ExtensionRecord[] = [...allIds]
@@ -234,7 +224,7 @@ export function composeInventory(input: ComposeInput): Inventory {
         }
       }
       const categories = categoriesFor(categoryFolders, input.folderCategories);
-      const sources = [...(installSources.get(id) ?? [])].sort();
+      const sources = sortedCaseInsensitive(installSources.get(id) ?? []);
       const selectedVersions = profiles.flatMap((profile) => {
         const version = profileVersions.get(id)?.get(profile.id);
         return version ? [{ profileId: profile.id, version }] : [];
@@ -254,7 +244,9 @@ export function composeInventory(input: ComposeInput): Inventory {
         ...(installedTimestampMs !== undefined ? { installedTimestampMs } : {}),
         ...(categories !== undefined ? { categories } : {}),
         ...(sources.length > 0 ? { installSources: sources } : {}),
-        ...(sources.length === 0 || missingSourceIds.has(id) ? { installSourceMissing: true as const } : {}),
+        ...(sources.length === 0 || missingSourceIds.has(id) || anyManifestUnreadable
+          ? { installSourceMissing: true as const }
+          : {}),
       };
     });
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
@@ -262,7 +254,8 @@ export function composeInventory(input: ComposeInput): Inventory {
   return { profiles, extensions, warnings };
 }
 
-/** VS Code's target platforms, which it appends to a platform-specific extension's folder name. */
+/** VS Code's target platforms (its `TargetPlatform` values), which it appends to the folder name of
+ *  a platform-specific extension. Used only by the fallback for an entry without a folder reference. */
 const TARGET_PLATFORMS = new Set([
   'win32-x64',
   'win32-arm64',
@@ -292,8 +285,17 @@ function categoriesFor(
 ): string[] | undefined {
   const categories = new Set<string>();
   for (const folder of folders) for (const c of folderCategories?.get(folder) ?? []) categories.add(c);
-  if (categories.size === 0) return undefined;
-  return [...categories].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  return categories.size > 0 ? sortedCaseInsensitive(categories) : undefined;
+}
+
+function sortedCaseInsensitive(values: Iterable<string>): string[] {
+  return [...values].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function addToSetMap<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
+  let set = map.get(key);
+  if (!set) map.set(key, (set = new Set()));
+  set.add(value);
 }
 
 /**

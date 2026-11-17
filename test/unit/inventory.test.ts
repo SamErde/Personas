@@ -338,6 +338,16 @@ describe('composeInventory install sources', () => {
     expect(shared?.installSourceMissing).toBe(true);
   });
 
+  it('marks every source missing when a manifest is unreadable, since it may hold another source', () => {
+    const input = baseInput();
+    input.defaultManifest = [{ ...entry('pub.shared', '1.0.0'), source: 'gallery' }];
+    input.rawProfiles.push({ location: 'bbb', name: 'Home', inheritsDefaultExtensions: false });
+    input.profileManifests.set('bbb', new Error('EPERM'));
+    const shared = recordOf(input, 'pub.shared');
+    expect(shared?.installSources).toEqual(['gallery']);
+    expect(shared?.installSourceMissing).toBe(true);
+  });
+
   it('marks the source missing when no entry carries one, including a disk-only record', () => {
     const input = baseInput();
     const noSource = recordOf(input, 'pub.default-only');
