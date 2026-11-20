@@ -1,15 +1,24 @@
+/** Which control in a row: the extension's name, its ALL badge, a profile cell's checkbox, or
+ * the workspace guide button. */
+export type SlotName = 'name' | 'all' | 'workspace' | `profile:${string}`;
+
 /** A focusable control in the Extension Matrix, named by what it is rather than by its element,
  * so it can be found again after the table is rebuilt. */
 export interface FocusTarget {
   extId: string;
-  /** 'name', 'all' (the ALL badge), `profile:${profileId}` (a cell's checkbox), or 'workspace'. */
-  slot: string;
+  slot: SlotName;
 }
 
-/** One table row's focusable controls in visual order, each with the column that holds it. */
+/** A control in a row and the table column that holds it. */
+export interface FocusSlot {
+  slot: SlotName;
+  col: number;
+}
+
+/** One table row's focusable controls in visual order. */
 export interface FocusRow {
   extId: string;
-  slots: { slot: string; col: number }[];
+  slots: FocusSlot[];
 }
 
 /** The `data-focus-key` the table stamps on a control. Extension IDs never contain '|'. */
@@ -51,14 +60,20 @@ export function resolveFocus(target: FocusTarget, before: FocusRow[], after: Foc
 /**
  * Runs `rebuild`, which may replace everything inside `container`, and keeps keyboard focus on
  * the same logical control. It does nothing to focus unless focus was on a keyed control inside
- * `container`, so a rebuild never takes focus from elsewhere (the filter box, the hover card).
+ * `container`, so a rebuild never takes focus from elsewhere (the filter box, a toolbar chip).
  * When nothing survives, focus goes to `container` itself so it stays in the matrix.
+ *
+ * `heldFor` names the matrix control that owns focus held outside `container` (the hover card
+ * for an extension's name). That focus is left alone unless the rebuild drops it to <body>, as
+ * when the card closes because its row is gone; it then moves as if it had been on `heldFor`.
  */
-export function preserveMatrixFocus(container: HTMLElement, rebuild: () => void): void {
-  const target = keyedTarget(document.activeElement, container);
+export function preserveMatrixFocus(container: HTMLElement, rebuild: () => void, heldFor?: FocusTarget): void {
+  const keyed = keyedTarget(document.activeElement, container);
+  const target = keyed ?? heldFor;
   const before = target ? readRows(container) : [];
   rebuild();
   if (!target) return;
+  if (!keyed && !focusWasDropped()) return;
   const next = resolveFocus(target, before, readRows(container));
   if (next && focusMatrixControl(container, next)) return;
   focusContainer(container);
@@ -77,6 +92,11 @@ export function focusMatrixControl(container: HTMLElement, target: FocusTarget):
   return false;
 }
 
+/** True when nothing holds focus, as after the focused element is removed. */
+function focusWasDropped(): boolean {
+  return document.activeElement === null || document.activeElement === document.body;
+}
+
 function keyedTarget(active: Element | null, container: HTMLElement): FocusTarget | undefined {
   if (!(active instanceof HTMLElement) || !container.contains(active)) return undefined;
   return parseKey(active.dataset['focusKey']);
@@ -85,7 +105,12 @@ function keyedTarget(active: Element | null, container: HTMLElement): FocusTarge
 function parseKey(key: string | undefined): FocusTarget | undefined {
   const split = key?.indexOf('|') ?? -1;
   if (!key || split < 0) return undefined;
-  return { extId: key.slice(0, split), slot: key.slice(split + 1) };
+  const slot = key.slice(split + 1);
+  return isSlotName(slot) ? { extId: key.slice(0, split), slot } : undefined;
+}
+
+function isSlotName(slot: string): slot is SlotName {
+  return slot === 'name' || slot === 'all' || slot === 'workspace' || slot.startsWith('profile:');
 }
 
 function readRows(container: HTMLElement): FocusRow[] {
@@ -114,9 +139,9 @@ function focusContainer(container: HTMLElement): void {
 
 /** The same slot when the row has it, else the control nearest `col`. A tie goes to the later
  * column (the next control in Tab order), then to the earlier control in the row. */
-function pickInRow(row: FocusRow, slot: string, col: number): FocusTarget | undefined {
+function pickInRow(row: FocusRow, slot: SlotName, col: number): FocusTarget | undefined {
   if (row.slots.some((s) => s.slot === slot)) return { extId: row.extId, slot };
-  let best: { slot: string; col: number } | undefined;
+  let best: FocusSlot | undefined;
   for (const s of row.slots) {
     if (!best) {
       best = s;

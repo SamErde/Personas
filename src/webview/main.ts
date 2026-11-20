@@ -496,9 +496,13 @@ function withRestoringFocus(action: () => void): void {
   }
 }
 
-/** Rebuilds the content container, keeping keyboard focus on the same matrix control. */
+/** Rebuilds the content container, keeping keyboard focus on the same matrix control. Focus in
+ * the hover card belongs to its extension's name: syncOpenCard keeps it in the card, and when the
+ * card closes because the row is gone, it moves to the nearest remaining row instead of <body>. */
 function renderContent(): void {
-  withRestoringFocus(() => preserveMatrixFocus(contentEl, buildContent));
+  const owner = cardOwnerExtId;
+  const heldFor = owner !== undefined && card.contains(document.activeElement) ? { extId: owner, slot: 'name' as const } : undefined;
+  withRestoringFocus(() => preserveMatrixFocus(contentEl, buildContent, heldFor));
 }
 
 function buildContent(): void {

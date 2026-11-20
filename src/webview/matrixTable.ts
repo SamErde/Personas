@@ -37,7 +37,7 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
   }
 
   const body = table.createTBody();
-  vm.rows.forEach((row, rowIndex) => {
+  for (const [rowIndex, row] of vm.rows.entries()) {
     const tr = body.insertRow();
     tr.append(nameCell(row, hooks));
     row.cells.forEach((cell, index) => {
@@ -76,7 +76,7 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
       tr.append(td);
     });
     if (vm.workspace) tr.append(workspaceCell(row, hooks));
-  });
+  }
 
   // Indexes for the crosshair highlight: every row has one cell per column (no spans), so a
   // cell's position is its column. Body rows count from 0, after the header row.

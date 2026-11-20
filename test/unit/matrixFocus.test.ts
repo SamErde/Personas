@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { resolveFocus, type FocusRow } from '../../src/webview/matrixFocus';
+import { resolveFocus, type FocusRow, type FocusSlot } from '../../src/webview/matrixFocus';
 
 /** A row with its name in column 0 and a checkbox for each listed profile column. */
-function row(extId: string, profileCols: Record<string, number>, extra: { slot: string; col: number }[] = []): FocusRow {
+function row(extId: string, profileCols: Record<string, number>, extra: FocusSlot[] = []): FocusRow {
   return {
     extId,
     slots: [
       { slot: 'name', col: 0 },
       ...extra,
-      ...Object.entries(profileCols).map(([id, col]) => ({ slot: `profile:${id}`, col })),
+      ...Object.entries(profileCols).map(([id, col]): FocusSlot => ({ slot: `profile:${id}`, col })),
     ],
   };
 }

@@ -13,7 +13,7 @@ function send(message: HostToMatrix): void {
 }
 
 function sendInventory(inventory: Inventory): void {
-  send({ type: 'inventory', inventory, icons: {} } as HostToMatrix);
+  send({ type: 'inventory', inventory, icons: {} });
 }
 
 function table(): HTMLTableElement {
@@ -115,6 +115,29 @@ describe('focus when the focused row is removed', () => {
     sendInventory({ ...withInherited, extensions: withInherited.extensions.filter((e) => e.id !== 'pub.b') });
 
     expect(document.activeElement).toBe(checkbox('Gamma', 'Work'));
+  });
+
+  it("moves from the removed row's hover card to the nearest remaining row", () => {
+    sendInventory(withInherited);
+    nameOf('Beta').focus();
+    press(nameOf('Beta'), 'Tab'); // into the open card
+    expect(card().contains(document.activeElement)).toBe(true);
+
+    sendInventory({ ...withInherited, extensions: withInherited.extensions.filter((e) => e.id !== 'pub.b') });
+
+    expect(card().hidden).toBe(true);
+    expect(document.activeElement).toBe(nameOf('Gamma'));
+  });
+
+  it('leaves focus in the hover card when its row survives the refresh', () => {
+    nameOf('Beta').focus();
+    press(nameOf('Beta'), 'Tab');
+    const action = (document.activeElement as HTMLElement).dataset['action'];
+
+    sendInventory(withInherited);
+
+    expect(card().hidden).toBe(false);
+    expect((document.activeElement as HTMLElement).dataset['action']).toBe(action);
   });
 });
 
