@@ -102,15 +102,12 @@ function keyedTarget(active: Element | null, container: HTMLElement): FocusTarge
   return parseKey(active.dataset['focusKey']);
 }
 
-function parseKey(key: string | undefined): FocusTarget | undefined {
-  const split = key?.indexOf('|') ?? -1;
-  if (!key || split < 0) return undefined;
-  const slot = key.slice(split + 1);
-  return isSlotName(slot) ? { extId: key.slice(0, split), slot } : undefined;
-}
+/** Reads a `data-focus-key` back into a target; anything that is not a known slot is ignored. */
+const FOCUS_KEY = /^([^|]+)\|(name|all|workspace|profile:.+)$/;
 
-function isSlotName(slot: string): slot is SlotName {
-  return slot === 'name' || slot === 'all' || slot === 'workspace' || slot.startsWith('profile:');
+function parseKey(key = ''): FocusTarget | undefined {
+  const match = FOCUS_KEY.exec(key);
+  return match ? { extId: match[1]!, slot: match[2] as SlotName } : undefined;
 }
 
 function readRows(container: HTMLElement): FocusRow[] {
@@ -128,10 +125,6 @@ function readRows(container: HTMLElement): FocusRow[] {
 
 /** A temporary tabindex lets the container hold focus without becoming a click or Tab stop. */
 function focusContainer(container: HTMLElement): void {
-  if (container.hasAttribute('tabindex')) {
-    container.focus({ preventScroll: true });
-    return;
-  }
   container.tabIndex = -1;
   container.addEventListener('blur', () => container.removeAttribute('tabindex'), { once: true });
   container.focus({ preventScroll: true });
