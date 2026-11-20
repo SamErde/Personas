@@ -16,16 +16,10 @@ function sendInventory(inventory: Inventory): void {
   send({ type: 'inventory', inventory, icons: {} });
 }
 
-function table(): HTMLTableElement {
-  const found = document.querySelector<HTMLTableElement>('.content table');
-  if (!found) throw new Error('The matrix table is not rendered');
-  return found;
-}
+const table = () => document.querySelector<HTMLTableElement>('.content table')!;
 
 function checkbox(extension: string, profile: string): HTMLInputElement {
-  const box = cellAt(table(), extension, profile).querySelector<HTMLInputElement>('input[type="checkbox"]');
-  if (!box) throw new Error(`${extension} in ${profile} has no checkbox`);
-  return box;
+  return cellAt(table(), extension, profile).querySelector<HTMLInputElement>('input[type="checkbox"]')!;
 }
 
 function nameOf(extension: string): HTMLElement {

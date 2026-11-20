@@ -48,18 +48,13 @@ describe('resolveFocus', () => {
     expect(resolveFocus({ extId: 'pub.b', slot: 'profile:aaa' }, before, after)).toEqual({ extId: 'pub.a', slot: 'profile:default' });
   });
 
-  it('moves to the nearest surviving row by distance, even when a farther row survives below', () => {
-    const before = ['pub.a', 'pub.b', 'pub.c', 'pub.d'].map((id) => row(id, { aaa: 2 }));
-    const after = [row('pub.a', { aaa: 2 }), row('pub.d', { aaa: 2 })];
+  it.each([
+    { name: 'the nearer row above over a farther row below', rows: ['pub.a', 'pub.b', 'pub.c', 'pub.d'], survivors: ['pub.a', 'pub.d'], expected: 'pub.a' },
+    { name: 'the row below when both are equally near', rows: ['pub.a', 'pub.b', 'pub.c'], survivors: ['pub.a', 'pub.c'], expected: 'pub.c' },
+  ])('picks the nearest surviving row by distance: $name', ({ rows, survivors, expected }) => {
+    const grid = (ids: string[]) => ids.map((id) => row(id, { aaa: 2 }));
 
-    expect(resolveFocus({ extId: 'pub.b', slot: 'profile:aaa' }, before, after)).toEqual({ extId: 'pub.a', slot: 'profile:aaa' });
-  });
-
-  it('prefers the row below when surviving rows above and below are equally near', () => {
-    const before = ['pub.a', 'pub.b', 'pub.c'].map((id) => row(id, { aaa: 2 }));
-    const after = [row('pub.a', { aaa: 2 }), row('pub.c', { aaa: 2 })];
-
-    expect(resolveFocus({ extId: 'pub.b', slot: 'profile:aaa' }, before, after)).toEqual({ extId: 'pub.c', slot: 'profile:aaa' });
+    expect(resolveFocus({ extId: 'pub.b', slot: 'profile:aaa' }, grid(rows), grid(survivors))).toEqual({ extId: expected, slot: 'profile:aaa' });
   });
 
   it('finds nothing when no row survives', () => {
