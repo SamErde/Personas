@@ -9,6 +9,7 @@ import type {
   WorkspaceExtensionCounts,
   WorkspaceInventory,
 } from './core/types';
+import type { MatrixViewState } from './webview/render';
 
 // --- Extension Matrix ---
 
@@ -20,6 +21,8 @@ export type HostToMatrix =
       icons: Record<string, string>;
     }
   | { type: 'pending'; extId: string; profileId: string }
+  /** The session's last view state, sent to a newly opened panel before its first inventory. */
+  | { type: 'viewState'; state: MatrixViewState }
   | { type: 'orphans'; orphans: OrphanInfo[] }
   | { type: 'cleanupResult'; results: { folderName: string; ok: boolean; error?: string }[] }
   | { type: 'unsupported'; reason: string };
@@ -27,6 +30,8 @@ export type HostToMatrix =
 export type MatrixToHost =
   | { type: 'ready' }
   | { type: 'refresh' }
+  /** The view state after each change, for the host to keep for the session. */
+  | { type: 'viewState'; state: MatrixViewState }
   | { type: 'toggleCell'; extId: string; profileId: string; install: boolean }
   | { type: 'showApplyToAllProfilesGuide'; extId: string }
   | { type: 'showWorkspaceEnablementGuide'; extId: string }

@@ -7,7 +7,56 @@ import {
 } from '../core/inventoryQueries';
 import type { ExtensionRecord, Inventory, Profile, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
 
-export type Chip = 'all' | 'orphaned' | 'appliedToAllProfiles';
+/** A view is a lens on the whole list rather than an attribute, so exactly one is selected. */
+export type MatrixView = 'all' | 'orphaned' | 'appliedToAllProfiles';
+
+/** The value a row matches in a dimension when it has no data for it. */
+export const UNKNOWN_VALUE = '';
+
+/**
+ * What the matrix is narrowed by. A row must match every dimension (they combine with "and"), and
+ * it matches a dimension when it has any of the selected values (values combine with "or"). An
+ * empty value list leaves its dimension unfiltered.
+ */
+export interface MatrixFilters {
+  view: MatrixView;
+  /** Matched, case-insensitively, against the extension's ID, name, and publisher. */
+  text: string;
+  /** Category names from package.json, or UNKNOWN_VALUE. */
+  categories: string[];
+  /** Publisher IDs, or UNKNOWN_VALUE. */
+  publishers: string[];
+  /** Manifest `metadata.source` values as written, or UNKNOWN_VALUE. */
+  sources: string[];
+}
+
+/** How the person has set up the matrix. The extension host keeps it for the session so that a
+ * reopened panel comes back the same way; it is not saved across VS Code restarts. */
+export interface MatrixViewState {
+  filters: MatrixFilters;
+}
+
+export const NO_FILTERS: MatrixFilters ={ view: 'all', text: '', categories: [], publishers: [], sources: [] };
+
+/** A row's values in each multi-value dimension, with missing data as UNKNOWN_VALUE. */
+function dimensionValues(
+  extension: ExtensionRecord | undefined,
+  publisher: string | undefined,
+): Record<'categories' | 'publishers' | 'sources', string[]> {
+  const categories = extension?.categories?.length ? extension.categories : [UNKNOWN_VALUE];
+  const sources = [
+    ...(extension?.installSources ?? []),
+    // A workspace-only row has no manifest entry, so its source is unknown too.
+    ...(!extension || extension.installSourceMissing || !extension.installSources?.length ? [UNKNOWN_VALUE] : []),
+  ];
+  return { categories, publishers: [publisher ?? UNKNOWN_VALUE], sources };
+}
+
+function matchesDimensions(values: ReturnType<typeof dimensionValues>, filters: MatrixFilters): boolean {
+  return (['categories', 'publishers', 'sources'] as const).every(
+    (dimension) => filters[dimension].length === 0 || values[dimension].some((value) => filters[dimension].includes(value)),
+  );
+}
 
 /** What is known about an extension's install in one profile. Unknown means the profile's list,
  * or the Default list it uses, could not be read. */
@@ -68,16 +117,18 @@ export interface ViewModel {
   profileNames: { id: string; name: string; label: string; tooltip?: string }[];
   workspace?: { name: string; kind: WorkspaceInventory['descriptor']['kind'] };
   rows: RowVm[];
+  /** How many rows there are before any filter, for "42 of 180 extensions". */
+  total: number;
   warnings: Inventory['warnings'];
   workspaceWarnings: string[];
 }
 
 export function buildViewModel(
   inv: Inventory,
-  state: { filter: string; chip: Chip },
+  filters: MatrixFilters,
   workspace?: WorkspaceInventory,
 ): ViewModel {
-  const filter = state.filter.trim().toLowerCase();
+  const text = filters.text.trim().toLowerCase();
   const warned = profileWarnings(inv);
   const workspaceById = new Map(workspace?.extensions.map((extension) => [extension.id, extension]) ?? []);
   const profileById = new Map(inv.extensions.map((extension) => [extension.id, extension]));
@@ -91,9 +142,14 @@ export function buildViewModel(
     const displayName = extension?.displayName ?? workspaceStatus?.displayName ?? id;
     const applyToAllProfiles = extension?.applyToAllProfiles ?? false;
     const orphaned = extension?.orphaned ?? false;
-    if (state.chip === 'orphaned' && (!profileBacked || !orphaned)) continue;
-    if (state.chip === 'appliedToAllProfiles' && (!profileBacked || !applyToAllProfiles)) continue;
-    if (filter && !id.includes(filter) && !displayName.toLowerCase().includes(filter)) continue;
+    const publisher = extension?.publisher ?? workspaceStatus?.publisher;
+    const publisherDisplayName = extension?.publisherDisplayName;
+    if (filters.view === 'orphaned' && (!profileBacked || !orphaned)) continue;
+    if (filters.view === 'appliedToAllProfiles' && (!profileBacked || !applyToAllProfiles)) continue;
+    if (text && ![id, displayName, publisher, publisherDisplayName].some((value) => value?.toLowerCase().includes(text))) {
+      continue;
+    }
+    if (!matchesDimensions(dimensionValues(extension, publisher), filters)) continue;
 
     // In a loaded workspace, the workspace composer has resolved the active profile manifest or
     // effective runtime location. Never overwrite that with arbitrary disk enumeration order.
@@ -116,10 +172,8 @@ export function buildViewModel(
       ...(extension?.description ?? workspaceStatus?.description
         ? { description: extension?.description ?? workspaceStatus?.description }
         : {}),
-      ...(extension?.publisher ?? workspaceStatus?.publisher
-        ? { publisher: extension?.publisher ?? workspaceStatus?.publisher }
-        : {}),
-      ...(extension?.publisherDisplayName ? { publisherDisplayName: extension.publisherDisplayName } : {}),
+      ...(publisher ? { publisher } : {}),
+      ...(publisherDisplayName ? { publisherDisplayName } : {}),
       ...(latestVersion ? { version: latestVersion } : {}),
       ...(extension?.installedTimestampMs !== undefined
         ? { installedTimestampMs: extension.installedTimestampMs }
@@ -137,6 +191,7 @@ export function buildViewModel(
     profileNames: inv.profiles.map((profile) => ({ id: profile.id, name: profileName(profile), ...profileLabel(profile) })),
     ...(workspace ? { workspace: { name: workspace.descriptor.name, kind: workspace.descriptor.kind } } : {}),
     rows,
+    total: allIds.size,
     warnings: inv.warnings,
     workspaceWarnings: workspace?.warnings ?? [],
   };

@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Inventory, WorkspaceInventory } from '../../src/core/types';
 import { gridHitAt, paintCrosshair } from '../../src/webview/crosshair';
-import { buildViewModel } from '../../src/webview/render';
+import { buildViewModel, NO_FILTERS } from '../../src/webview/render';
 import { renderMatrixLegend, renderMatrixTable, type MatrixTableHooks } from '../../src/webview/matrixTable';
 import { cellAt, inv, withInherited } from './matrixDom';
 
@@ -19,7 +19,7 @@ const hooks: MatrixTableHooks = {
 };
 
 function render(inventory: Inventory = inv, workspace?: WorkspaceInventory): HTMLTableElement {
-  const table = renderMatrixTable(buildViewModel(inventory, { filter: '', chip: 'all' }, workspace), hooks);
+  const table = renderMatrixTable(buildViewModel(inventory, NO_FILTERS, workspace), hooks);
   document.body.replaceChildren(table);
   return table;
 }

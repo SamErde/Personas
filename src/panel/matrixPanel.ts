@@ -5,6 +5,7 @@ import { asError } from '../core/errors';
 import { offersWorkspaceEnablementGuide } from '../core/inventoryQueries';
 import type { Inventory, WorkspaceInventory } from '../core/types';
 import type { HostToMatrix, MatrixToHost } from '../protocol';
+import type { MatrixViewState } from '../webview/render';
 import type { Services } from '../servicesFactory';
 import { statFolder } from './fsStat';
 import { shownInventory } from './profileVisibility';
@@ -12,6 +13,13 @@ import { createNonce, matrixContentSecurityPolicy, renderContentSecurityPolicyMe
 
 export class MatrixPanel {
   static current: MatrixPanel | undefined;
+
+  /**
+   * The matrix's view state, kept in memory for the extension host's session. Hiding the panel
+   * keeps its webview (retainContextWhenHidden), but closing it destroys the webview's state, so
+   * the host holds the view and sends it to the next panel. It is not saved across restarts.
+   */
+  private static sessionViewState: MatrixViewState | undefined;
 
   static show(context: vscode.ExtensionContext, services: Services): void {
     MatrixPanel.open(context, services, undefined);
@@ -154,6 +162,13 @@ export class MatrixPanel {
     }
     switch (m.type) {
       case 'ready':
+        // A reopened panel starts from the session's last view, before its first inventory.
+        if (MatrixPanel.sessionViewState) this.post({ type: 'viewState', state: MatrixPanel.sessionViewState });
+        await this.guard(() => this.refresh());
+        return;
+      case 'viewState':
+        MatrixPanel.sessionViewState = m.state;
+        return;
       case 'refresh':
         await this.guard(() => this.refresh());
         return;
