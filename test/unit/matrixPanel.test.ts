@@ -65,44 +65,48 @@ afterEach(() => {
   mock.panels.length = 0;
 });
 
+/**
+ * Opens a panel, lets the test act on it as its webview, closes it, then opens a new panel and
+ * has its webview signal ready. Returns what the host posted to the new panel.
+ */
+async function reopenAfter(firstServices: Services, actOnFirst: (first: FakePanel) => Promise<void> | void): Promise<HostToMatrix[]> {
+  MatrixPanel.show(context, firstServices);
+  const first = mock.panels[0]!;
+  await actOnFirst(first);
+  first.close();
+
+  MatrixPanel.show(context, services);
+  const second = mock.panels[1]!;
+  second.receive({ type: 'ready' });
+  await settle();
+  return second.posted;
+}
+
 describe('view state across closing and reopening the panel', () => {
   it('is sent to the reopened panel before its first inventory', async () => {
-    MatrixPanel.show(context, services);
-    const first = mock.panels[0]!;
     const state = { filters: { ...NO_FILTERS, view: 'orphaned' as const, text: 'Be' } };
-    first.receive({ type: 'viewState', state });
-    await settle();
-    first.close();
 
-    MatrixPanel.show(context, services);
-    const second = mock.panels[1]!;
-    second.receive({ type: 'ready' });
-    await settle();
+    const posted = await reopenAfter(services, async (first) => {
+      first.receive({ type: 'viewState', state });
+      await settle();
+    });
 
-    expect(second.posted.map((m) => m.type)).toEqual(['viewState', 'inventory']);
-    expect(second.posted[0]).toEqual({ type: 'viewState', state });
+    expect(posted.map((m) => m.type)).toEqual(['viewState', 'inventory']);
+    expect(posted[0]).toEqual({ type: 'viewState', state });
   });
 
   it('is kept at once, even while the closing panel is still reading the inventory', async () => {
     let finishRead: () => void = () => undefined;
     const slowRead = new Promise<void>((resolve) => (finishRead = resolve));
-    const slow = {
-      ...services,
-      inventory: { getInventory: async () => (await slowRead, inv) },
-    } as unknown as Services;
-    MatrixPanel.show(context, slow);
-    const first = mock.panels[0]!;
-    first.receive({ type: 'refresh' }); // still running when the person changes the view and closes
+    const slow = { ...services, inventory: { getInventory: async () => (await slowRead, inv) } } as unknown as Services;
     const state = { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles' as const } };
-    first.receive({ type: 'viewState', state });
-    first.close();
 
-    MatrixPanel.show(context, services);
-    const second = mock.panels[1]!;
-    second.receive({ type: 'ready' });
-    await settle();
+    const posted = await reopenAfter(slow, (first) => {
+      first.receive({ type: 'refresh' }); // still running when the person changes the view and closes
+      first.receive({ type: 'viewState', state });
+    });
     finishRead();
 
-    expect(second.posted[0]).toEqual({ type: 'viewState', state });
+    expect(posted[0]).toEqual({ type: 'viewState', state });
   });
 });

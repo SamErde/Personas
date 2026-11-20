@@ -2,15 +2,11 @@
 // Drives the real Extension Matrix webview (main.ts) through host messages and checks the view
 // chips, the text filter, the result announcement, and the view state kept by the host.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HostToMatrix, MatrixToHost } from '../../src/protocol';
+import type { MatrixToHost } from '../../src/protocol';
 import { NO_FILTERS } from '../../src/webview/render';
-import { inv } from './matrixDom';
+import { inv, loadMatrixWebview, sendToMatrix as send } from './matrixDom';
 
 const posted: MatrixToHost[] = [];
-
-function send(message: HostToMatrix): void {
-  window.dispatchEvent(new MessageEvent('message', { data: message, origin: window.location.origin }));
-}
 
 const filterInput = () => document.querySelector<HTMLInputElement>('.toolbar input[type="search"]')!;
 const announcement = () => document.querySelector<HTMLElement>('[aria-live="polite"]')!.textContent;
@@ -27,13 +23,7 @@ function type(text: string): void {
   filterInput().dispatchEvent(new Event('input'));
 }
 
-beforeAll(async () => {
-  document.body.innerHTML = '<div id="app"></div>';
-  const g = globalThis as unknown as Record<string, unknown>;
-  g['acquireVsCodeApi'] = () => ({ postMessage: (m: MatrixToHost) => posted.push(m) });
-  if (typeof CSS === 'undefined' || typeof CSS.escape !== 'function') g['CSS'] = { escape: (value: string) => value };
-  await import('../../src/webview/main.js'); // Vite resolves the .js specifier to main.ts
-});
+beforeAll(() => loadMatrixWebview(posted));
 
 beforeEach(() => {
   vi.useFakeTimers();
