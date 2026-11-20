@@ -37,19 +37,22 @@ export function resolveFocus(target: FocusTarget, before: FocusRow[], after: Foc
   const byId = new Map(after.map((r) => [r.extId, r]));
   const prevIndex = before.findIndex((r) => r.extId === target.extId);
   const prevCol = before[prevIndex]?.slots.find((s) => s.slot === target.slot)?.col ?? 0;
+  const survivor = nearestSurvivor(before, prevIndex, (r) => byId.has(r.extId));
   const row =
     byId.get(target.extId) ??
-    nearestSurvivor(before, prevIndex, byId) ??
+    (survivor && byId.get(survivor.extId)) ??
     after[Math.min(Math.max(prevIndex, 0), after.length - 1)];
   return row && pickInRow(row, target.slot, prevCol);
 }
 
-/** The surviving row nearest the focused row's old position, the one below on a tie. */
-function nearestSurvivor(before: FocusRow[], prevIndex: number, byId: Map<string, FocusRow>): FocusRow | undefined {
+/**
+ * The surviving item nearest `index` in `before`, the later one on a tie: the row below a removed
+ * row, or the chip after a removed chip. The item at `index` itself is not considered.
+ */
+export function nearestSurvivor<T>(before: readonly T[], index: number, survives: (item: T) => boolean): T | undefined {
   for (let distance = 1; distance <= before.length; distance++) {
-    for (const candidate of [before[prevIndex + distance], before[prevIndex - distance]]) {
-      const survivor = candidate && byId.get(candidate.extId);
-      if (survivor) return survivor;
+    for (const candidate of [before[index + distance], before[index - distance]]) {
+      if (candidate !== undefined && survives(candidate)) return candidate;
     }
   }
   return undefined;

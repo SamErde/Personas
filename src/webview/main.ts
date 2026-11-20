@@ -5,6 +5,7 @@ import { buildViewModel, NO_FILTERS, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
+import { createFilterControls } from './matrixFilters';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -80,17 +81,16 @@ function clearFilterTimer(): void {
 const chipButtons: [MatrixView, HTMLElement][] = [];
 for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedToAllProfiles', 'Applied to all profiles']] as const) {
   const b = el('button', 'chip', label);
-  b.addEventListener('click', () => {
-    filters = { ...filters, view: key };
-    keepViewState();
-    updateChipButtons();
-    clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
-    applyFilterChange();
-  });
+  b.addEventListener('click', () => changeFilters({ view: key }));
   chipButtons.push([key, b]);
   toolbar.append(b);
 }
 updateChipButtons();
+
+// Category, publisher, and source filters: one Filters disclosure beside the view chips, because
+// three separate buttons wrapped the toolbar at a 1,000px panel width.
+const filterControls = createFilterControls(changeFilters);
+toolbar.append(filterControls.toggle);
 
 const orphanButton = el('button', 'chip cleanup', '');
 orphanButton.hidden = true;
@@ -109,7 +109,7 @@ resultStatus.setAttribute('role', 'status');
 resultStatus.setAttribute('aria-live', 'polite');
 
 const contentEl = el('div', 'content');
-app.append(toolbar, resultStatus, contentEl);
+app.append(toolbar, filterControls.panel, filterControls.chips, resultStatus, contentEl);
 // ---------------------------------------------------------------------------------------------
 
 // --- Extension detail hover card ------------------------------------------------------------
@@ -530,6 +530,16 @@ function applyFilterChange(): void {
   resultStatus.textContent = shownCount ? `${shownCount.shown} of ${shownCount.total} extensions` : '';
 }
 
+/** Applies a change the person made to the view or the filters: keeps it with the host, shows it
+ * in the view chips, rebuilds the matrix, and announces the count. */
+function changeFilters(next: Partial<MatrixFilters>): void {
+  filters = { ...filters, ...next };
+  keepViewState();
+  updateChipButtons();
+  clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
+  applyFilterChange();
+}
+
 /** Gives the host the current view state to keep for the session. */
 function keepViewState(): void {
   post({ type: 'viewState', state: { filters } });
@@ -567,7 +577,11 @@ function buildContent(): void {
   contentEl.replaceChildren();
   shownCount = undefined; // only the matrix view has a count to announce
   // Leaving the matrix also empties the announcement, so the cleanup view never holds an old count.
-  if (!inventory || orphans !== undefined) resultStatus.textContent = '';
+  // The filter controls show the filters at once, keeping their last counts until the matrix is back.
+  if (!inventory || orphans !== undefined) {
+    resultStatus.textContent = '';
+    filterControls.update(filters);
+  }
   if (!inventory) {
     renderedRows = [];
     hideCard();
@@ -582,6 +596,7 @@ function buildContent(): void {
   }
 
   const vm = buildViewModel(inventory, filters, workspace);
+  filterControls.update(filters, vm.facets);
   renderedRows = vm.rows;
   shownCount = { shown: vm.rows.length, total: vm.total };
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { orphanCount } from '../../src/core/inventoryQueries';
-import type { MatrixFilters } from '../../src/protocol';
-import { buildViewModel, NO_FILTERS, UNKNOWN_VALUE } from '../../src/webview/render';
+import type { FilterDimension, MatrixFilters } from '../../src/protocol';
+import { activeFilterChips, buildViewModel, NO_FILTERS, OTHER_SOURCE, UNKNOWN_VALUE } from '../../src/webview/render';
 import { formatBytes } from '../../src/webview/ui';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../../src/core/types';
 
@@ -363,10 +363,149 @@ describe('filter dimensions', () => {
     ]);
   });
 
+  it('puts install sources without a known label under Other', () => {
+    const odd: Inventory = {
+      ...faceted,
+      extensions: faceted.extensions.map((e) =>
+        e.id === 'pub.c' ? { ...e, installSources: ['resource', 'somethingNew'], installSourceMissing: undefined } : e,
+      ),
+    };
+    const sourceIds = (sources: string[]) =>
+      buildViewModel(odd, { ...NO_FILTERS, sources }).rows.map((r) => r.id);
+    expect(sourceIds([OTHER_SOURCE])).toEqual(['pub.c']);
+    expect(sourceIds(['vsix'])).toEqual(['pub.b']);
+    expect(sourceIds([UNKNOWN_VALUE])).toEqual([]);
+  });
+
+  it('matches publishers by ID whatever the case written in package.json', () => {
+    const mixed: Inventory = {
+      ...faceted,
+      extensions: faceted.extensions.map((e) => (e.id === 'pub.b' ? { ...e, publisher: 'Contoso' } : e)),
+    };
+    expect(buildViewModel(mixed, { ...NO_FILTERS, publishers: ['contoso'] }).rows.map((r) => r.id)).toEqual(['pub.a', 'pub.b']);
+  });
+
+  /** Each option of a dimension as [label, count], with a * after a selected one. */
+  const facet = (dimension: FilterDimension, filters: Partial<MatrixFilters> = {}, inventory = faceted, workspace?: WorkspaceInventory) =>
+    buildViewModel(inventory, { ...NO_FILTERS, ...filters }, workspace).facets[dimension].map(
+      (option) => `${option.label}${option.selected ? '*' : ''} ${option.count}`,
+    );
+
+  it('lists every value of each dimension with how many rows carry it, Unknown last', () => {
+    expect(facet('categories')).toEqual(['Linters 2', 'Themes 1', 'Unknown 1']);
+    expect(facet('publishers')).toEqual(['contoso 1', 'fabrikam 1', 'Unknown 1']);
+    expect(facet('sources')).toEqual(['Marketplace 2', 'VSIX 1', 'Unknown 1']);
+  });
+
+  it('counts each value under the view, the text, and the other dimensions, but not its own dimension', () => {
+    expect(facet('categories', { categories: ['Themes'] })).toEqual(['Linters 2', 'Themes* 1', 'Unknown 1']);
+    expect(facet('publishers', { categories: ['Themes'] })).toEqual(['contoso 1', 'fabrikam 0', 'Unknown 0']);
+    expect(facet('sources', { categories: ['Themes'] })).toEqual(['Marketplace 1', 'VSIX 0', 'Unknown 0']);
+    expect(facet('categories', { view: 'appliedToAllProfiles' })).toEqual(['Linters 1', 'Themes 1', 'Unknown 0']);
+    expect(facet('categories', { text: 'beta' })).toEqual(['Linters 1', 'Themes 0', 'Unknown 0']);
+  });
+
+  it('counts a row with several install sources once under each of them', () => {
+    const odd: Inventory = {
+      ...faceted,
+      extensions: faceted.extensions.map((e) =>
+        e.id === 'pub.c' ? { ...e, installSources: ['resource', 'somethingNew'], installSourceMissing: undefined } : e,
+      ),
+    };
+    expect(facet('sources', {}, odd)).toEqual(['Marketplace 2', 'VSIX 1', 'Other 1']);
+    expect(facet('sources', { publishers: ['fabrikam'] }, odd)).toEqual(['Marketplace 1', 'VSIX 1', 'Other 0']);
+  });
+
+  it('keeps a selected value that no row carries any more, so it can still be cleared', () => {
+    expect(facet('publishers', { publishers: ['retired'] })).toEqual(['contoso 1', 'fabrikam 1', 'retired* 0', 'Unknown 1']);
+    expect(ids({ publishers: ['retired'] })).toEqual([]);
+  });
+
+  it('labels publishers by display name, adding the ID only where two publishers share a name', () => {
+    const named: Inventory = {
+      ...faceted,
+      extensions: faceted.extensions.map((e) => {
+        if (e.id === 'pub.a') return { ...e, publisher: 'ms-python', publisherDisplayName: 'Microsoft' };
+        if (e.id === 'pub.b') return { ...e, publisher: 'ms-vscode', publisherDisplayName: 'Microsoft' };
+        return { ...e, publisher: 'github', publisherDisplayName: 'GitHub' };
+      }),
+    };
+    const options = buildViewModel(named, NO_FILTERS).facets.publishers;
+    expect(options.map(({ value, label, detail }) => [value, label, detail])).toEqual([
+      ['github', 'GitHub', undefined],
+      ['ms-python', 'Microsoft', 'ms-python'],
+      ['ms-vscode', 'Microsoft', 'ms-vscode'],
+    ]);
+  });
+
+  it('counts a workspace-only row under its publisher and under Unknown for categories and source', () => {
+    const workspace = workspaceWith([
+      status('local.only', 'unknown', { publisher: 'contoso', installedInActiveProfile: false, workspaceLocal: 'candidate', profileBacked: false }),
+    ]);
+    expect(facet('publishers', {}, faceted, workspace)).toEqual(['contoso 2', 'fabrikam 1', 'Unknown 1']);
+    expect(facet('categories', {}, faceted, workspace)).toEqual(['Linters 2', 'Themes 1', 'Unknown 2']);
+    expect(facet('sources', {}, faceted, workspace)).toEqual(['Marketplace 2', 'VSIX 1', 'Unknown 2']);
+  });
+
+  it('counts an extension once, however many profiles have it directly or through Default', () => {
+    // Beta is installed in Work only; adding it to Default also gives it to Agents, which uses Default.
+    const inheritedToo: Inventory = {
+      ...faceted,
+      extensions: faceted.extensions.map((e) => (e.id === 'pub.b' ? { ...e, installedIn: ['default', 'aaa', 'bbb'] } : e)),
+    };
+    expect(facet('publishers', {}, inheritedToo)).toEqual(facet('publishers'));
+    expect(facet('sources', {}, inheritedToo)).toEqual(['Marketplace 2', 'VSIX 1', 'Unknown 1']);
+  });
+
+  it('counts rows the same when a profile list is unreadable or a profile uses Default', () => {
+    const unreadableDefault: Inventory = {
+      ...faceted,
+      warnings: [{ file: 'extensions.json (default profile)', message: 'bad', affectedProfileIds: ['default'] }],
+    };
+    expect(facet('categories', {}, unreadableDefault)).toEqual(facet('categories'));
+    expect(facet('sources', {}, unreadableDefault)).toEqual(facet('sources'));
+  });
+
   it('counts every row, before filters, as the total', () => {
     const vm = buildViewModel(faceted, { ...NO_FILTERS, view: 'orphaned' });
     expect(vm.rows).toHaveLength(1);
     expect(vm.total).toBe(3);
+  });
+});
+
+describe('activeFilterChips', () => {
+  it('names each selected value by dimension and label, in category, publisher, source order', () => {
+    const named: Inventory = {
+      ...inv,
+      extensions: inv.extensions.map((e) => {
+        if (e.id === 'pub.a') return { ...e, publisher: 'ms-python', publisherDisplayName: 'Microsoft', categories: ['Linters'] };
+        if (e.id === 'pub.b') return { ...e, publisher: 'ms-vscode', publisherDisplayName: 'Microsoft' };
+        return e;
+      }),
+    };
+    const filters: MatrixFilters = {
+      ...NO_FILTERS,
+      view: 'orphaned',
+      text: 'py',
+      sources: [UNKNOWN_VALUE],
+      publishers: ['ms-python'],
+      categories: ['Linters'],
+    };
+    const chips = activeFilterChips(filters, buildViewModel(named, filters).facets);
+    expect(chips).toEqual([
+      { dimension: 'categories', value: 'Linters', text: 'Category: Linters', removeLabel: 'Remove filter: Category Linters' },
+      {
+        dimension: 'publishers',
+        value: 'ms-python',
+        text: 'Publisher: Microsoft (ms-python)',
+        removeLabel: 'Remove filter: Publisher Microsoft (ms-python)',
+      },
+      { dimension: 'sources', value: UNKNOWN_VALUE, text: 'Source: Unknown', removeLabel: 'Remove filter: Source Unknown' },
+    ]);
+  });
+
+  it('has no chips when no dimension has a selection', () => {
+    expect(activeFilterChips({ ...NO_FILTERS, text: 'x' }, buildViewModel(inv, NO_FILTERS).facets)).toEqual([]);
   });
 });
 
