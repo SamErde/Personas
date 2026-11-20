@@ -1,7 +1,7 @@
 import type { Inventory, OrphanInfo, WorkspaceInventory } from '../core/types';
-import type { HostToMatrix, MatrixToHost } from '../protocol';
+import type { HostToMatrix, MatrixFilters, MatrixToHost, MatrixView } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
-import { buildViewModel, type Chip, type RowVm } from './render';
+import { buildViewModel, NO_FILTERS, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
@@ -15,8 +15,9 @@ let inventory: Inventory | undefined;
 let workspace: WorkspaceInventory | undefined;
 let renderedRows: RowVm[] = [];
 let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
-let chip: Chip = 'all';
-let filter = '';
+let filters: MatrixFilters = NO_FILTERS;
+/** The count announced after a filter change, from the last rebuild of the matrix. */
+let shownCount: { shown: number; total: number } | undefined;
 let pending = new Set<string>(); // `${extId}|${profileId}`, echoed back by the host
 // Presentation-only "in flight" state set the instant the user acts, before the host's 'pending'
 // round-trip lands — never shows a target state early (not optimistic UI), only a working state.
@@ -42,31 +43,54 @@ const app = document.getElementById('app') as HTMLDivElement;
 // that changes over time — the matrix table, the cleanup checklist, warning banners — lives
 // inside `contentEl`, which is freely torn down and rebuilt. Toolbar controls instead update
 // in place: chip classes are toggled, the orphan-review button's label/visibility is updated,
-// and the filter input is left completely alone by every code path except its own listener.
+// and the filter input is left alone by every code path except its own listener and the view
+// state the host sends once to a newly opened panel.
 app.replaceChildren();
 
 const toolbar = el('div', 'toolbar');
 
+/** Typing waits this long for a pause before the table is rebuilt. */
+const FILTER_DEBOUNCE_MS = 200;
+let filterTimer: ReturnType<typeof setTimeout> | undefined;
+
 const filterInput = document.createElement('input');
 filterInput.type = 'search';
-filterInput.placeholder = 'Filter extensions…';
+filterInput.placeholder = 'Filter by name, ID, or publisher…';
+filterInput.setAttribute('aria-label', 'Filter extensions by name, ID, or publisher');
 filterInput.addEventListener('input', () => {
-  filter = filterInput.value;
-  renderContent();
+  // The text is kept, and given to the host, at once, so a rebuild for a host message uses it and
+  // closing the panel mid-typing loses nothing. Only the rebuild the typing asks for waits.
+  filters = { ...filters, text: filterInput.value };
+  keepViewState();
+  clearFilterTimer();
+  filterTimer = setTimeout(() => {
+    filterTimer = undefined;
+    applyFilterChange();
+  }, FILTER_DEBOUNCE_MS);
 });
 toolbar.append(filterInput);
 
-const chipButtons: [Chip, HTMLElement][] = [];
+function clearFilterTimer(): void {
+  if (filterTimer !== undefined) {
+    clearTimeout(filterTimer);
+    filterTimer = undefined;
+  }
+}
+
+const chipButtons: [MatrixView, HTMLElement][] = [];
 for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedToAllProfiles', 'Applied to all profiles']] as const) {
-  const b = el('button', chip === key ? 'chip active' : 'chip', label);
+  const b = el('button', 'chip', label);
   b.addEventListener('click', () => {
-    chip = key;
+    filters = { ...filters, view: key };
+    keepViewState();
     updateChipButtons();
-    renderContent();
+    clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
+    applyFilterChange();
   });
   chipButtons.push([key, b]);
   toolbar.append(b);
 }
+updateChipButtons();
 
 const orphanButton = el('button', 'chip cleanup', '');
 orphanButton.hidden = true;
@@ -78,8 +102,14 @@ refreshButton.title = 'Refresh from disk';
 refreshButton.addEventListener('click', () => post({ type: 'refresh' }));
 toolbar.append(refreshButton);
 
+// Announces the result count after a filter change. It lives outside `contentEl` because a live
+// region must stay in the document to be announced.
+const resultStatus = el('div', 'sr-only');
+resultStatus.setAttribute('role', 'status');
+resultStatus.setAttribute('aria-live', 'polite');
+
 const contentEl = el('div', 'content');
-app.append(toolbar, contentEl);
+app.append(toolbar, resultStatus, contentEl);
 // ---------------------------------------------------------------------------------------------
 
 // --- Extension detail hover card ------------------------------------------------------------
@@ -425,6 +455,15 @@ window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
       pending.add(`${m.extId}|${m.profileId}`);
       render();
       return;
+    case 'viewState':
+      // A newly opened panel returns to the session's last view. Nothing is announced or sent
+      // back, because the person did not change anything.
+      clearFilterTimer();
+      filters = { ...NO_FILTERS, ...m.state.filters };
+      filterInput.value = filters.text;
+      updateChipButtons();
+      renderContent();
+      return;
     case 'orphans': {
       // Reset the selection only when entering the cleanup view fresh from the matrix. A
       // refresh of an already-open view (requested above, or re-requested by the user)
@@ -476,8 +515,24 @@ function render(): void {
   renderContent();
 }
 
+/** Shows the selected view by more than color: aria-pressed tells assistive technology too. */
 function updateChipButtons(): void {
-  for (const [key, b] of chipButtons) b.className = chip === key ? 'chip active' : 'chip';
+  for (const [key, b] of chipButtons) {
+    b.className = filters.view === key ? 'chip active' : 'chip';
+    b.setAttribute('aria-pressed', String(filters.view === key));
+  }
+}
+
+/** Rebuilds the table for a filter the person changed and announces the result count. The cleanup
+ * view has no count, so the region is emptied rather than left holding an old one. */
+function applyFilterChange(): void {
+  renderContent();
+  resultStatus.textContent = shownCount ? `${shownCount.shown} of ${shownCount.total} extensions` : '';
+}
+
+/** Gives the host the current view state to keep for the session. */
+function keepViewState(): void {
+  post({ type: 'viewState', state: { filters } });
 }
 
 function updateOrphanButton(): void {
@@ -510,6 +565,9 @@ function renderContent(): void {
 
 function buildContent(): void {
   contentEl.replaceChildren();
+  shownCount = undefined; // only the matrix view has a count to announce
+  // Leaving the matrix also empties the announcement, so the cleanup view never holds an old count.
+  if (!inventory || orphans !== undefined) resultStatus.textContent = '';
   if (!inventory) {
     renderedRows = [];
     hideCard();
@@ -523,8 +581,9 @@ function buildContent(): void {
     return;
   }
 
-  const vm = buildViewModel(inventory, { filter, chip }, workspace);
+  const vm = buildViewModel(inventory, filters, workspace);
   renderedRows = vm.rows;
+  shownCount = { shown: vm.rows.length, total: vm.total };
 
   for (const w of vm.warnings) {
     // Metadata-only warnings (.obsolete, folder listing, package.json) disable nothing.
@@ -602,26 +661,25 @@ function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
     if (related instanceof Node && card.contains(related)) return;
     hideCard();
   });
-  // Redirect a forward Tab from the name into the open card instead of the next table cell —
-  // otherwise the card's action buttons would be unreachable by keyboard even while visible.
   nameTrigger.addEventListener('keydown', (e) => {
     const ke = e as KeyboardEvent;
+    // Redirect a forward Tab from the name into the open card instead of the next table cell —
+    // otherwise the card's action buttons would be unreachable by keyboard even while visible.
     if (ke.key === 'Tab' && !ke.shiftKey && cardOwnerExtId === row.id) {
       const firstFocusable = card.querySelector<HTMLElement>('a, button');
       if (firstFocusable) {
         ke.preventDefault();
         firstFocusable.focus();
       }
+      return;
     }
-  });
-  // The name is a button, so every way of activating it opens its card: Enter and Space, and a
-  // click, which is also how a screen reader in browse mode activates a button. That is the way
-  // back to the card after Escape, or after focus was restored to a name without opening it.
-  nameTrigger.addEventListener('keydown', (e) => {
-    const key = (e as KeyboardEvent).key;
-    if (key !== 'Enter' && key !== ' ') return;
-    e.preventDefault();
-    showCard(row.id, nameTrigger);
+    // The name is a button, so every way of activating it opens its card: Enter and Space, and a
+    // click, which is also how a screen reader in browse mode activates a button. That is the way
+    // back to the card after Escape, or after focus was restored to a name without opening it.
+    if (ke.key === 'Enter' || ke.key === ' ') {
+      ke.preventDefault();
+      showCard(row.id, nameTrigger);
+    }
   });
   nameTrigger.addEventListener('click', () => showCard(row.id, nameTrigger));
 }

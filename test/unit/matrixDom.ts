@@ -1,5 +1,23 @@
 // Shared fixtures and lookups for the jsdom tests that render the Extension Matrix table.
 import type { Inventory } from '../../src/core/types';
+import type { HostToMatrix, MatrixToHost } from '../../src/protocol';
+
+/** Delivers a host message to the webview, as the extension host would. */
+export function sendToMatrix(message: HostToMatrix): void {
+  window.dispatchEvent(new MessageEvent('message', { data: message, origin: window.location.origin }));
+}
+
+/** Loads the real Extension Matrix webview (main.ts) once per test file, collecting what it posts. */
+export async function loadMatrixWebview(posted: MatrixToHost[]): Promise<void> {
+  document.body.innerHTML = '<div id="app"></div>';
+  const g = globalThis as unknown as Record<string, unknown>;
+  g['acquireVsCodeApi'] = () => ({ postMessage: (m: MatrixToHost) => posted.push(m) });
+  if (typeof CSS === 'undefined' || typeof CSS.escape !== 'function') {
+    // jsdom has no CSS.escape; main.ts uses it only for extension IDs, which need no escaping here.
+    g['CSS'] = { escape: (value: string) => value };
+  }
+  await import('../../src/webview/main.js'); // Vite resolves the .js specifier to main.ts
+}
 
 export const inv: Inventory = {
   profiles: [

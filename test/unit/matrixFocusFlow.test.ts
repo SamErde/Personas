@@ -3,14 +3,10 @@
 // keyboard focus lands after each table rebuild.
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Inventory } from '../../src/core/types';
-import type { HostToMatrix, MatrixToHost } from '../../src/protocol';
-import { cellAt, inv, withInherited } from './matrixDom';
+import type { MatrixToHost } from '../../src/protocol';
+import { cellAt, inv, loadMatrixWebview, sendToMatrix as send, withInherited } from './matrixDom';
 
 const posted: MatrixToHost[] = [];
-
-function send(message: HostToMatrix): void {
-  window.dispatchEvent(new MessageEvent('message', { data: message, origin: window.location.origin }));
-}
 
 function sendInventory(inventory: Inventory): void {
   send({ type: 'inventory', inventory, icons: {} });
@@ -45,16 +41,7 @@ function focusCardAction(extension: string): HTMLElement {
 /** The inventory with the Gamma row, after Beta is gone. */
 const withoutBeta: Inventory = { ...withInherited, extensions: withInherited.extensions.filter((e) => e.id !== 'pub.b') };
 
-beforeAll(async () => {
-  document.body.innerHTML = '<div id="app"></div>';
-  const g = globalThis as unknown as Record<string, unknown>;
-  g['acquireVsCodeApi'] = () => ({ postMessage: (m: MatrixToHost) => posted.push(m) });
-  if (typeof CSS === 'undefined' || typeof CSS.escape !== 'function') {
-    // jsdom has no CSS.escape; syncOpenCard uses it only for extension IDs, which need no escaping here.
-    g['CSS'] = { escape: (value: string) => value };
-  }
-  await import('../../src/webview/main.js'); // Vite resolves the .js specifier to main.ts
-});
+beforeAll(() => loadMatrixWebview(posted));
 
 beforeEach(() => {
   (document.activeElement as HTMLElement | null)?.blur();

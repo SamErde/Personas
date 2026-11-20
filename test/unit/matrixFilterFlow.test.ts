@@ -1,0 +1,125 @@
+// @vitest-environment jsdom
+// Drives the real Extension Matrix webview (main.ts) through host messages and checks the view
+// chips, the text filter, the result announcement, and the view state kept by the host.
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MatrixToHost } from '../../src/protocol';
+import { NO_FILTERS } from '../../src/webview/render';
+import { inv, loadMatrixWebview, sendToMatrix as send } from './matrixDom';
+
+const posted: MatrixToHost[] = [];
+
+const filterInput = () => document.querySelector<HTMLInputElement>('.toolbar input[type="search"]')!;
+const announcement = () => document.querySelector<HTMLElement>('[aria-live="polite"]')!.textContent;
+const shownNames = () => [...document.querySelectorAll<HTMLElement>('.content tbody .name')].map((name) => name.textContent);
+
+function viewChip(label: string): HTMLButtonElement {
+  const chip = [...document.querySelectorAll<HTMLButtonElement>('.toolbar button')].find((b) => b.textContent === label);
+  if (!chip) throw new Error(`No view chip labelled ${label}`);
+  return chip;
+}
+
+function type(text: string): void {
+  filterInput().value = text;
+  filterInput().dispatchEvent(new Event('input'));
+}
+
+beforeAll(() => loadMatrixWebview(posted));
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  send({ type: 'cleanupResult', results: [] }); // back to the matrix if a test opened the cleanup view
+  send({ type: 'viewState', state: { filters: NO_FILTERS } });
+  send({ type: 'inventory', inventory: inv, icons: {} });
+  posted.length = 0;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('view chips', () => {
+  it('tell assistive technology which view is selected', () => {
+    expect(viewChip('All').getAttribute('aria-pressed')).toBe('true');
+    expect(viewChip('Orphaned').getAttribute('aria-pressed')).toBe('false');
+
+    viewChip('Applied to all profiles').click();
+
+    expect(viewChip('All').getAttribute('aria-pressed')).toBe('false');
+    expect(viewChip('Applied to all profiles').getAttribute('aria-pressed')).toBe('true');
+    expect(shownNames()).toEqual(['Alpha']);
+  });
+});
+
+describe('text filter', () => {
+  it('applies after a short pause in typing', () => {
+    type('Be');
+    expect(shownNames()).toEqual(['Alpha', 'Beta']);
+
+    vi.advanceTimersByTime(300);
+
+    expect(shownNames()).toEqual(['Beta']);
+  });
+});
+
+describe('result announcement', () => {
+  it('announces how many extensions are shown after a filter change', () => {
+    viewChip('Applied to all profiles').click();
+    expect(announcement()).toBe('1 of 2 extensions');
+
+    type('zzz');
+    vi.advanceTimersByTime(300);
+    expect(announcement()).toBe('0 of 2 extensions');
+  });
+
+  it('leaves no stale count behind once the cleanup view opens', () => {
+    viewChip('Applied to all profiles').click();
+    expect(announcement()).toBe('1 of 2 extensions');
+
+    send({ type: 'orphans', orphans: [] });
+    expect(announcement()).toBe('');
+
+    viewChip('All').click(); // a filter change while cleanup is open still has no count to give
+    expect(announcement()).toBe('');
+  });
+
+  it('stays quiet when the host refreshes the list', () => {
+    viewChip('Orphaned').click();
+    viewChip('All').click();
+    const before = announcement();
+
+    send({ type: 'inventory', inventory: { ...inv, extensions: inv.extensions.slice(0, 1) }, icons: {} });
+
+    expect(announcement()).toBe(before);
+  });
+});
+
+describe('view state kept by the host', () => {
+  it('is sent to the host when the view changes, and on every keystroke so a quick close keeps the text', () => {
+    viewChip('Orphaned').click();
+    type('Be');
+
+    expect(posted).toEqual([
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned' } } },
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'Be' } } },
+    ]);
+  });
+
+  it('is not sent again by a typing pause that a view change already applied', () => {
+    type('Be');
+    viewChip('Orphaned').click();
+    posted.length = 0;
+
+    vi.advanceTimersByTime(300);
+
+    expect(posted).toEqual([]);
+  });
+
+  it('is restored from the host into the chips, the filter box, and the table', () => {
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles', text: 'Al' } } });
+
+    expect(filterInput().value).toBe('Al');
+    expect(viewChip('Applied to all profiles').getAttribute('aria-pressed')).toBe('true');
+    expect(shownNames()).toEqual(['Alpha']);
+    expect(posted).toEqual([]);
+  });
+});

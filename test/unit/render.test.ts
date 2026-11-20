@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { orphanCount } from '../../src/core/inventoryQueries';
-import { buildViewModel } from '../../src/webview/render';
+import type { MatrixFilters } from '../../src/protocol';
+import { buildViewModel, NO_FILTERS, UNKNOWN_VALUE } from '../../src/webview/render';
 import { formatBytes } from '../../src/webview/ui';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../../src/core/types';
 
@@ -52,7 +53,7 @@ function status(
 
 /** Lists each cell of a row as [what is known about the install, why the cell cannot act]. */
 function cellStates(inventory: Inventory, extId: string): [string, string | undefined][] {
-  const row = buildViewModel(inventory, { filter: '', chip: 'all' }).rows.find((r) => r.id === extId);
+  const row = buildViewModel(inventory, NO_FILTERS).rows.find((r) => r.id === extId);
   if (!row) throw new Error(`No row for ${extId}`);
   return row.cells.map((cell) => [cell.install, cell.readOnlyReason]);
 }
@@ -127,24 +128,35 @@ describe('cell knowledge and actions', () => {
 
 describe('buildViewModel', () => {
   it('produces one row per extension and one cell per profile', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' });
+    const vm = buildViewModel(inv, NO_FILTERS);
     expect(vm.rows).toHaveLength(3);
     expect(vm.rows[0]?.cells).toHaveLength(3);
   });
 
-  it('chip=orphaned shows only orphans', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'orphaned' });
+  it('the Orphaned view shows only orphans', () => {
+    const vm = buildViewModel(inv, { ...NO_FILTERS, view: 'orphaned' });
     expect(vm.rows.map((r) => r.id)).toEqual(['pub.c']);
   });
 
-  it('chip=appliedToAllProfiles shows only extensions applied to all profiles', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'appliedToAllProfiles' });
+  it('the Applied to all profiles view shows only extensions applied to all profiles', () => {
+    const vm = buildViewModel(inv, { ...NO_FILTERS, view: 'appliedToAllProfiles' });
     expect(vm.rows.map((r) => r.id)).toEqual(['pub.a']);
   });
 
   it('filter matches id and displayName, case-insensitive', () => {
-    expect(buildViewModel(inv, { filter: 'BETA', chip: 'all' }).rows.map((r) => r.id)).toEqual(['pub.b']);
-    expect(buildViewModel(inv, { filter: 'pub.c', chip: 'all' }).rows.map((r) => r.id)).toEqual(['pub.c']);
+    expect(buildViewModel(inv, { ...NO_FILTERS, text: 'BETA' }).rows.map((r) => r.id)).toEqual(['pub.b']);
+    expect(buildViewModel(inv, { ...NO_FILTERS, text: 'pub.c' }).rows.map((r) => r.id)).toEqual(['pub.c']);
+  });
+
+  it('text search matches the publisher ID and display name', () => {
+    const published: Inventory = {
+      ...inv,
+      extensions: inv.extensions.map((e) =>
+        e.id === 'pub.b' ? { ...e, publisher: 'contoso', publisherDisplayName: 'Contoso Tools' } : e,
+      ),
+    };
+    expect(buildViewModel(published, { ...NO_FILTERS, text: 'CONTOSO' }).rows.map((r) => r.id)).toEqual(['pub.b']);
+    expect(buildViewModel(published, { ...NO_FILTERS, text: 'so tool' }).rows.map((r) => r.id)).toEqual(['pub.b']);
   });
 
   it('counts orphans in the summary', () => {
@@ -152,14 +164,14 @@ describe('buildViewModel', () => {
   });
 
   it('has no workspace column model when no workspace is loaded', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' });
+    const vm = buildViewModel(inv, NO_FILTERS);
     expect(vm.workspace).toBeUndefined();
     expect(vm.workspaceWarnings).toEqual([]);
     expect(vm.rows.every((row) => row.workspaceCell === undefined)).toBe(true);
   });
 
   it('adds a final, separate workspace model without adding a synthetic profile', () => {
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([status('pub.a', 'enabled')]));
+    const vm = buildViewModel(inv, NO_FILTERS, workspaceWith([status('pub.a', 'enabled')]));
     expect(vm.profileNames.map((profile) => profile.id)).toEqual(['default', 'aaa', 'bbb']);
     expect(vm.workspace).toEqual({ name: 'Shared workspace', kind: 'workspace' });
     expect(vm.workspaceWarnings).toEqual(['association evidence is incomplete']);
@@ -174,7 +186,7 @@ describe('buildViewModel', () => {
     const workspace = workspaceWith([
       status('pub.a', 'enabled', { version: '9.0.0' }),
     ]);
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspace);
+    const vm = buildViewModel(inv, NO_FILTERS, workspace);
     expect(vm.rows.find((row) => row.id === 'pub.a')?.version).toBe('9.0.0');
   });
 
@@ -187,7 +199,7 @@ describe('buildViewModel', () => {
         profileBacked: false,
       }),
     ]);
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspace);
+    const vm = buildViewModel(inv, NO_FILTERS, workspace);
     const row = vm.rows.find((item) => item.id === 'local.only');
     expect(row).toMatchObject({
       displayName: 'Local Fixture',
@@ -201,7 +213,7 @@ describe('buildViewModel', () => {
     expect(row?.workspaceCell).toMatchObject({ state: 'unknown', label: 'Unknown', symbol: '?' });
   });
 
-  it('does not expose workspace-only rows through profile-action chips', () => {
+  it('does not expose workspace-only rows through the profile-backed views', () => {
     const workspace = workspaceWith([
       status('local.only', 'unknown', {
         installedInActiveProfile: false,
@@ -209,10 +221,10 @@ describe('buildViewModel', () => {
         profileBacked: false,
       }),
     ]);
-    expect(buildViewModel(inv, { filter: '', chip: 'orphaned' }, workspace).rows.map((row) => row.id)).toEqual([
+    expect(buildViewModel(inv, { ...NO_FILTERS, view: 'orphaned' }, workspace).rows.map((row) => row.id)).toEqual([
       'pub.c',
     ]);
-    expect(buildViewModel(inv, { filter: '', chip: 'appliedToAllProfiles' }, workspace).rows.map((row) => row.id)).toEqual([
+    expect(buildViewModel(inv, { ...NO_FILTERS, view: 'appliedToAllProfiles' }, workspace).rows.map((row) => row.id)).toEqual([
       'pub.a',
     ]);
   });
@@ -226,10 +238,10 @@ describe('buildViewModel', () => {
         profileBacked: false,
       }),
     ]);
-    expect(buildViewModel(inv, { filter: 'SPECIAL', chip: 'all' }, workspace).rows.map((row) => row.id)).toEqual([
+    expect(buildViewModel(inv, { ...NO_FILTERS, text: 'SPECIAL' }, workspace).rows.map((row) => row.id)).toEqual([
       'local.only',
     ]);
-    expect(buildViewModel(inv, { filter: 'local.only', chip: 'all' }, workspace).rows.map((row) => row.id)).toEqual([
+    expect(buildViewModel(inv, { ...NO_FILTERS, text: 'local.only' }, workspace).rows.map((row) => row.id)).toEqual([
       'local.only',
     ]);
   });
@@ -242,7 +254,7 @@ describe('buildViewModel', () => {
   ] satisfies [WorkspaceExtensionStatus['state'], string, string][])(
     'maps %s to exact accessible status text',
     (state, label, symbol) => {
-      const row = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([status('pub.a', state)])).rows.find(
+      const row = buildViewModel(inv, NO_FILTERS, workspaceWith([status('pub.a', state)])).rows.find(
         (item) => item.id === 'pub.a',
       );
       expect(row?.workspaceCell).toMatchObject({ state, label, symbol });
@@ -260,7 +272,7 @@ describe('buildViewModel', () => {
       installedInActiveProfile: true,
       workspaceLocal: 'installed',
     });
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([localOnly, bothSources]));
+    const vm = buildViewModel(inv, NO_FILTERS, workspaceWith([localOnly, bothSources]));
     expect(vm.rows.find((row) => row.id === 'local.only')?.workspaceCell).toMatchObject({
       label: 'Workspace-local',
       symbol: '✓ W',
@@ -276,7 +288,7 @@ describe('buildViewModel', () => {
   ] satisfies [WorkspaceExtensionStatus['state'], boolean][])(
     'offers the workspace enablement hand-off for %s: %s',
     (state, offered) => {
-      const row = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([status('pub.a', state)])).rows.find(
+      const row = buildViewModel(inv, NO_FILTERS, workspaceWith([status('pub.a', state)])).rows.find(
         (item) => item.id === 'pub.a',
       );
       expect(row?.workspaceCell?.offersEnablementGuide).toBe(offered);
@@ -289,11 +301,72 @@ describe('buildViewModel', () => {
       workspaceLocal: 'installed',
       profileBacked: false,
     });
-    const vm = buildViewModel(inv, { filter: '', chip: 'all' }, workspaceWith([localOnly]));
+    const vm = buildViewModel(inv, NO_FILTERS, workspaceWith([localOnly]));
     expect(vm.rows.find((row) => row.id === 'local.only')?.workspaceCell).toMatchObject({
       label: 'Workspace-local',
       offersEnablementGuide: true,
     });
+  });
+});
+
+describe('filter dimensions', () => {
+  // Alpha: contoso, Themes + Linters, from the Marketplace. Beta: fabrikam, Linters, from a VSIX in one
+  // profile and the Marketplace in another. Gone: no publisher, no categories, no manifest entry.
+  const faceted: Inventory = {
+    ...inv,
+    extensions: inv.extensions.map((e) => {
+      if (e.id === 'pub.a') return { ...e, publisher: 'contoso', categories: ['Linters', 'Themes'], installSources: ['gallery'] };
+      if (e.id === 'pub.b') return { ...e, publisher: 'fabrikam', categories: ['Linters'], installSources: ['gallery', 'vsix'] };
+      return { ...e, installSourceMissing: true };
+    }),
+  };
+  const ids = (filters: Partial<MatrixFilters>, workspace?: WorkspaceInventory) =>
+    buildViewModel(faceted, { ...NO_FILTERS, ...filters }, workspace).rows.map((r) => r.id);
+
+  it('matches any selected value within one dimension', () => {
+    expect(ids({ publishers: ['contoso', 'fabrikam'] })).toEqual(['pub.a', 'pub.b']);
+    expect(ids({ categories: ['Themes'] })).toEqual(['pub.a']);
+    expect(ids({ sources: ['vsix'] })).toEqual(['pub.b']);
+  });
+
+  it('requires every dimension with a selection to match, including the view and the text', () => {
+    expect(ids({ categories: ['Linters'], sources: ['vsix'] })).toEqual(['pub.b']);
+    expect(ids({ categories: ['Linters'], publishers: ['contoso'], text: 'beta' })).toEqual([]);
+    expect(ids({ view: 'appliedToAllProfiles', categories: ['Linters'] })).toEqual(['pub.a']);
+    expect(ids({ view: 'orphaned', categories: ['Linters'] })).toEqual([]);
+  });
+
+  it('puts rows without publisher, categories, or install source under Unknown', () => {
+    expect(ids({ publishers: [UNKNOWN_VALUE] })).toEqual(['pub.c']);
+    expect(ids({ categories: [UNKNOWN_VALUE] })).toEqual(['pub.c']);
+    expect(ids({ sources: [UNKNOWN_VALUE] })).toEqual(['pub.c']);
+  });
+
+  it('puts a workspace-only row under Unknown for categories and install source', () => {
+    const workspace = workspaceWith([
+      status('local.only', 'unknown', { installedInActiveProfile: false, workspaceLocal: 'candidate', profileBacked: false }),
+    ]);
+    expect(ids({ categories: [UNKNOWN_VALUE], sources: [UNKNOWN_VALUE] }, workspace)).toEqual(['pub.c', 'local.only']);
+  });
+
+  it('keeps cells of inheriting and unreadable profiles unchanged under a filter', () => {
+    const unreadableDefault: Inventory = {
+      ...faceted,
+      warnings: [{ file: 'extensions.json (default profile)', message: 'bad', affectedProfileIds: ['default'] }],
+    };
+    const row = buildViewModel(unreadableDefault, { ...NO_FILTERS, publishers: ['fabrikam'] }).rows;
+    expect(row.map((r) => r.id)).toEqual(['pub.b']);
+    expect(row[0]?.cells.map((cell) => [cell.install, cell.readOnlyReason])).toEqual([
+      ['unknown', 'unreadable'],
+      ['installed', undefined],
+      ['unknown', 'inheritsDefault'],
+    ]);
+  });
+
+  it('counts every row, before filters, as the total', () => {
+    const vm = buildViewModel(faceted, { ...NO_FILTERS, view: 'orphaned' });
+    expect(vm.rows).toHaveLength(1);
+    expect(vm.total).toBe(3);
   });
 });
 
@@ -306,7 +379,7 @@ describe('buildViewModel profile headers', () => {
         { id: 'builtin/agents', name: 'Agents', isDefault: false, inheritsDefaultExtensions: true },
       ],
     };
-    const headers = buildViewModel(withAgents, { filter: '', chip: 'all' }).profileNames;
+    const headers = buildViewModel(withAgents, NO_FILTERS).profileNames;
     expect(headers.map((h) => h.label)).toEqual(['Default', 'Work', '⤷ Agents', '⤷ Agents window']);
     expect(headers[0]?.tooltip).toBeUndefined();
     expect(headers[2]?.tooltip).toBe("Uses the Default profile's extensions.");
