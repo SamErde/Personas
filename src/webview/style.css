@@ -30,6 +30,11 @@ body {
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
 /* Category, publisher, and source filters. The panel and the chip row set `display`, so each also
  * restates `hidden`, which an author `display` would otherwise override. */
+/* A chevron shows whether the panel is open by shape, so the cue holds in every theme, including
+ * ones that leave the contrast borders unset. The empty alternative text keeps it out of the
+ * button's accessible name, which aria-expanded already completes. */
+.filters-toggle::after { content: "▾" / ""; display: inline-block; margin-left: 0.35rem; }
+.filters-toggle[aria-expanded="true"]::after { content: "▴" / ""; }
 .filters-toggle[aria-expanded="true"] {
   border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
 }
