@@ -37,6 +37,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  send({ type: 'cleanupResult', results: [] }); // back to the matrix if a test opened the cleanup view
   send({ type: 'viewState', state: { filters: NO_FILTERS } });
   send({ type: 'inventory', inventory: inv, icons: {} });
   posted.length = 0;
@@ -80,6 +81,15 @@ describe('result announcement', () => {
     expect(announcement()).toBe('0 of 2 extensions');
   });
 
+  it('leaves no stale count behind while the cleanup view is open', () => {
+    viewChip('Applied to all profiles').click();
+    send({ type: 'orphans', orphans: [] });
+
+    viewChip('All').click();
+
+    expect(announcement()).toBe('');
+  });
+
   it('stays quiet when the host refreshes the list', () => {
     viewChip('Orphaned').click();
     viewChip('All').click();
@@ -92,15 +102,24 @@ describe('result announcement', () => {
 });
 
 describe('view state kept by the host', () => {
-  it('is sent to the host when the view or the text filter changes', () => {
+  it('is sent to the host when the view changes, and on every keystroke so a quick close keeps the text', () => {
     viewChip('Orphaned').click();
     type('Be');
-    vi.advanceTimersByTime(300);
 
     expect(posted).toEqual([
       { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned' } } },
       { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'Be' } } },
     ]);
+  });
+
+  it('is not sent again by a typing pause that a view change already applied', () => {
+    type('Be');
+    viewChip('Orphaned').click();
+    posted.length = 0;
+
+    vi.advanceTimersByTime(300);
+
+    expect(posted).toEqual([]);
   });
 
   it('is restored from the host into the chips, the filter box, and the table', () => {

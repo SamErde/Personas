@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { orphanCount } from '../../src/core/inventoryQueries';
-import { buildViewModel, NO_FILTERS, UNKNOWN_VALUE, type MatrixFilters } from '../../src/webview/render';
+import type { MatrixFilters } from '../../src/protocol';
+import { buildViewModel, NO_FILTERS, UNKNOWN_VALUE } from '../../src/webview/render';
 import { formatBytes } from '../../src/webview/ui';
 import type { Inventory, WorkspaceExtensionStatus, WorkspaceInventory } from '../../src/core/types';
 

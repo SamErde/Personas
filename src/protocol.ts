@@ -9,9 +9,38 @@ import type {
   WorkspaceExtensionCounts,
   WorkspaceInventory,
 } from './core/types';
-import type { MatrixViewState } from './webview/render';
 
 // --- Extension Matrix ---
+
+/** A view is a lens on the whole list rather than an attribute, so exactly one is selected. */
+export type MatrixView = 'all' | 'orphaned' | 'appliedToAllProfiles';
+
+/** The filters that narrow by any of several values. */
+export type FilterDimension = 'categories' | 'publishers' | 'sources';
+
+/**
+ * What the matrix is narrowed by. A row must match every dimension (they combine with "and"), and
+ * it matches a dimension when it has any of the selected values (values combine with "or"). An
+ * empty value list leaves its dimension unfiltered. A row with no data for a dimension matches
+ * its Unknown value (UNKNOWN_VALUE in webview/render.ts).
+ */
+export interface MatrixFilters {
+  view: MatrixView;
+  /** Matched, case-insensitively, against the extension's ID, name, and publisher. */
+  text: string;
+  /** Category names from package.json. */
+  categories: readonly string[];
+  /** Publisher IDs. */
+  publishers: readonly string[];
+  /** Manifest `metadata.source` values as written. */
+  sources: readonly string[];
+}
+
+/** How the person has set up the matrix. The extension host keeps it for the session so that a
+ * reopened panel comes back the same way; it is not saved across VS Code restarts. */
+export interface MatrixViewState {
+  filters: MatrixFilters;
+}
 
 export type HostToMatrix =
   | {

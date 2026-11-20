@@ -6,43 +6,27 @@ import {
   type ProfileWarnings,
 } from '../core/inventoryQueries';
 import type { ExtensionRecord, Inventory, Profile, WorkspaceExtensionStatus, WorkspaceInventory } from '../core/types';
-
-/** A view is a lens on the whole list rather than an attribute, so exactly one is selected. */
-export type MatrixView = 'all' | 'orphaned' | 'appliedToAllProfiles';
+import type { FilterDimension, MatrixFilters } from '../protocol';
 
 /** The value a row matches in a dimension when it has no data for it. */
 export const UNKNOWN_VALUE = '';
 
-/**
- * What the matrix is narrowed by. A row must match every dimension (they combine with "and"), and
- * it matches a dimension when it has any of the selected values (values combine with "or"). An
- * empty value list leaves its dimension unfiltered.
- */
-export interface MatrixFilters {
-  view: MatrixView;
-  /** Matched, case-insensitively, against the extension's ID, name, and publisher. */
-  text: string;
-  /** Category names from package.json, or UNKNOWN_VALUE. */
-  categories: string[];
-  /** Publisher IDs, or UNKNOWN_VALUE. */
-  publishers: string[];
-  /** Manifest `metadata.source` values as written, or UNKNOWN_VALUE. */
-  sources: string[];
-}
+const FILTER_DIMENSIONS = ['categories', 'publishers', 'sources'] as const satisfies readonly FilterDimension[];
 
-/** How the person has set up the matrix. The extension host keeps it for the session so that a
- * reopened panel comes back the same way; it is not saved across VS Code restarts. */
-export interface MatrixViewState {
-  filters: MatrixFilters;
-}
-
-export const NO_FILTERS: MatrixFilters ={ view: 'all', text: '', categories: [], publishers: [], sources: [] };
+/** Frozen, because every filter state is spread from it and shares its arrays. */
+export const NO_FILTERS: MatrixFilters = Object.freeze({
+  view: 'all',
+  text: '',
+  categories: Object.freeze([]),
+  publishers: Object.freeze([]),
+  sources: Object.freeze([]),
+});
 
 /** A row's values in each multi-value dimension, with missing data as UNKNOWN_VALUE. */
 function dimensionValues(
   extension: ExtensionRecord | undefined,
   publisher: string | undefined,
-): Record<'categories' | 'publishers' | 'sources', string[]> {
+): Record<FilterDimension, string[]> {
   const categories = extension?.categories?.length ? extension.categories : [UNKNOWN_VALUE];
   const sources = [
     ...(extension?.installSources ?? []),
@@ -53,7 +37,7 @@ function dimensionValues(
 }
 
 function matchesDimensions(values: ReturnType<typeof dimensionValues>, filters: MatrixFilters): boolean {
-  return (['categories', 'publishers', 'sources'] as const).every(
+  return FILTER_DIMENSIONS.every(
     (dimension) => filters[dimension].length === 0 || values[dimension].some((value) => filters[dimension].includes(value)),
   );
 }

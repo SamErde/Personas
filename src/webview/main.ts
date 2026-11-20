@@ -1,7 +1,7 @@
 import type { Inventory, OrphanInfo, WorkspaceInventory } from '../core/types';
-import type { HostToMatrix, MatrixToHost } from '../protocol';
+import type { HostToMatrix, MatrixFilters, MatrixToHost, MatrixView } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
-import { buildViewModel, NO_FILTERS, type MatrixFilters, type MatrixView, type RowVm } from './render';
+import { buildViewModel, NO_FILTERS, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
@@ -58,9 +58,10 @@ filterInput.type = 'search';
 filterInput.placeholder = 'Filter by name, ID, or publisher…';
 filterInput.setAttribute('aria-label', 'Filter extensions by name, ID, or publisher');
 filterInput.addEventListener('input', () => {
-  // The text is kept at once, so a rebuild for a host message uses it; only the rebuild that the
-  // typing itself asks for waits for a pause.
+  // The text is kept, and given to the host, at once, so a rebuild for a host message uses it and
+  // closing the panel mid-typing loses nothing. Only the rebuild the typing asks for waits.
   filters = { ...filters, text: filterInput.value };
+  keepViewState();
   clearFilterTimer();
   filterTimer = setTimeout(() => {
     filterTimer = undefined;
@@ -81,7 +82,9 @@ for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedT
   const b = el('button', 'chip', label);
   b.addEventListener('click', () => {
     filters = { ...filters, view: key };
+    keepViewState();
     updateChipButtons();
+    clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
     applyFilterChange();
   });
   chipButtons.push([key, b]);
@@ -520,11 +523,15 @@ function updateChipButtons(): void {
   }
 }
 
-/** Rebuilds the table for a filter the person changed, announces the result count, and gives the
- * host the new view state to keep for the session. */
+/** Rebuilds the table for a filter the person changed and announces the result count. The cleanup
+ * view has no count, so the region is emptied rather than left holding an old one. */
 function applyFilterChange(): void {
   renderContent();
-  if (shownCount) resultStatus.textContent = `${shownCount.shown} of ${shownCount.total} extensions`;
+  resultStatus.textContent = shownCount ? `${shownCount.shown} of ${shownCount.total} extensions` : '';
+}
+
+/** Gives the host the current view state to keep for the session. */
+function keepViewState(): void {
   post({ type: 'viewState', state: { filters } });
 }
 
