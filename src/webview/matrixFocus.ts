@@ -64,10 +64,13 @@ export function resolveFocus(target: FocusTarget, before: FocusRow[], after: Foc
  * `heldFor` names the matrix control that owns focus held outside `container` (the hover card
  * for an extension's name). That focus is left alone unless the rebuild drops it to <body>, as
  * when the card closes because its row is gone; it then moves as if it had been on `heldFor`.
+ *
+ * Nothing is restored while the webview does not own focus: after the user moves to the editor,
+ * `activeElement` still names the old control, and focusing its replacement would pull focus back.
  */
 export function preserveMatrixFocus(container: HTMLElement, rebuild: () => void, heldFor?: FocusTarget): void {
   const keyed = keyedTarget(document.activeElement, container);
-  const target = keyed ?? heldFor;
+  const target = document.hasFocus() ? (keyed ?? heldFor) : undefined;
   const before = target ? readRows(container) : [];
   rebuild();
   if (!target) return;
@@ -82,17 +85,19 @@ export function focusMatrixControl(container: HTMLElement, target: FocusTarget):
   const key = focusKey(target);
   for (const node of container.querySelectorAll<HTMLElement>('[data-focus-key]')) {
     if (node.dataset['focusKey'] === key) {
-      // The element is re-created where the old one was; scrolling would only close the hover card.
-      node.focus({ preventScroll: true });
+      // focus() scrolls only when the control is out of view, as when rows were added above it.
+      node.focus();
       return document.activeElement === node;
     }
   }
   return false;
 }
 
-/** True when nothing holds focus, as after the focused element is removed. */
+/** True when nothing usable holds focus: the focused element was removed, or it sits inside a
+ * hidden element (the hover card container stays in the DOM, hidden, when its row is removed). */
 function focusWasDropped(): boolean {
-  return document.activeElement === null || document.activeElement === document.body;
+  const active = document.activeElement;
+  return !active || active === document.body || active.closest('[hidden]') !== null;
 }
 
 function keyedTarget(active: Element | null, container: HTMLElement): FocusTarget | undefined {
@@ -132,15 +137,7 @@ function focusContainer(container: HTMLElement): void {
  * column (the next control in Tab order), then to the earlier control in the row. */
 function pickInRow(row: FocusRow, slot: SlotName, col: number): FocusTarget | undefined {
   if (row.slots.some((s) => s.slot === slot)) return { extId: row.extId, slot };
-  let best: FocusSlot | undefined;
-  for (const s of row.slots) {
-    if (!best) {
-      best = s;
-      continue;
-    }
-    const d = Math.abs(s.col - col);
-    const bestD = Math.abs(best.col - col);
-    if (d < bestD || (d === bestD && s.col > best.col)) best = s;
-  }
+  // Sorting is stable, so controls in the same column keep their row order.
+  const [best] = [...row.slots].sort((a, b) => Math.abs(a.col - col) - Math.abs(b.col - col) || b.col - a.col);
   return best && { extId: row.extId, slot: best.slot };
 }

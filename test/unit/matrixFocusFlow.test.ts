@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Drives the real Extension Matrix webview (main.ts) through host messages and checks where
 // keyboard focus lands after each table rebuild.
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Inventory } from '../../src/core/types';
 import type { HostToMatrix, MatrixToHost } from '../../src/protocol';
 import { cellAt, inv, withInherited } from './matrixDom';
@@ -164,5 +164,48 @@ describe('Escape in the hover card', () => {
 
     expect(card().hidden).toBe(true);
     expect(document.activeElement).toBe(nameOf('Beta'));
+  });
+});
+
+describe('focus when the webview does not own focus', () => {
+  it('is not pulled back by a refresh after the user moved to another VS Code view', () => {
+    checkbox('Beta', 'Work').focus();
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false); // the editor has focus now
+    try {
+      sendInventory(withInherited);
+
+      expect(document.activeElement).not.toBe(checkbox('Beta', 'Work'));
+    } finally {
+      hasFocus.mockRestore();
+    }
+  });
+});
+
+describe('the extension name as a button', () => {
+  it('opens its hover card with Enter or Space after Escape closed it', () => {
+    press(focusCardAction('Beta'), 'Escape');
+    expect(card().hidden).toBe(true);
+
+    press(nameOf('Beta'), 'Enter');
+    expect(card().hidden).toBe(false);
+
+    press(focusCardAction('Beta'), 'Escape');
+    press(nameOf('Beta'), ' ');
+    expect(card().hidden).toBe(false);
+  });
+});
+
+describe('focus on a hidden hover card', () => {
+  it('moves to the nearest remaining row when the card container held focus and its row is removed', () => {
+    sendInventory(withInherited);
+    focusCardAction('Beta');
+    card().querySelector<HTMLElement>('[data-action="install-in-every-profile"]')!.focus();
+    send({ type: 'pending', extId: 'pub.b', profileId: 'default' }); // card actions turn disabled
+    expect(document.activeElement).toBe(card()); // syncOpenCard's fallback to the container
+
+    sendInventory(withoutBeta);
+
+    expect(card().hidden).toBe(true);
+    expect(document.activeElement).toBe(nameOf('Gamma'));
   });
 });

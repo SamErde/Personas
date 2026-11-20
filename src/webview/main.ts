@@ -342,13 +342,15 @@ card.addEventListener('focusout', (e) => {
 // the card, since hiding the card would otherwise drop it to <body>. Focus elsewhere stays put.
 document.addEventListener('keydown', (e) => {
   if ((e as KeyboardEvent).key !== 'Escape' || card.hidden) return;
-  const owner = cardOwnerExtId;
-  const focusWasInCard = card.contains(document.activeElement);
+  const owner = cardFocusOwner();
   hideCard();
-  if (focusWasInCard && owner !== undefined) {
-    withRestoringFocus(() => focusMatrixControl(contentEl, { extId: owner, slot: 'name' }));
-  }
+  if (owner !== undefined) withRestoringFocus(() => focusMatrixControl(contentEl, { extId: owner, slot: 'name' }));
 });
+
+/** The extension whose open card holds keyboard focus, if any. */
+function cardFocusOwner(): string | undefined {
+  return card.contains(document.activeElement) ? cardOwnerExtId : undefined;
+}
 window.addEventListener(
   'scroll',
   () => {
@@ -500,8 +502,8 @@ function withRestoringFocus(action: () => void): void {
  * the hover card belongs to its extension's name: syncOpenCard keeps it in the card, and when the
  * card closes because the row is gone, it moves to the nearest remaining row instead of <body>. */
 function renderContent(): void {
-  const owner = cardOwnerExtId;
-  const heldFor = owner !== undefined && card.contains(document.activeElement) ? { extId: owner, slot: 'name' as const } : undefined;
+  const owner = cardFocusOwner();
+  const heldFor = owner === undefined ? undefined : { extId: owner, slot: 'name' as const };
   withRestoringFocus(() => preserveMatrixFocus(contentEl, buildContent, heldFor));
 }
 
@@ -610,6 +612,14 @@ function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
         firstFocusable.focus();
       }
     }
+  });
+  // The name is a button, so Enter and Space open its card. That is the keyboard way back to the
+  // card after Escape, or after focus was restored to a name without opening its card.
+  nameTrigger.addEventListener('keydown', (e) => {
+    const key = (e as KeyboardEvent).key;
+    if (key !== 'Enter' && key !== ' ') return;
+    e.preventDefault();
+    showCard(row.id, nameTrigger);
   });
 }
 
