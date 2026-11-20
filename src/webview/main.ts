@@ -81,13 +81,7 @@ function clearFilterTimer(): void {
 const chipButtons: [MatrixView, HTMLElement][] = [];
 for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedToAllProfiles', 'Applied to all profiles']] as const) {
   const b = el('button', 'chip', label);
-  b.addEventListener('click', () => {
-    filters = { ...filters, view: key };
-    keepViewState();
-    updateChipButtons();
-    clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
-    applyFilterChange();
-  });
+  b.addEventListener('click', () => changeFilters({ view: key }));
   chipButtons.push([key, b]);
   toolbar.append(b);
 }
@@ -95,12 +89,7 @@ updateChipButtons();
 
 // Category, publisher, and source filters: one Filters disclosure beside the view chips, because
 // three separate buttons wrapped the toolbar at a 1,000px panel width.
-const filterControls = createFilterControls((next) => {
-  filters = { ...filters, ...next };
-  keepViewState();
-  clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
-  applyFilterChange();
-});
+const filterControls = createFilterControls(changeFilters);
 toolbar.append(filterControls.toggle);
 
 const orphanButton = el('button', 'chip cleanup', '');
@@ -539,6 +528,16 @@ function updateChipButtons(): void {
 function applyFilterChange(): void {
   renderContent();
   resultStatus.textContent = shownCount ? `${shownCount.shown} of ${shownCount.total} extensions` : '';
+}
+
+/** Applies a change the person made to the view or the filters: keeps it with the host, shows it
+ * in the view chips, rebuilds the matrix, and announces the count. */
+function changeFilters(next: Partial<MatrixFilters>): void {
+  filters = { ...filters, ...next };
+  keepViewState();
+  updateChipButtons();
+  clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
+  applyFilterChange();
 }
 
 /** Gives the host the current view state to keep for the session. */

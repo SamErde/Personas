@@ -26,6 +26,25 @@ const EMPTY_FACETS: Facets = { categories: [], publishers: [], sources: [] };
 /** The `data-filter-key` on an option's checkbox, which finds it again after a rebuild. */
 const optionKey = (dimension: FilterDimension, value: string) => `${dimension}|${value}`;
 
+/** The key of the control in `container` that has focus. As in preserveMatrixFocus, there is none
+ * while the webview does not own focus, so a host refresh never pulls focus back from the editor. */
+function focusedKeyIn(container: HTMLElement): string | undefined {
+  const active = document.activeElement;
+  return document.hasFocus() && active instanceof HTMLElement && container.contains(active) ? active.dataset['filterKey'] : undefined;
+}
+
+/** The `data-filter-key` of Clear all filters, which no option key can equal (those hold a '|'). */
+const CLEAR_ALL_KEY = 'clear-all';
+
+function findByKey(container: HTMLElement, key: string): HTMLElement | undefined {
+  return [...container.querySelectorAll<HTMLElement>('[data-filter-key]')].find((node) => node.dataset['filterKey'] === key);
+}
+
+/** The publisher search matches an option's label or its ID. */
+function matchesQuery(option: FacetOption, query: string): boolean {
+  return !query || [option.label, option.value].some((text) => text.toLowerCase().includes(query));
+}
+
 export function createFilterControls(change: (next: DimensionChange) => void): FilterControls {
   let filters: MatrixFilters | undefined;
   let facets = EMPTY_FACETS;
@@ -46,6 +65,7 @@ export function createFilterControls(change: (next: DimensionChange) => void): F
   const lists = {} as Record<FilterDimension, HTMLElement>;
   const publisherSearch = document.createElement('input');
   publisherSearch.type = 'search';
+  publisherSearch.className = 'filter-search';
   publisherSearch.placeholder = 'Search publishers…';
   publisherSearch.setAttribute('aria-label', 'Search publishers');
   // Narrows only the list of publishers to pick from; the filters stay as they are.
@@ -74,26 +94,14 @@ export function createFilterControls(change: (next: DimensionChange) => void): F
   /** Rebuilds one group's checkboxes, keeping focus on the same value when one of them had it. */
   function renderOptions(dimension: FilterDimension): void {
     const list = lists[dimension];
-    const active = document.activeElement;
-    // As in preserveMatrixFocus, nothing is restored while the webview does not own focus, so a
-    // host refresh never pulls focus back from the editor.
-    const focusedKey =
-      document.hasFocus() && active instanceof HTMLElement && list.contains(active) ? active.dataset['filterKey'] : undefined;
-
+    const focusedKey = focusedKeyIn(list);
     const query = dimension === 'publishers' ? publisherSearch.value.trim().toLowerCase() : '';
-    const shown = facets[dimension].filter(
-      (option) => !query || [option.label, option.value].some((text) => text.toLowerCase().includes(query)),
-    );
+    const shown = facets[dimension].filter((option) => matchesQuery(option, query));
     list.replaceChildren(...shown.map((option) => optionRow(dimension, option)));
-    if (shown.length === 0) {
-      list.append(el('p', 'filter-empty', query ? 'No publishers match.' : 'No values.'));
-    }
-
-    if (focusedKey) {
-      const again = [...list.querySelectorAll<HTMLElement>('[data-filter-key]')].find((n) => n.dataset['filterKey'] === focusedKey);
-      // A value filtered out of view leaves focus with the group's search box, not <body>.
-      (again ?? (dimension === 'publishers' ? publisherSearch : toggle)).focus();
-    }
+    if (shown.length === 0) list.append(el('p', 'filter-empty', query ? 'No publishers match.' : 'No values.'));
+    // A value that is no longer listed leaves focus with the publisher search box, or for the
+    // other groups with the Filters button, never on <body>.
+    if (focusedKey) (findByKey(list, focusedKey) ?? (dimension === 'publishers' ? publisherSearch : toggle)).focus();
   }
 
   function optionRow(dimension: FilterDimension, option: FacetOption): HTMLElement {
@@ -113,10 +121,13 @@ export function createFilterControls(change: (next: DimensionChange) => void): F
     return row;
   }
 
+  /** Rebuilds the chips. Focus on a chip stays on it, or moves to the chip after it, the one
+   * before it, or the Filters button when the chip is gone, so it never drops to <body>. */
   function renderChips(): void {
+    const focused = focusedKeyIn(chipRow);
+    const before = [...chipRow.querySelectorAll<HTMLElement>('.filter-chip')].map((b) => b.dataset['filterKey'] ?? '');
     chipRow.replaceChildren();
     chipRow.hidden = chips.length === 0;
-    if (chips.length === 0) return;
     for (const chip of chips) {
       const button = el('button', 'chip filter-chip', chip.text) as HTMLButtonElement;
       button.setAttribute('aria-label', chip.removeLabel);
@@ -124,27 +135,29 @@ export function createFilterControls(change: (next: DimensionChange) => void): F
       const mark = el('span', 'filter-chip-remove', '✕');
       mark.setAttribute('aria-hidden', 'true');
       button.append(mark);
-      button.addEventListener('click', () => removeChip(chip));
+      button.addEventListener('click', () => {
+        button.focus(); // so the rebuild that follows moves focus on from this chip
+        select(chip.dimension, chip.value, false);
+      });
       chipRow.append(button);
     }
-    const clear = el('button', 'chip filter-clear', 'Clear all filters');
-    clear.addEventListener('click', () => {
-      change({ categories: [], publishers: [], sources: [] });
-      toggle.focus();
-    });
-    chipRow.append(clear);
+    if (chips.length > 0) {
+      const clear = el('button', 'chip filter-clear', 'Clear all filters');
+      clear.dataset['filterKey'] = CLEAR_ALL_KEY;
+      clear.addEventListener('click', () => {
+        clear.focus();
+        change({ categories: [], publishers: [], sources: [] });
+      });
+      chipRow.append(clear);
+    }
+    if (focused !== undefined) restoreChipFocus(focused, before);
   }
 
-  /** Removes a chip's filter, then moves focus to the chip after it, the one before it, or the
-   * Filters button, so it never drops to <body>. */
-  function removeChip(chip: FilterChip): void {
-    const removed = optionKey(chip.dimension, chip.value);
-    const before = chips.map((c) => optionKey(c.dimension, c.value));
-    select(chip.dimension, chip.value, false);
-    const after = new Set(chips.map((c) => optionKey(c.dimension, c.value)));
-    const next = nearestSurvivor(before, before.indexOf(removed), (key) => after.has(key));
-    const target = next === undefined ? undefined : [...chipRow.querySelectorAll<HTMLElement>('[data-filter-key]')].find((b) => b.dataset['filterKey'] === next);
-    (target ?? toggle).focus();
+  /** Focuses the control `focused` names after a rebuild, else the surviving chip nearest it. */
+  function restoreChipFocus(focused: string, before: string[]): void {
+    const rendered = (key: string) => findByKey(chipRow, key);
+    const neighbour = nearestSurvivor(before, before.indexOf(focused), (key) => rendered(key) !== undefined);
+    (rendered(focused) ?? (neighbour === undefined ? undefined : rendered(neighbour)) ?? toggle).focus();
   }
 
   return {

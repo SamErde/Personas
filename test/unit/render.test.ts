@@ -447,6 +447,16 @@ describe('filter dimensions', () => {
     expect(facet('sources', {}, faceted, workspace)).toEqual(['Marketplace 2', 'VSIX 1', 'Unknown 2']);
   });
 
+  it('counts an extension once, however many profiles have it directly or through Default', () => {
+    // Beta is installed in Work only; adding it to Default also gives it to Agents, which uses Default.
+    const inheritedToo: Inventory = {
+      ...faceted,
+      extensions: faceted.extensions.map((e) => (e.id === 'pub.b' ? { ...e, installedIn: ['default', 'aaa', 'bbb'] } : e)),
+    };
+    expect(facet('publishers', {}, inheritedToo)).toEqual(facet('publishers'));
+    expect(facet('sources', {}, inheritedToo)).toEqual(['Marketplace 2', 'VSIX 1', 'Unknown 1']);
+  });
+
   it('counts rows the same when a profile list is unreadable or a profile uses Default', () => {
     const unreadableDefault: Inventory = {
       ...faceted,

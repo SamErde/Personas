@@ -275,9 +275,26 @@ describe('active-filter chips', () => {
     expect(document.activeElement).toBe(chip('Remove filter: Category Linters'));
 
     press(chip('Remove filter: Category Linters'));
+    expect(announcement()).toBe('3 of 3 extensions');
     expect(chipRow().hidden).toBe(true);
     expect(document.activeElement).toBe(filtersButton());
     expect(filtersButton().textContent).toBe('Filters');
+  });
+
+  it('keep focus on the same chip when the host refreshes the list', () => {
+    chip('Remove filter: Source VSIX').focus();
+    send({ type: 'inventory', inventory: faceted, icons: {} });
+    expect(document.activeElement).toBe(chip('Remove filter: Source VSIX'));
+
+    chip('Clear all filters').focus();
+    send({ type: 'inventory', inventory: faceted, icons: {} });
+    expect(document.activeElement).toBe(chip('Clear all filters'));
+  });
+
+  it('move focus to a neighbouring chip when a refresh removes the focused one', () => {
+    chip('Remove filter: Publisher fabrikam').focus();
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], sources: ['vsix'] } } });
+    expect(document.activeElement).toBe(chip('Remove filter: Source VSIX'));
   });
 
   it('are all cleared by Clear all filters, which keeps the view and the text and focuses the Filters button', () => {

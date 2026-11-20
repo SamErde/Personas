@@ -20,6 +20,15 @@ export const SOURCE_LABELS: Readonly<Record<string, string>> = Object.freeze({ g
 export const OTHER_SOURCE = 'other';
 
 const UNKNOWN_LABEL = 'Unknown';
+const OTHER_LABEL = 'Other';
+
+/** A value's label from the value alone: Unknown for no data, and for a source, its known label or
+ * Other. A publisher's display name comes from its rows instead (publisherOptions). */
+function valueLabel(dimension: FilterDimension, value: string): string {
+  if (value === UNKNOWN_VALUE) return UNKNOWN_LABEL;
+  if (dimension === 'sources') return SOURCE_LABELS[value] ?? OTHER_LABEL;
+  return value;
+}
 
 /** The filter dimensions in the order the filter groups and chips show them. */
 export const FILTER_DIMENSIONS = ['categories', 'publishers', 'sources'] as const satisfies readonly FilterDimension[];
@@ -151,7 +160,7 @@ export function activeFilterChips(filters: MatrixFilters, facets: Facets): Filte
   return FILTER_DIMENSIONS.flatMap((dimension) =>
     filters[dimension].map((value) => {
       const found = facets[dimension].find((option) => option.value === value);
-      const name = found ? optionName(found) : value || UNKNOWN_LABEL;
+      const name = found ? optionName(found) : valueLabel(dimension, value);
       const dimensionName = DIMENSION_NAMES[dimension];
       return { dimension, value, text: `${dimensionName}: ${name}`, removeLabel: `Remove filter: ${dimensionName} ${name}` };
     }),
@@ -195,12 +204,12 @@ export function buildViewModel(
     const publisher = extension?.publisher ?? workspaceStatus?.publisher;
     const publisherDisplayName = extension?.publisherDisplayName;
     const values = dimensionValues(extension, publisher);
-    const inLens =
+    const matchesViewAndText =
       (filters.view !== 'orphaned' || (profileBacked && orphaned)) &&
       (filters.view !== 'appliedToAllProfiles' || (profileBacked && applyToAllProfiles)) &&
       (!text || [id, displayName, publisher, publisherDisplayName].some((value) => value?.toLowerCase().includes(text)));
-    candidates.push({ values, inLens, ...(publisherDisplayName ? { publisherDisplayName } : {}) });
-    if (!inLens || !matchesDimensions(values, filters)) continue;
+    candidates.push({ values, matchesViewAndText, ...(publisherDisplayName ? { publisherDisplayName } : {}) });
+    if (!matchesViewAndText || !matchesDimensions(values, filters)) continue;
 
     // In a loaded workspace, the workspace composer has resolved the active profile manifest or
     // effective runtime location. Never overwrite that with arbitrary disk enumeration order.
@@ -253,7 +262,7 @@ export function buildViewModel(
 interface FacetCandidate {
   values: Record<FilterDimension, string[]>;
   /** The row matches the view and the text, which every facet count applies. */
-  inLens: boolean;
+  matchesViewAndText: boolean;
   publisherDisplayName?: string;
 }
 
@@ -263,13 +272,11 @@ function buildFacets(candidates: FacetCandidate[], filters: MatrixFilters): Face
   const options = (dimension: FilterDimension) => facetCounts(dimension, candidates, filters);
   return {
     categories: sortWithUnknownLast(
-      [...options('categories')].map(([value, count]) => option(value, value || UNKNOWN_LABEL, count, filters.categories)),
+      [...options('categories')].map(([value, count]) => option(value, valueLabel('categories', value), count, filters.categories)),
     ),
     publishers: publisherOptions(options('publishers'), candidates, filters),
     sources: [...options('sources')]
-      .map(([value, count]) =>
-        option(value, SOURCE_LABELS[value] ?? (value === UNKNOWN_VALUE ? UNKNOWN_LABEL : 'Other'), count, filters.sources),
-      )
+      .map(([value, count]) => option(value, valueLabel('sources', value), count, filters.sources))
       .sort((a, b) => SOURCE_ORDER.indexOf(a.value) - SOURCE_ORDER.indexOf(b.value)),
   };
 }
@@ -284,7 +291,7 @@ function facetCounts(dimension: FilterDimension, candidates: FacetCandidate[], f
   for (const value of [...candidates.flatMap((c) => c.values[dimension]), ...filters[dimension]]) counts.set(value, 0);
   const others: MatrixFilters = { ...filters, [dimension]: [] };
   for (const candidate of candidates) {
-    if (!candidate.inLens || !matchesDimensions(candidate.values, others)) continue;
+    if (!candidate.matchesViewAndText || !matchesDimensions(candidate.values, others)) continue;
     for (const value of new Set(candidate.values[dimension])) counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   return counts;
@@ -305,18 +312,28 @@ function sortWithUnknownLast(options: FacetOption[]): FacetOption[] {
 /** Publishers are labelled with the first display name any of their rows gives, else their ID.
  * Publishers that share a label show their ID too. */
 function publisherOptions(counts: Map<string, number>, candidates: FacetCandidate[], filters: MatrixFilters): FacetOption[] {
-  const names = new Map<string, string>();
-  for (const candidate of candidates) {
-    const id = candidate.values.publishers[0];
-    if (id && candidate.publisherDisplayName && !names.has(id)) names.set(id, candidate.publisherDisplayName);
-  }
+  const names = publisherDisplayNames(candidates);
   const options = [...counts].map(([value, count]) =>
-    option(value, value === UNKNOWN_VALUE ? UNKNOWN_LABEL : (names.get(value) ?? value), count, filters.publishers),
+    option(value, names.get(value) ?? valueLabel('publishers', value), count, filters.publishers),
   );
-  const labelUses = new Map<string, number>();
-  for (const { label } of options) labelUses.set(label, (labelUses.get(label) ?? 0) + 1);
-  for (const o of options) if (o.value !== UNKNOWN_VALUE && (labelUses.get(o.label) ?? 0) > 1) o.detail = o.value;
-  return sortWithUnknownLast(options);
+  return sortWithUnknownLast(withSharedLabelsTold(options));
+}
+
+/** Each publisher ID's first display name, in row order. */
+function publisherDisplayNames(candidates: FacetCandidate[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const { values, publisherDisplayName } of candidates) {
+    const id = values.publishers[0];
+    if (id && publisherDisplayName && !names.has(id)) names.set(id, publisherDisplayName);
+  }
+  return names;
+}
+
+/** Gives every known option whose label another option also has its value as detail. */
+function withSharedLabelsTold(options: FacetOption[]): FacetOption[] {
+  const uses = new Map<string, number>();
+  for (const { label } of options) uses.set(label, (uses.get(label) ?? 0) + 1);
+  return options.map((o) => (o.value !== UNKNOWN_VALUE && (uses.get(o.label) ?? 0) > 1 ? { ...o, detail: o.value } : o));
 }
 
 /** Works out what is known about one cell's install, separately from whether the cell can act.
