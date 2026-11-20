@@ -4,6 +4,7 @@ import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
+import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -337,8 +338,16 @@ card.addEventListener('focusout', (e) => {
   if (related instanceof Node && card.contains(related)) return;
   hideCard();
 });
+// Escape closes the card. When focus was in the card, it returns to the extension name that owns
+// the card, since hiding the card would otherwise drop it to <body>. Focus elsewhere stays put.
 document.addEventListener('keydown', (e) => {
-  if ((e as KeyboardEvent).key === 'Escape' && !card.hidden) hideCard();
+  if ((e as KeyboardEvent).key !== 'Escape' || card.hidden) return;
+  const owner = cardOwnerExtId;
+  const focusWasInCard = card.contains(document.activeElement);
+  hideCard();
+  if (focusWasInCard && owner !== undefined) {
+    withRestoringFocus(() => focusMatrixControl(contentEl, { extId: owner, slot: 'name' }));
+  }
 });
 window.addEventListener(
   'scroll',
@@ -474,7 +483,25 @@ function updateOrphanButton(): void {
   orphanButton.hidden = count === 0;
 }
 
+/** True while focus is moved by code (restored after a rebuild, or returned by Escape) rather
+ * than by the user, so a name receiving it does not open its hover card. */
+let restoringFocus = false;
+
+function withRestoringFocus(action: () => void): void {
+  restoringFocus = true;
+  try {
+    action();
+  } finally {
+    restoringFocus = false;
+  }
+}
+
+/** Rebuilds the content container, keeping keyboard focus on the same matrix control. */
 function renderContent(): void {
+  withRestoringFocus(() => preserveMatrixFocus(contentEl, buildContent));
+}
+
+function buildContent(): void {
   contentEl.replaceChildren();
   if (!inventory) {
     renderedRows = [];
@@ -554,7 +581,9 @@ function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
     clearShowTimer();
     scheduleHideCard();
   });
-  nameTrigger.addEventListener('focus', () => scheduleShowCard(row.id, nameTrigger, 0));
+  nameTrigger.addEventListener('focus', () => {
+    if (!restoringFocus) scheduleShowCard(row.id, nameTrigger, 0);
+  });
   nameTrigger.addEventListener('blur', (e) => {
     // Removal-fired blur: renderContent()'s replaceChildren() detaches this element while it
     // holds keyboard focus, and Chromium fires blur with relatedTarget null before

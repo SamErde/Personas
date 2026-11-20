@@ -2,6 +2,7 @@
 // render it directly. Everything stateful (the hover card, pending markers, and posting to the
 // host) stays in main.ts and reaches the table through the hooks below.
 import type { InstallState, ReadOnlyReason, RowVm, ViewModel } from './render';
+import { focusKey } from './matrixFocus';
 import { el } from './ui';
 
 export interface MatrixTableHooks {
@@ -36,7 +37,7 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
   }
 
   const body = table.createTBody();
-  for (const row of vm.rows) {
+  vm.rows.forEach((row, rowIndex) => {
     const tr = body.insertRow();
     tr.append(nameCell(row, hooks));
     row.cells.forEach((cell, index) => {
@@ -44,7 +45,8 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
       const cellName = `${row.displayName} in ${vm.profileNames[index]?.name ?? cell.profileId}`;
       const isPending = hooks.isPending(row.id, cell.profileId);
       const td = el('td', isPending ? 'cell pending' : 'cell');
-      if (isPending && cell.readOnlyReason !== 'workspaceOnly') {
+      // A pending writable cell stays a checkbox (below); a pending read-only cell has no control.
+      if (isPending && cell.readOnlyReason && cell.readOnlyReason !== 'workspaceOnly') {
         labelCell(td, glyph('spinner', '◐'), `${cellName}: change in progress`);
       } else if (cell.readOnlyReason) {
         const shown = describeReadOnlyCell(cell.install, cell.readOnlyReason);
@@ -55,13 +57,26 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
         box.type = 'checkbox';
         box.checked = cell.install === 'installed';
         box.setAttribute('aria-label', cellName);
-        box.addEventListener('change', () => hooks.toggleCell(row.id, cell.profileId, box.checked));
+        box.dataset['focusKey'] = focusKey({ extId: row.id, slot: `profile:${cell.profileId}` });
         td.append(box);
+        if (isPending) {
+          // A pending cell stays a checkbox so it keeps focus and its name while the change is in
+          // flight. aria-disabled, unlike disabled, leaves it focusable. It shows the current
+          // install (not optimistic UI) until the host's next inventory confirms the change.
+          const status = el('span', 'sr-only', 'change in progress');
+          status.id = `pending-status-${rowIndex}-${index}`;
+          box.setAttribute('aria-disabled', 'true');
+          box.setAttribute('aria-describedby', status.id);
+          box.addEventListener('click', (e) => e.preventDefault());
+          td.append(glyph('spinner', '◐'), status);
+        } else {
+          box.addEventListener('change', () => hooks.toggleCell(row.id, cell.profileId, box.checked));
+        }
       }
       tr.append(td);
     });
     if (vm.workspace) tr.append(workspaceCell(row, hooks));
-  }
+  });
 
   // Indexes for the crosshair highlight: every row has one cell per column (no spans), so a
   // cell's position is its column. Body rows count from 0, after the header row.
@@ -88,12 +103,14 @@ function nameCell(row: RowVm, hooks: MatrixTableHooks): HTMLElement {
   nameTrigger.tabIndex = 0;
   nameTrigger.setAttribute('role', 'button');
   nameTrigger.setAttribute('aria-haspopup', 'true');
+  nameTrigger.dataset['focusKey'] = focusKey({ extId: row.id, slot: 'name' });
   hooks.attachHoverCard(nameTrigger, row);
   name.append(nameTrigger);
 
   if (row.applyToAllProfiles) {
     const badge = el('button', 'badge', 'ALL');
     badge.title = 'Applied to all profiles — click for how to change';
+    badge.dataset['focusKey'] = focusKey({ extId: row.id, slot: 'all' });
     badge.addEventListener('click', () => hooks.showApplyToAllProfilesGuide(row.id));
     name.append(badge);
   }
@@ -112,6 +129,7 @@ function workspaceCell(row: RowVm, hooks: MatrixTableHooks): HTMLElement {
   if (guide) {
     td.title += ' Opens the Extensions view to enable or disable it for this workspace.';
     td.classList.add('workspace-guide-cell'); // The button, not the cell, carries the padding.
+    guide.dataset['focusKey'] = focusKey({ extId: row.id, slot: 'workspace' });
     guide.addEventListener('click', () => hooks.showWorkspaceEnablementGuide(row.id));
     td.append(guide);
   }
