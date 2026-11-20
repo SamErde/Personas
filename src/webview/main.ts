@@ -193,10 +193,11 @@ function syncOpenCard(): void {
   // focus (by its stable data-action name) and restore it after the rebuild — falling back to
   // the card container itself (tabindex=-1) when the control no longer exists (e.g. the
   // extension became applied to all profiles and install/remove disappeared). Escape still closes either way.
+  // Like preserveMatrixFocus, it restores nothing while the webview does not own focus, so a
+  // refresh never pulls focus back from the editor.
   const active = document.activeElement;
-  const focusedAction =
-    active instanceof HTMLElement && card.contains(active) ? active.dataset['action'] : undefined;
-  const focusWasInCard = active instanceof HTMLElement && card.contains(active);
+  const focusWasInCard = document.hasFocus() && active instanceof HTMLElement && card.contains(active);
+  const focusedAction = focusWasInCard ? active.dataset['action'] : undefined;
 
   rebuildCard(row);
   positionCard(trigger);

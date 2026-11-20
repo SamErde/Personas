@@ -179,6 +179,18 @@ describe('focus when the webview does not own focus', () => {
       hasFocus.mockRestore();
     }
   });
+
+  it('is not pulled back into the hover card by a refresh', () => {
+    focusCardAction('Beta');
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    try {
+      sendInventory(withInherited);
+
+      expect(card().contains(document.activeElement)).toBe(false);
+    } finally {
+      hasFocus.mockRestore();
+    }
+  });
 });
 
 describe('the extension name as a button', () => {
