@@ -73,8 +73,11 @@ export function preserveMatrixFocus(container: HTMLElement, rebuild: () => void,
   const target = document.hasFocus() ? (keyed ?? heldFor) : undefined;
   const before = target ? readRows(container) : [];
   rebuild();
-  if (!target) return;
-  if (!keyed && !focusWasDropped()) return;
+  if (target && (keyed || focusWasDropped())) restoreFocus(container, target, before);
+}
+
+/** Focuses where `target` resolves to in the rebuilt container, or the container itself. */
+function restoreFocus(container: HTMLElement, target: FocusTarget, before: FocusRow[]): void {
   const next = resolveFocus(target, before, readRows(container));
   if (next && focusMatrixControl(container, next)) return;
   focusContainer(container);
