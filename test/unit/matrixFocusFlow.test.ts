@@ -39,6 +39,18 @@ function press(target: Element, key: string): void {
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
 }
 
+/** Opens an extension's hover card from the keyboard and Tabs into it, returning the focused action. */
+function focusCardAction(extension: string): HTMLElement {
+  nameOf(extension).focus();
+  press(nameOf(extension), 'Tab'); // a forward Tab from the name moves into the open card
+  const action = document.activeElement as HTMLElement;
+  expect(card().contains(action)).toBe(true);
+  return action;
+}
+
+/** The inventory with the Gamma row, after Beta is gone. */
+const withoutBeta: Inventory = { ...withInherited, extensions: withInherited.extensions.filter((e) => e.id !== 'pub.b') };
+
 beforeAll(async () => {
   document.body.innerHTML = '<div id="app"></div>';
   const g = globalThis as unknown as Record<string, unknown>;
@@ -112,27 +124,23 @@ describe('focus when the focused row is removed', () => {
     sendInventory(withInherited);
     checkbox('Beta', 'Work').focus();
 
-    sendInventory({ ...withInherited, extensions: withInherited.extensions.filter((e) => e.id !== 'pub.b') });
+    sendInventory(withoutBeta);
 
     expect(document.activeElement).toBe(checkbox('Gamma', 'Work'));
   });
 
   it("moves from the removed row's hover card to the nearest remaining row", () => {
     sendInventory(withInherited);
-    nameOf('Beta').focus();
-    press(nameOf('Beta'), 'Tab'); // into the open card
-    expect(card().contains(document.activeElement)).toBe(true);
+    focusCardAction('Beta');
 
-    sendInventory({ ...withInherited, extensions: withInherited.extensions.filter((e) => e.id !== 'pub.b') });
+    sendInventory(withoutBeta);
 
     expect(card().hidden).toBe(true);
     expect(document.activeElement).toBe(nameOf('Gamma'));
   });
 
   it('leaves focus in the hover card when its row survives the refresh', () => {
-    nameOf('Beta').focus();
-    press(nameOf('Beta'), 'Tab');
-    const action = (document.activeElement as HTMLElement).dataset['action'];
+    const action = focusCardAction('Beta').dataset['action'];
 
     sendInventory(withInherited);
 
@@ -158,12 +166,7 @@ describe('focus outside the matrix', () => {
 
 describe('Escape in the hover card', () => {
   it('closes the card and returns focus to the extension name that opened it', () => {
-    nameOf('Beta').focus();
-    press(nameOf('Beta'), 'Tab'); // a forward Tab from the name moves into the open card
-    const action = document.activeElement as HTMLElement;
-    expect(card().contains(action)).toBe(true);
-
-    press(action, 'Escape');
+    press(focusCardAction('Beta'), 'Escape');
 
     expect(card().hidden).toBe(true);
     expect(document.activeElement).toBe(nameOf('Beta'));

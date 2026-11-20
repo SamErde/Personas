@@ -18,10 +18,21 @@ const hooks: MatrixTableHooks = {
   showWorkspaceEnablementGuide: () => undefined,
 };
 
-function render(inventory: Inventory = inv): HTMLTableElement {
-  const table = renderMatrixTable(buildViewModel(inventory, { filter: '', chip: 'all' }), hooks);
+function render(inventory: Inventory = inv, workspace?: WorkspaceInventory): HTMLTableElement {
+  const table = renderMatrixTable(buildViewModel(inventory, { filter: '', chip: 'all' }, workspace), hooks);
   document.body.replaceChildren(table);
   return table;
+}
+
+/** An open folder named Repo whose active profile is Work, holding these extensions. */
+function workspaceWith(extensions: WorkspaceInventory['extensions']): WorkspaceInventory {
+  return {
+    descriptor: { name: 'Repo', kind: 'folder', rootFsPaths: ['/repo'] },
+    activeProfileId: 'aaa',
+    activeProfileName: 'Work',
+    extensions,
+    warnings: [],
+  };
 }
 
 beforeEach(() => {
@@ -134,20 +145,15 @@ describe('read-only cells', () => {
 
   it('mark every profile cell of a workspace-only row as read-only, even while a change is pending', () => {
     pendingCells.add('local.only|aaa');
-    const workspace: WorkspaceInventory = {
-      descriptor: { name: 'Repo', kind: 'folder', rootFsPaths: ['/repo'] },
-      activeProfileId: 'aaa',
-      activeProfileName: 'Work',
-      extensions: [
+    const table = render(
+      inv,
+      workspaceWith([
         {
           id: 'local.only', displayName: 'Local Fixture', state: 'enabled', installedInActiveProfile: false,
           workspaceLocal: 'installed', profileBacked: false, reason: 'local copy',
         },
-      ],
-      warnings: [],
-    };
-    const table = renderMatrixTable(buildViewModel(inv, { filter: '', chip: 'all' }, workspace), hooks);
-    document.body.replaceChildren(table);
+      ]),
+    );
 
     for (const profile of ['Default', 'Work', '⤷ Shared']) {
       const cell = cellAt(table, 'Local Fixture', profile);
@@ -188,17 +194,15 @@ describe('read-only cells', () => {
 
 describe('focus keys', () => {
   it('name every focusable control by its extension and slot, so focus can find it after a rebuild', () => {
-    const workspace: WorkspaceInventory = {
-      descriptor: { name: 'Repo', kind: 'folder', rootFsPaths: ['/repo'] },
-      activeProfileId: 'aaa',
-      activeProfileName: 'Work',
-      extensions: [
-        { id: 'pub.b', displayName: 'Beta', state: 'notEnabled', installedInActiveProfile: true, workspaceLocal: 'none', profileBacked: true, reason: 'not enabled here' },
-      ],
-      warnings: [],
-    };
-    const table = renderMatrixTable(buildViewModel(inv, { filter: '', chip: 'all' }, workspace), hooks);
-    document.body.replaceChildren(table);
+    const table = render(
+      inv,
+      workspaceWith([
+        {
+          id: 'pub.b', displayName: 'Beta', state: 'notEnabled', installedInActiveProfile: true,
+          workspaceLocal: 'none', profileBacked: true, reason: 'not enabled here',
+        },
+      ]),
+    );
     const keys = (extension: string) =>
       [...cellAt(table, extension, 'Extension').closest('tr')!.querySelectorAll<HTMLElement>('[data-focus-key]')].map(
         (node) => node.dataset['focusKey'],
