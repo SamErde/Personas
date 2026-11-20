@@ -78,7 +78,15 @@ export class MatrixPanel {
     });
     panel.webview.html = this.html(context);
     panel.onDidDispose(() => (MatrixPanel.current = undefined));
-    panel.webview.onDidReceiveMessage((m: MatrixToHost) => void this.enqueue(() => this.onMessage(m)));
+    panel.webview.onDidReceiveMessage((m: MatrixToHost) => {
+      // View state is presentation only, so it is kept at once instead of waiting behind a slow
+      // refresh: a panel reopened in the meantime must find the latest view.
+      if (m.type === 'viewState') {
+        MatrixPanel.sessionViewState = m.state;
+        return;
+      }
+      void this.enqueue(() => this.onMessage(m));
+    });
   }
 
   /**
@@ -166,8 +174,7 @@ export class MatrixPanel {
         await this.guard(() => this.refresh());
         return;
       case 'viewState':
-        MatrixPanel.sessionViewState = m.state;
-        return;
+        return; // kept on arrival, outside the queue (see the constructor)
       case 'refresh':
         await this.guard(() => this.refresh());
         return;

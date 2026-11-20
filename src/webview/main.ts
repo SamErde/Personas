@@ -566,6 +566,8 @@ function renderContent(): void {
 function buildContent(): void {
   contentEl.replaceChildren();
   shownCount = undefined; // only the matrix view has a count to announce
+  // Leaving the matrix also empties the announcement, so the cleanup view never holds an old count.
+  if (!inventory || orphans !== undefined) resultStatus.textContent = '';
   if (!inventory) {
     renderedRows = [];
     hideCard();

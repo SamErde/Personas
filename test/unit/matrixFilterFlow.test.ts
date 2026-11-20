@@ -81,12 +81,14 @@ describe('result announcement', () => {
     expect(announcement()).toBe('0 of 2 extensions');
   });
 
-  it('leaves no stale count behind while the cleanup view is open', () => {
+  it('leaves no stale count behind once the cleanup view opens', () => {
     viewChip('Applied to all profiles').click();
+    expect(announcement()).toBe('1 of 2 extensions');
+
     send({ type: 'orphans', orphans: [] });
+    expect(announcement()).toBe('');
 
-    viewChip('All').click();
-
+    viewChip('All').click(); // a filter change while cleanup is open still has no count to give
     expect(announcement()).toBe('');
   });
 

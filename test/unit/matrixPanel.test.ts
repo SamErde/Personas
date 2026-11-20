@@ -82,4 +82,27 @@ describe('view state across closing and reopening the panel', () => {
     expect(second.posted.map((m) => m.type)).toEqual(['viewState', 'inventory']);
     expect(second.posted[0]).toEqual({ type: 'viewState', state });
   });
+
+  it('is kept at once, even while the closing panel is still reading the inventory', async () => {
+    let finishRead: () => void = () => undefined;
+    const slowRead = new Promise<void>((resolve) => (finishRead = resolve));
+    const slow = {
+      ...services,
+      inventory: { getInventory: async () => (await slowRead, inv) },
+    } as unknown as Services;
+    MatrixPanel.show(context, slow);
+    const first = mock.panels[0]!;
+    first.receive({ type: 'refresh' }); // still running when the person changes the view and closes
+    const state = { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles' as const } };
+    first.receive({ type: 'viewState', state });
+    first.close();
+
+    MatrixPanel.show(context, services);
+    const second = mock.panels[1]!;
+    second.receive({ type: 'ready' });
+    await settle();
+    finishRead();
+
+    expect(second.posted[0]).toEqual({ type: 'viewState', state });
+  });
 });
