@@ -4,28 +4,7 @@ import type { Inventory, WorkspaceInventory } from '../../src/core/types';
 import { gridHitAt, paintCrosshair } from '../../src/webview/crosshair';
 import { buildViewModel } from '../../src/webview/render';
 import { renderMatrixLegend, renderMatrixTable, type MatrixTableHooks } from '../../src/webview/matrixTable';
-
-const inv: Inventory = {
-  profiles: [
-    { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
-    { id: 'aaa', name: 'Work', isDefault: false, inheritsDefaultExtensions: false },
-    { id: 'bbb', name: 'Shared', isDefault: false, inheritsDefaultExtensions: true },
-  ],
-  extensions: [
-    { id: 'pub.a', displayName: 'Alpha', versions: [], applyToAllProfiles: true, installedIn: ['default', 'aaa', 'bbb'], orphaned: false },
-    { id: 'pub.b', displayName: 'Beta', versions: [], applyToAllProfiles: false, installedIn: ['aaa'], orphaned: false },
-  ],
-  warnings: [],
-};
-
-/** The base inventory plus an extension that the Shared profile has only through Default. */
-const withInherited: Inventory = {
-  ...inv,
-  extensions: [
-    ...inv.extensions,
-    { id: 'pub.g', displayName: 'Gamma', versions: [], applyToAllProfiles: false, installedIn: ['default', 'bbb'], orphaned: false },
-  ],
-};
+import { cellAt, inv, withInherited } from './matrixDom';
 
 let toggles: { extId: string; profileId: string; install: boolean }[];
 let pendingCells: Set<string>;
@@ -39,23 +18,21 @@ const hooks: MatrixTableHooks = {
   showWorkspaceEnablementGuide: () => undefined,
 };
 
-function render(inventory: Inventory = inv): HTMLTableElement {
-  const table = renderMatrixTable(buildViewModel(inventory, { filter: '', chip: 'all' }), hooks);
+function render(inventory: Inventory = inv, workspace?: WorkspaceInventory): HTMLTableElement {
+  const table = renderMatrixTable(buildViewModel(inventory, { filter: '', chip: 'all' }, workspace), hooks);
   document.body.replaceChildren(table);
   return table;
 }
 
-/** The body cell where an extension's row meets a profile's column, found through the table's
- * own header cells the way assistive technology pairs them. */
-function cellAt(table: HTMLTableElement, extension: string, profileLabel: string): HTMLTableCellElement {
-  const headers = [...(table.tHead?.rows[0]?.cells ?? [])].map((th) => th.textContent);
-  const col = headers.indexOf(profileLabel);
-  if (col < 0) throw new Error(`No column headed ${profileLabel}; headers are ${headers.join(', ')}`);
-  const row = [...table.tBodies].flatMap((body) => [...body.rows]).find((tr) => tr.cells[0]?.textContent?.includes(extension));
-  if (!row) throw new Error(`No row for ${extension}`);
-  const cell = row.cells[col];
-  if (!cell) throw new Error(`Row ${extension} has no cell in column ${profileLabel}`);
-  return cell;
+/** An open folder named Repo whose active profile is Work, holding these extensions. */
+function workspaceWith(extensions: WorkspaceInventory['extensions']): WorkspaceInventory {
+  return {
+    descriptor: { name: 'Repo', kind: 'folder', rootFsPaths: ['/repo'] },
+    activeProfileId: 'aaa',
+    activeProfileName: 'Work',
+    extensions,
+    warnings: [],
+  };
 }
 
 beforeEach(() => {
@@ -168,20 +145,15 @@ describe('read-only cells', () => {
 
   it('mark every profile cell of a workspace-only row as read-only, even while a change is pending', () => {
     pendingCells.add('local.only|aaa');
-    const workspace: WorkspaceInventory = {
-      descriptor: { name: 'Repo', kind: 'folder', rootFsPaths: ['/repo'] },
-      activeProfileId: 'aaa',
-      activeProfileName: 'Work',
-      extensions: [
+    const table = render(
+      inv,
+      workspaceWith([
         {
           id: 'local.only', displayName: 'Local Fixture', state: 'enabled', installedInActiveProfile: false,
           workspaceLocal: 'installed', profileBacked: false, reason: 'local copy',
         },
-      ],
-      warnings: [],
-    };
-    const table = renderMatrixTable(buildViewModel(inv, { filter: '', chip: 'all' }, workspace), hooks);
-    document.body.replaceChildren(table);
+      ]),
+    );
 
     for (const profile of ['Default', 'Work', '⤷ Shared']) {
       const cell = cellAt(table, 'Local Fixture', profile);
@@ -190,12 +162,24 @@ describe('read-only cells', () => {
     }
   });
 
-  it('label a cell whose change is in progress', () => {
+  it('keep a pending cell a focusable checkbox that names its cell, shows the current state, and says the change is in progress', () => {
     pendingCells.add('pub.b|aaa');
     const work = cellAt(render(), 'Beta', 'Work');
+    const box = work.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
 
-    expect(work.querySelector('input')).toBeNull();
-    expect(label(work)).toBe('Beta in Work: change in progress');
+    expect(box.disabled).toBe(false); // a disabled control cannot hold focus
+    expect(box.getAttribute('aria-disabled')).toBe('true');
+    expect(box.getAttribute('aria-label')).toBe('Beta in Work');
+    expect(box.checked).toBe(true); // still installed until the host confirms the change
+    const description = document.getElementById(box.getAttribute('aria-describedby') ?? '');
+    expect(description?.textContent).toBe('change in progress');
+    expect(work.querySelector('.spinner')?.getAttribute('aria-hidden')).toBe('true');
+
+    box.focus();
+    expect(document.activeElement).toBe(box);
+    box.click();
+    expect(box.checked).toBe(true);
+    expect(toggles).toEqual([]);
   });
 
   it("name the Agents window profile for its window", () => {
@@ -205,6 +189,31 @@ describe('read-only cells', () => {
     };
 
     expect(label(cellAt(render(withAgentsWindow), 'Alpha', '⤷ Agents window'))).toBe('Alpha in Agents window: applied to all profiles');
+  });
+});
+
+describe('focus keys', () => {
+  it('name every focusable control by its extension and slot, so focus can find it after a rebuild', () => {
+    const table = render(
+      inv,
+      workspaceWith([
+        {
+          id: 'pub.b', displayName: 'Beta', state: 'notEnabled', installedInActiveProfile: true,
+          workspaceLocal: 'none', profileBacked: true, reason: 'not enabled here',
+        },
+      ]),
+    );
+    const keys = (extension: string) =>
+      [...cellAt(table, extension, 'Extension').closest('tr')!.querySelectorAll<HTMLElement>('[data-focus-key]')].map(
+        (node) => node.dataset['focusKey'],
+      );
+
+    expect(keys('Alpha').slice(0, 2)).toEqual(['pub.a|name', 'pub.a|all']);
+    expect(keys('Beta')).toEqual(expect.arrayContaining(['pub.b|name', 'pub.b|profile:default', 'pub.b|profile:aaa']));
+    expect(keys('Beta')).not.toContain('pub.b|profile:bbb'); // read-only cells are not controls
+    // Every control in the table carries a key, and every keyed element is in the Tab order.
+    expect(table.querySelectorAll('button:not([data-focus-key]), input:not([data-focus-key]), [tabindex]:not([data-focus-key])')).toHaveLength(0);
+    for (const node of table.querySelectorAll<HTMLElement>('[data-focus-key]')) expect(node.tabIndex).toBeGreaterThanOrEqual(0);
   });
 });
 

@@ -128,6 +128,8 @@ thead th.ext-col { left: 0; z-index: 3; }
 /* In-flight mutation feedback: shown the instant a checkbox is toggled (localPending) or once
  * the host echoes a 'pending' message — Cell Sky alpha-blended so it reads on light+dark. */
 .cell.pending { background: rgba(56, 189, 248, 0.25); border-radius: 3px; }
+/* A pending checkbox stays focusable (aria-disabled, not disabled) but looks unavailable. */
+.cell.pending input[aria-disabled="true"] { opacity: 0.6; cursor: progress; margin-right: 0.25rem; }
 /* Crosshair highlight for the row and column under the pointer or focus. `crosshair-label` marks
  * the labels the user reads: the column's header and the row's header (the extension's name).
  * Both are sticky, so the tint is layered over the opaque editor background (cells can't show

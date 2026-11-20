@@ -4,6 +4,7 @@ import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, type Chip, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
+import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -192,10 +193,11 @@ function syncOpenCard(): void {
   // focus (by its stable data-action name) and restore it after the rebuild — falling back to
   // the card container itself (tabindex=-1) when the control no longer exists (e.g. the
   // extension became applied to all profiles and install/remove disappeared). Escape still closes either way.
+  // Like preserveMatrixFocus, it restores nothing while the webview does not own focus, so a
+  // refresh never pulls focus back from the editor.
   const active = document.activeElement;
-  const focusedAction =
-    active instanceof HTMLElement && card.contains(active) ? active.dataset['action'] : undefined;
-  const focusWasInCard = active instanceof HTMLElement && card.contains(active);
+  const focusWasInCard = document.hasFocus() && active instanceof HTMLElement && card.contains(active);
+  const focusedAction = focusWasInCard ? active.dataset['action'] : undefined;
 
   rebuildCard(row);
   positionCard(trigger);
@@ -337,9 +339,19 @@ card.addEventListener('focusout', (e) => {
   if (related instanceof Node && card.contains(related)) return;
   hideCard();
 });
+// Escape closes the card. When focus was in the card, it returns to the extension name that owns
+// the card, since hiding the card would otherwise drop it to <body>. Focus elsewhere stays put.
 document.addEventListener('keydown', (e) => {
-  if ((e as KeyboardEvent).key === 'Escape' && !card.hidden) hideCard();
+  if ((e as KeyboardEvent).key !== 'Escape' || card.hidden) return;
+  const owner = cardFocusOwner();
+  hideCard();
+  if (owner !== undefined) withRestoringFocus(() => focusMatrixControl(contentEl, { extId: owner, slot: 'name' }));
 });
+
+/** The extension whose open card holds keyboard focus, if any. */
+function cardFocusOwner(): string | undefined {
+  return card.contains(document.activeElement) ? cardOwnerExtId : undefined;
+}
 window.addEventListener(
   'scroll',
   () => {
@@ -474,7 +486,29 @@ function updateOrphanButton(): void {
   orphanButton.hidden = count === 0;
 }
 
+/** True while focus is moved by code (restored after a rebuild, or returned by Escape) rather
+ * than by the user, so a name receiving it does not open its hover card. */
+let restoringFocus = false;
+
+function withRestoringFocus(action: () => void): void {
+  restoringFocus = true;
+  try {
+    action();
+  } finally {
+    restoringFocus = false;
+  }
+}
+
+/** Rebuilds the content container, keeping keyboard focus on the same matrix control. Focus in
+ * the hover card belongs to its extension's name: syncOpenCard keeps it in the card, and when the
+ * card closes because the row is gone, it moves to the nearest remaining row instead of <body>. */
 function renderContent(): void {
+  const owner = cardFocusOwner();
+  const heldFor = owner === undefined ? undefined : { extId: owner, slot: 'name' as const };
+  withRestoringFocus(() => preserveMatrixFocus(contentEl, buildContent, heldFor));
+}
+
+function buildContent(): void {
   contentEl.replaceChildren();
   if (!inventory) {
     renderedRows = [];
@@ -554,7 +588,9 @@ function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
     clearShowTimer();
     scheduleHideCard();
   });
-  nameTrigger.addEventListener('focus', () => scheduleShowCard(row.id, nameTrigger, 0));
+  nameTrigger.addEventListener('focus', () => {
+    if (!restoringFocus) scheduleShowCard(row.id, nameTrigger, 0);
+  });
   nameTrigger.addEventListener('blur', (e) => {
     // Removal-fired blur: renderContent()'s replaceChildren() detaches this element while it
     // holds keyboard focus, and Chromium fires blur with relatedTarget null before
@@ -578,6 +614,16 @@ function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
       }
     }
   });
+  // The name is a button, so every way of activating it opens its card: Enter and Space, and a
+  // click, which is also how a screen reader in browse mode activates a button. That is the way
+  // back to the card after Escape, or after focus was restored to a name without opening it.
+  nameTrigger.addEventListener('keydown', (e) => {
+    const key = (e as KeyboardEvent).key;
+    if (key !== 'Enter' && key !== ' ') return;
+    e.preventDefault();
+    showCard(row.id, nameTrigger);
+  });
+  nameTrigger.addEventListener('click', () => showCard(row.id, nameTrigger));
 }
 
 function renderCleanup(list: OrphanInfo[]): void {
