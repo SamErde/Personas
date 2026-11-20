@@ -29,7 +29,7 @@ export function focusKey(target: FocusTarget): string {
 /**
  * Decides where focus belongs after a rebuild. The same control keeps focus when it is still
  * rendered. Otherwise focus moves to the nearest control: first within the same row, then in the
- * nearest surviving row (looking down before up), on the same control or the nearest column.
+ * nearest surviving row (the one below on a tie), on the same control or the nearest column.
  * Returns undefined only when no row survives.
  */
 export function resolveFocus(target: FocusTarget, before: FocusRow[], after: FocusRow[]): FocusTarget | undefined {
@@ -40,13 +40,11 @@ export function resolveFocus(target: FocusTarget, before: FocusRow[], after: Foc
   const sameRow = byId.get(target.extId);
   if (sameRow) return pickInRow(sameRow, target.slot, prevCol);
 
-  // The focused row is gone: walk outward from where it was, rows below first.
-  const below = before.slice(prevIndex + 1);
-  const above = before.slice(0, Math.max(prevIndex, 0)).reverse();
-  for (const candidate of [...below, ...above]) {
-    const survivor = byId.get(candidate.extId);
-    if (survivor) {
-      const picked = pickInRow(survivor, target.slot, prevCol);
+  // The focused row is gone: try rows by distance from where it was, the row below first on a tie.
+  for (let distance = 1; distance <= before.length; distance++) {
+    for (const candidate of [before[prevIndex + distance], before[prevIndex - distance]]) {
+      const survivor = candidate && byId.get(candidate.extId);
+      const picked = survivor && pickInRow(survivor, target.slot, prevCol);
       if (picked) return picked;
     }
   }
