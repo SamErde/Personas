@@ -30,9 +30,10 @@ export interface MatrixFilters {
   text: string;
   /** Category names from package.json. */
   categories: readonly string[];
-  /** Publisher IDs. */
+  /** Publisher IDs, lowercase. */
   publishers: readonly string[];
-  /** Manifest `metadata.source` values as written. */
+  /** Manifest `metadata.source` values that have a label of their own (SOURCE_LABELS in
+   *  webview/render.ts), or OTHER_SOURCE for any other value written. */
   sources: readonly string[];
 }
 

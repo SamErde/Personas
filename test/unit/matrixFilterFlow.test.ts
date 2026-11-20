@@ -4,7 +4,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatrixToHost } from '../../src/protocol';
 import { NO_FILTERS } from '../../src/webview/render';
-import { inv, loadMatrixWebview, sendToMatrix as send } from './matrixDom';
+import { faceted, inv, loadMatrixWebview, sendToMatrix as send } from './matrixDom';
 
 const posted: MatrixToHost[] = [];
 
@@ -121,5 +121,176 @@ describe('view state kept by the host', () => {
     expect(viewChip('Applied to all profiles').getAttribute('aria-pressed')).toBe('true');
     expect(shownNames()).toEqual(['Alpha']);
     expect(posted).toEqual([]);
+  });
+});
+
+// --- Category, publisher, and source filters ----------------------------------------------------
+
+const filtersButton = () => document.querySelector<HTMLButtonElement>('.toolbar button[aria-controls]')!;
+const filterPanel = () => document.getElementById(filtersButton().getAttribute('aria-controls')!)!;
+const chipRow = () => document.querySelector<HTMLElement>('.filter-chips')!;
+const chipButtons = () => [...chipRow().querySelectorAll<HTMLButtonElement>('button')];
+const chipNames = () => chipButtons().map((b) => b.getAttribute('aria-label') ?? b.textContent);
+const publisherSearch = () => filterPanel().querySelector<HTMLInputElement>('input[type="search"]')!;
+
+function group(legend: string): HTMLFieldSetElement {
+  const found = [...filterPanel().querySelectorAll('fieldset')].find((f) => f.querySelector('legend')?.textContent === legend);
+  if (!found) throw new Error(`No filter group ${legend}`);
+  return found;
+}
+
+/** Each option in a filter group as its accessible name, with a * when checked. */
+function options(legend: string): string[] {
+  return [...group(legend).querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
+    (box) => `${box.getAttribute('aria-label')}${box.checked ? ' *' : ''}`,
+  );
+}
+
+function option(legend: string, label: string): HTMLInputElement {
+  const box = [...group(legend).querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((b) =>
+    b.getAttribute('aria-label')?.startsWith(`${label},`),
+  );
+  if (!box) throw new Error(`No ${legend} option ${label}; options are ${options(legend).join(' | ')}`);
+  return box;
+}
+
+function chip(name: string): HTMLButtonElement {
+  const found = chipButtons().find((b) => (b.getAttribute('aria-label') ?? b.textContent) === name);
+  if (!found) throw new Error(`No chip ${name}; chips are ${chipNames().join(' | ')}`);
+  return found;
+}
+
+/** Clicks a control the way a keyboard user does: focus first, then activate. */
+function press(control: HTMLElement): void {
+  control.focus();
+  control.click();
+}
+
+function searchPublishers(text: string): void {
+  publisherSearch().value = text;
+  publisherSearch().dispatchEvent(new Event('input'));
+}
+
+describe('filter groups', () => {
+  beforeEach(() => {
+    send({ type: 'inventory', inventory: faceted, icons: {} });
+    if (filtersButton().getAttribute('aria-expanded') === 'true') filtersButton().click();
+    searchPublishers('');
+    posted.length = 0;
+  });
+
+  it('open from one Filters disclosure button that exposes its expanded state', () => {
+    expect(filtersButton().textContent).toBe('Filters');
+    expect(filtersButton().getAttribute('aria-expanded')).toBe('false');
+    expect(filterPanel().hidden).toBe(true);
+
+    filtersButton().click();
+
+    expect(filtersButton().getAttribute('aria-expanded')).toBe('true');
+    expect(filterPanel().hidden).toBe(false);
+    expect([...filterPanel().querySelectorAll('legend')].map((l) => l.textContent)).toEqual(['Category', 'Publisher', 'Source']);
+    expect(posted).toEqual([]);
+  });
+
+  it('list each value as a native checkbox named with how many extensions carry it', () => {
+    expect(options('Category')).toEqual(['Linters, 2 extensions', 'Themes, 1 extension', 'Unknown, 1 extension']);
+    expect(options('Publisher')).toEqual(['Contoso Ltd, 1 extension', 'fabrikam, 1 extension', 'Unknown, 1 extension']);
+    expect(options('Source')).toEqual(['Marketplace, 2 extensions', 'VSIX, 1 extension', 'Unknown, 1 extension']);
+  });
+
+  it('narrow the table when a value is checked, keep the view state, announce the count, and add a chip', () => {
+    filtersButton().click();
+    press(option('Category', 'Themes'));
+
+    expect(shownNames()).toEqual(['Alpha']);
+    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Themes'] } } }]);
+    expect(announcement()).toBe('1 of 3 extensions');
+    expect(chipNames()).toEqual(['Remove filter: Category Themes', 'Clear all filters']);
+    expect(filtersButton().textContent).toBe('Filters (1)');
+  });
+
+  it('keep focus on the checked value while its group is rebuilt', () => {
+    filtersButton().click();
+    press(option('Category', 'Themes'));
+
+    expect(document.activeElement).toBe(option('Category', 'Themes'));
+    expect(option('Category', 'Themes').checked).toBe(true);
+  });
+
+  it('count each value under the other active filters', () => {
+    press(option('Publisher', 'fabrikam'));
+
+    expect(options('Category')).toEqual(['Linters, 1 extension', 'Themes, 0 extensions', 'Unknown, 0 extensions']);
+    expect(options('Publisher')).toEqual(['Contoso Ltd, 1 extension', 'fabrikam, 1 extension *', 'Unknown, 1 extension']);
+  });
+
+  it('let the publisher list be searched by name or ID without changing the filters', () => {
+    searchPublishers('contoso');
+    expect(options('Publisher')).toEqual(['Contoso Ltd, 1 extension']);
+
+    searchPublishers('LTD');
+    expect(options('Publisher')).toEqual(['Contoso Ltd, 1 extension']);
+
+    searchPublishers('zzz');
+    expect(options('Publisher')).toEqual([]);
+    expect(group('Publisher').textContent).toContain('No publishers match');
+    expect(posted).toEqual([]);
+  });
+});
+
+describe('active-filter chips', () => {
+  beforeEach(() => {
+    send({ type: 'inventory', inventory: faceted, icons: {} });
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], publishers: ['fabrikam'], sources: ['vsix'] } } });
+    searchPublishers('');
+    posted.length = 0;
+  });
+
+  it('come back with the checkboxes and the table when the host restores the view state, without being sent back', () => {
+    expect(chipNames()).toEqual([
+      'Remove filter: Category Linters',
+      'Remove filter: Publisher fabrikam',
+      'Remove filter: Source VSIX',
+      'Clear all filters',
+    ]);
+    expect(option('Source', 'VSIX').checked).toBe(true);
+    expect(shownNames()).toEqual(['Beta']);
+    expect(filtersButton().textContent).toBe('Filters (3)');
+    expect(posted).toEqual([]);
+  });
+
+  it('remove their filter, announce the new count, and move focus to the next chip, the previous one, then the Filters button', () => {
+    press(chip('Remove filter: Publisher fabrikam'));
+
+    expect(posted).toEqual([
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], sources: ['vsix'] } } },
+    ]);
+    expect(announcement()).toBe('1 of 3 extensions');
+    expect(option('Publisher', 'fabrikam').checked).toBe(false);
+    expect(document.activeElement).toBe(chip('Remove filter: Source VSIX'));
+
+    press(chip('Remove filter: Source VSIX'));
+    expect(shownNames()).toEqual(['Alpha', 'Beta']);
+    expect(announcement()).toBe('2 of 3 extensions');
+    expect(document.activeElement).toBe(chip('Remove filter: Category Linters'));
+
+    press(chip('Remove filter: Category Linters'));
+    expect(chipRow().hidden).toBe(true);
+    expect(document.activeElement).toBe(filtersButton());
+    expect(filtersButton().textContent).toBe('Filters');
+  });
+
+  it('are all cleared by Clear all filters, which keeps the view and the text and focuses the Filters button', () => {
+    send({
+      type: 'viewState',
+      state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a', categories: ['Linters'], sources: ['vsix'] } },
+    });
+
+    press(chip('Clear all filters'));
+
+    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a' } } }]);
+    expect(chipRow().hidden).toBe(true);
+    expect(document.activeElement).toBe(filtersButton());
+    expect(announcement()).toBe('0 of 3 extensions');
   });
 });

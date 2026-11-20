@@ -5,7 +5,7 @@ body {
   padding: 0.5rem 1rem;
 }
 .toolbar { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
-.toolbar input {
+.toolbar input, .filter-group input[type="search"] {
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border, transparent);
@@ -28,6 +28,37 @@ body {
 .chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
 .chip.refresh { margin-left: auto; }
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Category, publisher, and source filters. The panel and the chip row set `display`, so each also
+ * restates `hidden`, which an author `display` would otherwise override. */
+.filters-toggle[aria-expanded="true"] {
+  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+}
+.filter-panel {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+.filter-panel[hidden], .filter-chips[hidden] { display: none; }
+.filter-group {
+  margin: 0; padding: 0.3rem 0.6rem 0.5rem; min-width: 0;
+  border: 1px solid var(--vscode-panel-border); border-radius: 2px;
+}
+.filter-group legend { padding: 0 0.25rem; font-weight: 600; }
+.filter-group input[type="search"] { width: 100%; box-sizing: border-box; margin: 0.2rem 0 0.4rem; }
+/* A long list scrolls inside its group instead of pushing the matrix down. */
+.filter-options { max-height: 12rem; overflow-y: auto; }
+.filter-option { display: flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0; cursor: pointer; }
+.filter-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-detail, .filter-count, .filter-empty { color: var(--vscode-descriptionForeground); font-size: 0.85em; }
+.filter-count { font-variant-numeric: tabular-nums; }
+.filter-empty { margin: 0.2rem 0; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.75rem; }
+.filter-chip-remove { margin-left: 0.4rem; }
+.filters-toggle:focus-visible, .filter-chip:focus-visible, .filter-clear:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px;
+}
+.filter-option input:focus-visible, .filter-group input[type="search"]:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px;
+}
 /* Separate borders (with no spacing) so each cell owns its border: collapsed borders are painted
  * at the cell's original position and would not move with the sticky header and name column. */
 table { border-collapse: separate; border-spacing: 0; }

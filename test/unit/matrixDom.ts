@@ -53,3 +53,17 @@ export function cellAt(table: HTMLTableElement, extension: string, profileLabel:
   if (!cell) throw new Error(`Row ${extension} has no cell in column ${profileLabel}`);
   return cell;
 }
+
+/** The base inventory with filter data: Alpha is Contoso's (Linters and Themes, from the
+ * Marketplace), Beta is Fabrikam's (Linters, from the Marketplace and a VSIX), and Gamma has no
+ * publisher, categories, or install source. */
+export const faceted: Inventory = {
+  ...withInherited,
+  extensions: withInherited.extensions.map((e) => {
+    if (e.id === 'pub.a') {
+      return { ...e, publisher: 'contoso', publisherDisplayName: 'Contoso Ltd', categories: ['Linters', 'Themes'], installSources: ['gallery'] };
+    }
+    if (e.id === 'pub.b') return { ...e, publisher: 'fabrikam', categories: ['Linters'], installSources: ['gallery', 'vsix'] };
+    return { ...e, installSourceMissing: true };
+  }),
+};

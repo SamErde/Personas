@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveFocus, type FocusRow, type FocusSlot } from '../../src/webview/matrixFocus';
+import { nearestSurvivor, resolveFocus, type FocusRow, type FocusSlot } from '../../src/webview/matrixFocus';
 
 /** A row with its name in column 0 and a checkbox for each listed profile column. */
 function row(extId: string, profileCols: Record<string, number>, extra: FocusSlot[] = []): FocusRow {
@@ -68,5 +68,24 @@ describe('resolveFocus', () => {
     const before = [row('pub.a', { default: 1 })];
 
     expect(resolveFocus({ extId: 'pub.a', slot: 'name' }, before, [])).toBeUndefined();
+  });
+});
+
+describe('nearestSurvivor', () => {
+  const chips = ['a', 'b', 'c', 'd'];
+  const without = (...gone: string[]) => (key: string) => !gone.includes(key);
+
+  it('picks the next item after a removed one, as when a chip in the middle is removed', () => {
+    expect(nearestSurvivor(chips, 1, without('b'))).toBe('c');
+  });
+
+  it('picks the previous item when nothing after it survives', () => {
+    expect(nearestSurvivor(chips, 3, without('d'))).toBe('c');
+    expect(nearestSurvivor(chips, 2, without('c', 'd'))).toBe('b');
+  });
+
+  it('finds nothing when no other item survives', () => {
+    expect(nearestSurvivor(['a'], 0, without('a'))).toBeUndefined();
+    expect(nearestSurvivor(chips, 0, without(...chips))).toBeUndefined();
   });
 });

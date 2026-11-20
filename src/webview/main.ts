@@ -5,6 +5,7 @@ import { buildViewModel, NO_FILTERS, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
+import { createFilterControls } from './matrixFilters';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -92,6 +93,16 @@ for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedT
 }
 updateChipButtons();
 
+// Category, publisher, and source filters: one Filters disclosure beside the view chips, because
+// three separate buttons wrapped the toolbar at a 1,000px panel width.
+const filterControls = createFilterControls((next) => {
+  filters = { ...filters, ...next };
+  keepViewState();
+  clearFilterTimer(); // this rebuild also applies any text still waiting for a pause
+  applyFilterChange();
+});
+toolbar.append(filterControls.toggle);
+
 const orphanButton = el('button', 'chip cleanup', '');
 orphanButton.hidden = true;
 orphanButton.addEventListener('click', () => post({ type: 'requestOrphans' }));
@@ -109,7 +120,7 @@ resultStatus.setAttribute('role', 'status');
 resultStatus.setAttribute('aria-live', 'polite');
 
 const contentEl = el('div', 'content');
-app.append(toolbar, resultStatus, contentEl);
+app.append(toolbar, filterControls.panel, filterControls.chips, resultStatus, contentEl);
 // ---------------------------------------------------------------------------------------------
 
 // --- Extension detail hover card ------------------------------------------------------------
@@ -567,7 +578,11 @@ function buildContent(): void {
   contentEl.replaceChildren();
   shownCount = undefined; // only the matrix view has a count to announce
   // Leaving the matrix also empties the announcement, so the cleanup view never holds an old count.
-  if (!inventory || orphans !== undefined) resultStatus.textContent = '';
+  // The filter controls show the filters at once, keeping their last counts until the matrix is back.
+  if (!inventory || orphans !== undefined) {
+    resultStatus.textContent = '';
+    filterControls.update(filters);
+  }
   if (!inventory) {
     renderedRows = [];
     hideCard();
@@ -582,6 +597,7 @@ function buildContent(): void {
   }
 
   const vm = buildViewModel(inventory, filters, workspace);
+  filterControls.update(filters, vm.facets);
   renderedRows = vm.rows;
   shownCount = { shown: vm.rows.length, total: vm.total };
 
