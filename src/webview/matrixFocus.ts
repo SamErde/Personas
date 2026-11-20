@@ -30,22 +30,26 @@ export function focusKey(target: FocusTarget): string {
  * Decides where focus belongs after a rebuild. The same control keeps focus when it is still
  * rendered. Otherwise focus moves to the nearest control: first within the same row, then in the
  * nearest surviving row (the one below on a tie), on the same control or the nearest column.
- * Returns undefined only when no row survives.
+ * When no earlier row survives, it uses the row now at the old position. Returns undefined only
+ * when the rebuilt table has no rows.
  */
 export function resolveFocus(target: FocusTarget, before: FocusRow[], after: FocusRow[]): FocusTarget | undefined {
   const byId = new Map(after.map((r) => [r.extId, r]));
   const prevIndex = before.findIndex((r) => r.extId === target.extId);
   const prevCol = before[prevIndex]?.slots.find((s) => s.slot === target.slot)?.col ?? 0;
+  const row =
+    byId.get(target.extId) ??
+    nearestSurvivor(before, prevIndex, byId) ??
+    after[Math.min(Math.max(prevIndex, 0), after.length - 1)];
+  return row && pickInRow(row, target.slot, prevCol);
+}
 
-  const sameRow = byId.get(target.extId);
-  if (sameRow) return pickInRow(sameRow, target.slot, prevCol);
-
-  // The focused row is gone: try rows by distance from where it was, the row below first on a tie.
+/** The surviving row nearest the focused row's old position, the one below on a tie. */
+function nearestSurvivor(before: FocusRow[], prevIndex: number, byId: Map<string, FocusRow>): FocusRow | undefined {
   for (let distance = 1; distance <= before.length; distance++) {
     for (const candidate of [before[prevIndex + distance], before[prevIndex - distance]]) {
       const survivor = candidate && byId.get(candidate.extId);
-      const picked = survivor && pickInRow(survivor, target.slot, prevCol);
-      if (picked) return picked;
+      if (survivor) return survivor;
     }
   }
   return undefined;

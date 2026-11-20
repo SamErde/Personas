@@ -57,6 +57,13 @@ describe('resolveFocus', () => {
     expect(resolveFocus({ extId: 'pub.b', slot: 'profile:aaa' }, grid(rows), grid(survivors))).toEqual({ extId: expected, slot: 'profile:aaa' });
   });
 
+  it('moves to the row now at the same position when every earlier row is gone', () => {
+    const before = [row('pub.a', { aaa: 2 }), row('pub.b', { aaa: 2 })];
+    const after = [row('pub.x', { aaa: 2 }), row('pub.y', { aaa: 2 }), row('pub.z', { aaa: 2 })];
+
+    expect(resolveFocus({ extId: 'pub.b', slot: 'profile:aaa' }, before, after)).toEqual({ extId: 'pub.y', slot: 'profile:aaa' });
+  });
+
   it('finds nothing when no row survives', () => {
     const before = [row('pub.a', { default: 1 })];
 

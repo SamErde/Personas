@@ -205,6 +205,14 @@ describe('the extension name as a button', () => {
     press(nameOf('Beta'), ' ');
     expect(card().hidden).toBe(false);
   });
+
+  it('opens its hover card when clicked, as a screen reader activates a button', () => {
+    press(focusCardAction('Beta'), 'Escape');
+
+    nameOf('Beta').click();
+
+    expect(card().hidden).toBe(false);
+  });
 });
 
 describe('focus on a hidden hover card', () => {

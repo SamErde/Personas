@@ -614,14 +614,16 @@ function attachHoverCard(nameTrigger: HTMLElement, row: RowVm): void {
       }
     }
   });
-  // The name is a button, so Enter and Space open its card. That is the keyboard way back to the
-  // card after Escape, or after focus was restored to a name without opening its card.
+  // The name is a button, so every way of activating it opens its card: Enter and Space, and a
+  // click, which is also how a screen reader in browse mode activates a button. That is the way
+  // back to the card after Escape, or after focus was restored to a name without opening it.
   nameTrigger.addEventListener('keydown', (e) => {
     const key = (e as KeyboardEvent).key;
     if (key !== 'Enter' && key !== ' ') return;
     e.preventDefault();
     showCard(row.id, nameTrigger);
   });
+  nameTrigger.addEventListener('click', () => showCard(row.id, nameTrigger));
 }
 
 function renderCleanup(list: OrphanInfo[]): void {
