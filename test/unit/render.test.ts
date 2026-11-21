@@ -133,9 +133,9 @@ describe('buildViewModel', () => {
     expect(vm.rows[0]?.cells).toHaveLength(3);
   });
 
-  it('the Orphaned view shows only orphans', () => {
-    const vm = buildViewModel(inv, { ...NO_FILTERS, view: 'orphaned' });
-    expect(vm.rows.map((r) => r.id)).toEqual(['pub.c']);
+  it('the All view still lists orphans, marked so their names show as orphaned', () => {
+    const vm = buildViewModel(inv, NO_FILTERS);
+    expect(vm.rows.filter((r) => r.orphaned).map((r) => r.id)).toEqual(['pub.c']);
   });
 
   it('the Applied to all profiles view shows only extensions applied to all profiles', () => {
@@ -213,16 +213,13 @@ describe('buildViewModel', () => {
     expect(row?.workspaceCell).toMatchObject({ state: 'unknown', label: 'Unknown', symbol: '?' });
   });
 
-  it('does not expose workspace-only rows through the profile-backed views', () => {
+  it('does not expose workspace-only rows through the Applied to all profiles view', () => {
     const workspace = workspaceWith([
       status('local.only', 'unknown', {
         installedInActiveProfile: false,
         workspaceLocal: 'candidate',
         profileBacked: false,
       }),
-    ]);
-    expect(buildViewModel(inv, { ...NO_FILTERS, view: 'orphaned' }, workspace).rows.map((row) => row.id)).toEqual([
-      'pub.c',
     ]);
     expect(buildViewModel(inv, { ...NO_FILTERS, view: 'appliedToAllProfiles' }, workspace).rows.map((row) => row.id)).toEqual([
       'pub.a',
@@ -333,7 +330,7 @@ describe('filter dimensions', () => {
     expect(ids({ categories: ['Linters'], sources: ['vsix'] })).toEqual(['pub.b']);
     expect(ids({ categories: ['Linters'], publishers: ['contoso'], text: 'beta' })).toEqual([]);
     expect(ids({ view: 'appliedToAllProfiles', categories: ['Linters'] })).toEqual(['pub.a']);
-    expect(ids({ view: 'orphaned', categories: ['Linters'] })).toEqual([]);
+    expect(ids({ view: 'appliedToAllProfiles', sources: ['vsix'] })).toEqual([]);
   });
 
   it('puts rows without publisher, categories, or install source under Unknown', () => {
@@ -467,7 +464,7 @@ describe('filter dimensions', () => {
   });
 
   it('counts every row, before filters, as the total', () => {
-    const vm = buildViewModel(faceted, { ...NO_FILTERS, view: 'orphaned' });
+    const vm = buildViewModel(faceted, { ...NO_FILTERS, view: 'appliedToAllProfiles' });
     expect(vm.rows).toHaveLength(1);
     expect(vm.total).toBe(3);
   });
@@ -485,7 +482,7 @@ describe('activeFilterChips', () => {
     };
     const filters: MatrixFilters = {
       ...NO_FILTERS,
-      view: 'orphaned',
+      view: 'appliedToAllProfiles',
       text: 'py',
       sources: [UNKNOWN_VALUE],
       publishers: ['ms-python'],

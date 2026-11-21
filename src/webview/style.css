@@ -4,40 +4,76 @@ body {
   background: var(--vscode-editor-background);
   padding: 0.5rem 1rem;
 }
-.toolbar { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
+/* Toolbar controls follow VS Code's own: 26px tall with a 4px corner radius, as .monaco-text-button,
+ * .monaco-inputbox and .monaco-select-box are in microsoft/vscode. One row at about 1,000px wide,
+ * wrapping when narrower. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 12px; }
 .toolbar input, .toolbar select, .filter-search {
+  box-sizing: border-box; height: 26px; padding: 0 6px; border-radius: 4px; font: inherit;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border, transparent);
-  padding: 0.3rem 0.5rem;
 }
-/* High-contrast themes can color a button the same as the surface behind it (or leave its
- * background unset) and rely on contrastBorder for its edge, with contrastActiveBorder marking the
- * active one. Other themes leave both unset, so the border stays transparent there. Wherever a
- * button draws this border, its padding gives back the border's 1px to keep the button's size. */
+/* The 12rem basis keeps the row on one line at 1,000px even while "Review N orphaned…" shows. */
+.toolbar input { flex: 1 1 12rem; min-width: 10rem; max-width: 24rem; }
+.toolbar select {
+  padding: 0 4px;
+  background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground);
+  border-color: var(--vscode-dropdown-border, transparent);
+}
+/* Every matrix button is a VS Code secondary button. High-contrast themes can color a button the same
+ * as the surface behind it and rely on its border (button.border, which defaults to contrastBorder
+ * there) for its edge; other themes leave it faint or unset. Buttons take the body font rather than
+ * the browser's smaller default. */
 .chip {
+  box-sizing: border-box; height: 26px; padding: 0 8px; border-radius: 4px; line-height: 16px;
+  font: inherit; white-space: nowrap; cursor: pointer;
   background: var(--vscode-button-secondaryBackground);
   color: var(--vscode-button-secondaryForeground);
-  border: 1px solid var(--vscode-contrastBorder, transparent);
-  padding: calc(0.3rem - 1px) calc(0.7rem - 1px); border-radius: 1rem; cursor: pointer;
+  border: 1px solid var(--vscode-button-border, var(--vscode-contrastBorder, transparent));
 }
-.chip.active {
-  background: var(--vscode-button-background); color: var(--vscode-button-foreground);
-  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+/* Warning buttons keep their warning fill on hover. */
+.chip:hover:not(:disabled):not(.cleanup) { background: var(--vscode-button-secondaryHoverBackground); }
+.chip.cleanup {
+  background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground);
+  border-color: var(--vscode-inputValidation-warningBorder, var(--vscode-contrastBorder, transparent));
 }
-.chip.cleanup { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
-.chip.refresh { margin-left: auto; }
 .chip:disabled { opacity: 0.55; cursor: not-allowed; }
+.chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+/* The orphans button, or the Legend button when there are no orphans, starts the right-hand group. */
+.toolbar .chip.cleanup, .toolbar .chip.cleanup[hidden] + .chip { margin-left: auto; }
+/* The views are one joined group in VS Code's radio colors: only the outer corners are rounded, and
+ * the selected button's border is drawn over its neighbours'. */
+.view-group { display: inline-flex; }
+.view-group .chip {
+  position: relative; border-radius: 0;
+  background: var(--vscode-radio-inactiveBackground, transparent);
+  color: var(--vscode-radio-inactiveForeground, var(--vscode-foreground));
+  border-color: var(--vscode-radio-inactiveBorder, var(--vscode-contrastBorder, var(--vscode-input-border, transparent)));
+}
+.view-group .chip + .chip { margin-left: -1px; }
+.view-group .chip:first-child { border-radius: 4px 0 0 4px; }
+.view-group .chip:last-child { border-radius: 0 4px 4px 0; }
+.view-group .chip:hover:not(.active) { background: var(--vscode-radio-inactiveHoverBackground, var(--vscode-toolbar-hoverBackground)); }
+/* `:hover` is listed too, so the selected view keeps its fill under the pointer instead of taking
+ * the generic button hover, whose selector would otherwise outrank this one. */
+.view-group .chip.active, .view-group .chip.active:hover:not(:disabled):not(.cleanup) {
+  z-index: 1;
+  background: var(--vscode-radio-activeBackground, var(--vscode-inputOption-activeBackground));
+  color: var(--vscode-radio-activeForeground, var(--vscode-inputOption-activeForeground, var(--vscode-foreground)));
+  border-color: var(--vscode-radio-activeBorder, var(--vscode-contrastActiveBorder, var(--vscode-inputOption-activeBorder, transparent)));
+}
+.view-group .chip:focus-visible { z-index: 2; }
+/* The Filters and Legend disclosures. A chevron shows whether the panel is open by shape, so the cue
+ * holds in every theme, including ones that leave the contrast borders unset. The empty alternative
+ * text keeps it out of the button's accessible name, which aria-expanded already completes. */
+.disclosure::after { content: "▾" / ""; display: inline-block; margin-left: 0.35rem; }
+.disclosure[aria-expanded="true"]::after { content: "▴" / ""; }
+.disclosure[aria-expanded="true"] {
+  border-color: var(--vscode-contrastActiveBorder, var(--vscode-button-border, var(--vscode-contrastBorder, transparent)));
+}
 /* Category, publisher, and source filters. The panel and the chip row set `display`, so each also
  * restates `hidden`, which an author `display` would otherwise override. */
-/* A chevron shows whether the panel is open by shape, so the cue holds in every theme, including
- * ones that leave the contrast borders unset. The empty alternative text keeps it out of the
- * button's accessible name, which aria-expanded already completes. */
-.filters-toggle::after { content: "▾" / ""; display: inline-block; margin-left: 0.35rem; }
-.filters-toggle[aria-expanded="true"]::after { content: "▴" / ""; }
-.filters-toggle[aria-expanded="true"] {
-  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
-}
 .filter-panel {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem;
   margin: 0 0 0.75rem;
@@ -45,7 +81,7 @@ body {
 .filter-panel[hidden], .filter-chips[hidden] { display: none; }
 .filter-group {
   margin: 0; padding: 0.3rem 0.6rem 0.5rem; min-width: 0;
-  border: 1px solid var(--vscode-panel-border); border-radius: 2px;
+  border: 1px solid var(--vscode-panel-border); border-radius: 4px;
 }
 .filter-group legend { padding: 0 0.25rem; font-weight: 600; }
 .filter-search { width: 100%; box-sizing: border-box; margin: 0.2rem 0 0.4rem; }
@@ -60,12 +96,13 @@ body {
 .filter-count { font-variant-numeric: tabular-nums; }
 .filter-empty { margin: 0.2rem 0; }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.75rem; }
+/* Active-filter chips are VS Code's small buttons. */
+.filter-chips .chip { height: 22px; padding: 0 6px; font-size: 0.9em; }
 .filter-chip-remove { margin-left: 0.4rem; }
-.filters-toggle:focus-visible, .filter-chip:focus-visible, .filter-clear:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px;
-}
-.filter-option input:focus-visible, .filter-search:focus-visible, .group-by select:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px;
+.filter-option input:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+/* Bordered text boxes and selects draw their focus ring on their own edge, as VS Code's do. */
+.toolbar input:focus-visible, .filter-search:focus-visible, .group-by select:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px;
 }
 /* Separate borders (with no spacing) so each cell owns its border: collapsed borders are painted
  * at the cell's original position and would not move with the sticky header and name column. */
@@ -87,7 +124,7 @@ tbody th { font-weight: normal; }
 }
 .group-label { position: sticky; left: 0.75rem; }
 .group-count { color: var(--vscode-descriptionForeground); font-weight: normal; }
-.group-by { display: inline-flex; align-items: center; gap: 0.35rem; }
+.group-by { display: inline-flex; align-items: center; gap: 6px; }
 .workspace-col { border-left: 2px solid var(--vscode-focusBorder); }
 .workspace-header { min-width: 9.5rem; }
 .workspace-header-title, .workspace-header-name { display: block; }
@@ -101,14 +138,21 @@ tbody th { font-weight: normal; }
   font-size: 0.85em;
   font-weight: normal;
 }
-.workspace-legend {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin: 0 0 0.6rem;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.85em;
+/* The Legend panel, opened from the toolbar: one titled list per column kind, side by side when
+ * there is room. Like the filter panel, it restates `hidden` over its own `display`. */
+.legend-panel {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 2rem;
+  margin: 0 0 0.75rem; padding: 0.4rem 0.6rem;
+  border: 1px solid var(--vscode-panel-border); border-radius: 4px;
+  font-size: 0.9em;
 }
+.legend-panel[hidden], .legend-group[hidden] { display: none; }
+.legend-title { font-weight: 600; margin-bottom: 0.2rem; }
+.matrix-legend, .workspace-legend {
+  display: grid; gap: 0.15rem; list-style: none; margin: 0; padding: 0;
+  color: var(--vscode-descriptionForeground);
+}
+.matrix-legend .glyph { display: inline-block; min-width: 1.2em; }
 .workspace-state { cursor: default; }
 /* The hand-off button fills its cell so a click anywhere in the cell opens it. */
 .workspace-guide-cell { padding: 0; }
@@ -164,16 +208,6 @@ thead th.ext-col { left: 0; z-index: 3; }
  * them in high-contrast themes, so they use the description color, which those themes keep
  * legible. */
 .glyph { color: var(--vscode-descriptionForeground); font-weight: 600; }
-.matrix-legend {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  list-style: none;
-  padding: 0;
-  margin: 0 0 0.6rem;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.85em;
-}
 .cell input:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .spinner { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }

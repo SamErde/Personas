@@ -85,7 +85,7 @@ async function reopenAfter(firstServices: Services, actOnFirst: (first: FakePane
 describe('view state across closing and reopening the panel', () => {
   it('is sent to the reopened panel before its first inventory', async () => {
     const state = {
-      filters: { ...NO_FILTERS, view: 'orphaned' as const, text: 'Be', categories: ['Linters'], publishers: ['contoso'], sources: ['vsix'] },
+      filters: { ...NO_FILTERS, view: 'appliedToAllProfiles' as const, text: 'Be', categories: ['Linters'], publishers: ['contoso'], sources: ['vsix'] },
       groupBy: 'publisher' as const,
     };
 

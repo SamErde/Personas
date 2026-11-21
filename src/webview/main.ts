@@ -3,9 +3,10 @@ import type { HostToMatrix, MatrixFilters, MatrixGroupBy, MatrixToHost, MatrixVi
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, NO_FILTERS, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
-import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
+import { renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
 import { createFilterControls } from './matrixFilters';
+import { createLegendControls } from './matrixLegend';
 import { groupRows, isMatrixGroupBy } from './matrixGroups';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
@@ -81,13 +82,18 @@ function clearFilterTimer(): void {
   }
 }
 
+// The view buttons are one joined group. There is no Orphaned view: "Review N orphaned…" covers orphans.
+const viewGroup = el('div', 'view-group');
+viewGroup.setAttribute('role', 'group');
+viewGroup.setAttribute('aria-label', 'View');
 const chipButtons: [MatrixView, HTMLElement][] = [];
-for (const [key, label] of [['all', 'All'], ['orphaned', 'Orphaned'], ['appliedToAllProfiles', 'Applied to all profiles']] as const) {
+for (const [key, label] of [['all', 'All'], ['appliedToAllProfiles', 'Applied to all profiles']] as const) {
   const b = el('button', 'chip', label);
   b.addEventListener('click', () => changeFilters({ view: key }));
   chipButtons.push([key, b]);
-  toolbar.append(b);
+  viewGroup.append(b);
 }
+toolbar.append(viewGroup);
 updateChipButtons();
 
 // Category, publisher, and source filters: one Filters disclosure beside the view chips, because
@@ -114,6 +120,12 @@ orphanButton.hidden = true;
 orphanButton.addEventListener('click', () => post({ type: 'requestOrphans' }));
 toolbar.append(orphanButton);
 
+// The legend sits behind its own disclosure beside Refresh, so the key is there when wanted without
+// standing between the toolbar and the table. Keep it right after the orphan button: style.css
+// right-aligns it (`.chip.cleanup[hidden] + .chip`) whenever that button is hidden.
+const legend = createLegendControls();
+toolbar.append(legend.toggle);
+
 const refreshButton = el('button', 'chip refresh', '↻ Refresh');
 refreshButton.title = 'Refresh from disk';
 refreshButton.addEventListener('click', () => post({ type: 'refresh' }));
@@ -126,7 +138,7 @@ resultStatus.setAttribute('role', 'status');
 resultStatus.setAttribute('aria-live', 'polite');
 
 const contentEl = el('div', 'content');
-app.append(toolbar, filterControls.panel, filterControls.chips, resultStatus, contentEl);
+app.append(toolbar, filterControls.panel, legend.panel, filterControls.chips, resultStatus, contentEl);
 // ---------------------------------------------------------------------------------------------
 
 // --- Extension detail hover card ------------------------------------------------------------
@@ -458,6 +470,8 @@ window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
     case 'inventory':
       inventory = m.inventory;
       workspace = m.workspace;
+      // Here rather than in buildContent, which skips the matrix while the cleanup view is open.
+      legend.update(workspace !== undefined);
       icons = m.icons;
       pending = new Set();
       localPending = new Set();
@@ -634,20 +648,6 @@ function buildContent(): void {
     banner = '';
   }
 
-  if (vm.workspace) {
-    const legend = el('div', 'workspace-legend');
-    legend.setAttribute('aria-label', 'Current workspace extension status legend');
-    legend.append(
-      el('span', '', '✓ Enabled'),
-      el('span', '', '○ Not enabled'),
-      el('span', '', '— Not installed in profile'),
-      el('span', '', '✓ W Workspace-local'),
-      el('span', '', '? Unknown'),
-    );
-    contentEl.append(legend);
-  }
-
-  contentEl.append(renderMatrixLegend());
   contentEl.append(
     renderMatrixTable(vm, {
       icon: extIcon,
