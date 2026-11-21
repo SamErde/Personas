@@ -239,6 +239,20 @@ it.skipIf(!symlinksAvailable)('checks the shown rows when a refresh adds depende
   await vi.waitFor(()=>expect(row()?.state).toBe('brokenLink'),{timeout:3000});
 });
 
+it.skipIf(!symlinksAvailable)('notices a link retargeted between existing files before the first tick',async()=>{
+  const context=await setup(60_000);
+  const first=path.join(context.root,'first.ps1'), second=path.join(context.root,'second.ps1'), link=path.join(context.root,'profile.ps1');
+  await fs.writeFile(first,'one',{flag:'wx'}); await fs.writeFile(second,'two',{flag:'wx'}); await fs.symlink(first,link);
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  const internal=context.controller as unknown as {reconcile():Promise<void>};
+  const row=()=>context.service.snapshot.rows.find(item=>item.host==='All Hosts');
+  expect(row()?.target).toBe(first);
+  await fs.unlink(link); await fs.symlink(second,link); // Both targets exist, so the state stays `existing`.
+  await internal.reconcile(); // First sample: no baseline yet, and no watcher callback fires.
+  await vi.waitFor(()=>expect(row()?.target).toBe(second),{timeout:3000});
+});
+
 it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
   const intervals=vi.spyOn(globalThis,'setInterval');
   const {file,controller,discover}=await reconciling();

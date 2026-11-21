@@ -132,11 +132,11 @@ export class PowerShellController implements vscode.Disposable {
     }
     return replaced;
   }
-  /** Whether any shown row's state differs from a fresh inspection, the same check the inventory itself uses. */
+  /** Whether any shown row's state or link target differs from a fresh inspection, the same check the inventory itself uses. */
   private async inventoryIsStale(): Promise<boolean> {
     const rows = this.service.snapshot.rows;
     const current = await Promise.all(rows.map(row => inspectProfile(row)));
-    return current.some((row, index) => row.state !== rows[index]?.state);
+    return current.some((row, index) => row.state !== rows[index]?.state || row.target !== rows[index]?.target);
   }
   private async watch(): Promise<void> {
     if (!this.active || this.disposed) return;
