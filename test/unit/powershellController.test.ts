@@ -222,17 +222,24 @@ it('re-arms a watched directory replaced before the first tick while the profile
   expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true);
 });
 
-it.skipIf(!symlinksAvailable)('checks the shown rows when a refresh adds dependencies that have no baseline',async()=>{
-  const context=await setup(60_000); // Ticks are driven by hand below, so their order is deterministic.
+/** A profile link to `first`, with `second` as another existing file and ticks driven by hand so their order is deterministic. */
+async function linkedProfile() {
+  const context=await setup(60_000);
   const first=path.join(context.root,'first.ps1'), second=path.join(context.root,'second.ps1'), link=path.join(context.root,'profile.ps1');
   await fs.writeFile(first,'one',{flag:'wx'}); await fs.writeFile(second,'two',{flag:'wx'}); await fs.symlink(first,link);
   context.controller.setActive(true);
   await context.controller.refresh();
   const internal=context.controller as unknown as {reconcile():Promise<void>; dependencies:string[]};
   const row=()=>context.service.snapshot.rows.find(item=>item.host==='All Hosts');
+  const retarget=async()=>{await fs.unlink(link); await fs.symlink(second,link);}; // The new link may reuse the old inode.
+  return {first,second,internal,row,retarget};
+}
+
+it.skipIf(!symlinksAvailable)('checks the shown rows when a refresh adds dependencies that have no baseline',async()=>{
+  const {second,internal,row,retarget}=await linkedProfile();
   await internal.reconcile(); // Baseline.
-  await fs.unlink(link); await fs.symlink(second,link);
-  await internal.reconcile(); // The link's own identity changed: refresh, which adds `second` as a dependency.
+  await retarget();
+  await internal.reconcile(); // The link's identity (including its text) changed: refresh, which adds `second`.
   await vi.waitFor(()=>expect(internal.dependencies).toContain(second),{timeout:3000});
   await fs.unlink(second); // Before any tick has a baseline for it, and no watcher callback fires.
   await internal.reconcile();
@@ -240,15 +247,9 @@ it.skipIf(!symlinksAvailable)('checks the shown rows when a refresh adds depende
 });
 
 it.skipIf(!symlinksAvailable)('notices a link retargeted between existing files before the first tick',async()=>{
-  const context=await setup(60_000);
-  const first=path.join(context.root,'first.ps1'), second=path.join(context.root,'second.ps1'), link=path.join(context.root,'profile.ps1');
-  await fs.writeFile(first,'one',{flag:'wx'}); await fs.writeFile(second,'two',{flag:'wx'}); await fs.symlink(first,link);
-  context.controller.setActive(true);
-  await context.controller.refresh();
-  const internal=context.controller as unknown as {reconcile():Promise<void>};
-  const row=()=>context.service.snapshot.rows.find(item=>item.host==='All Hosts');
+  const {first,second,internal,row,retarget}=await linkedProfile();
   expect(row()?.target).toBe(first);
-  await fs.unlink(link); await fs.symlink(second,link); // Both targets exist, so the state stays `existing`.
+  await retarget(); // Both targets exist, so the state stays `existing`.
   await internal.reconcile(); // First sample: no baseline yet, and no watcher callback fires.
   await vi.waitFor(()=>expect(row()?.target).toBe(second),{timeout:3000});
 });

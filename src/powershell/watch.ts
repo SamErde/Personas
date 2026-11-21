@@ -90,7 +90,9 @@ export async function pathIdentities(paths: Iterable<string>): Promise<Map<strin
   for (const file of new Set(paths)) {
     try {
       const stat = await fs.lstat(file, {bigint:true});
-      identities.set(file, `${stat.dev}:${stat.ino}:${stat.mode}`);
+      // A replaced link can reuse its inode (seen on Linux), so its text is part of its identity.
+      const link = stat.isSymbolicLink() ? ':' + await fs.readlink(file) : '';
+      identities.set(file, `${stat.dev}:${stat.ino}:${stat.mode}${link}`);
     } catch {
       identities.set(file, 'missing');
     }

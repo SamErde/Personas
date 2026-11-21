@@ -79,3 +79,11 @@ it('reports only paths that both snapshots know',()=>{
   expect(changedIdentities(previous,new Map([['a','1'],['c','2']]))).toEqual([]);
   expect(changedIdentities(previous,new Map([['a','missing'],['b','missing']]))).toEqual(['a']);
 });
+
+it.skipIf(!symlinksAvailable)('treats a retargeted link as a new identity even if its inode is reused',async()=>{
+  const base=await root(), link=path.join(base,'profile.ps1');
+  await fs.symlink('first.ps1',link);
+  const before=await pathIdentities([link]);
+  await fs.unlink(link); await fs.symlink('second.ps1',link);
+  expect(changedIdentities(before,await pathIdentities([link]))).toEqual([link]);
+});
