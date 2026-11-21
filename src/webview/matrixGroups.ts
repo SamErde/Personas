@@ -55,7 +55,7 @@ function publisherGroups(rows: readonly RowVm[], publishers: readonly FacetOptio
 
 /** Latin letters that NFD leaves whole, mapped to the letter they file under. */
 const UNDECOMPOSED_LATIN: Readonly<Record<string, string>> = Object.freeze({
-  Æ: 'A', Đ: 'D', Ħ: 'H', Ł: 'L', Ø: 'O', Œ: 'O', Þ: 'T',
+  Æ: 'A', Đ: 'D', Ð: 'D', Ħ: 'H', Ł: 'L', Ø: 'O', Œ: 'O', ẞ: 'S', Þ: 'T',
 });
 
 /**
