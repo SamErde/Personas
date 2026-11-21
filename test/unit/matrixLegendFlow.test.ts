@@ -62,7 +62,9 @@ describe('the Legend disclosure', () => {
 
     send({ type: 'inventory', inventory: inv, workspace: openFolder, icons: {} });
     expect(shown()).toBe(true);
-    expect([...workspaceLegend()!.children].map((item) => item.textContent?.trim())).toEqual([
+    // A list, like the cell legend, so assistive technology announces its label.
+    expect(workspaceLegend()!.tagName).toBe('UL');
+    expect([...workspaceLegend()!.querySelectorAll('li')].map((item) => item.textContent?.trim())).toEqual([
       '✓ Enabled',
       '○ Not enabled',
       '— Not installed in profile',

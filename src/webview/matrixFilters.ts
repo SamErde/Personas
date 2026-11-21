@@ -5,7 +5,7 @@
 import type { FilterDimension, MatrixFilters } from '../protocol';
 import { activeFilterChips, DIMENSION_NAMES, FILTER_DIMENSIONS, optionName, type FacetOption, type Facets, type FilterChip } from './render';
 import { nearestSurvivor } from './matrixFocus';
-import { el, extensionCount } from './ui';
+import { disclosure, el, extensionCount } from './ui';
 
 export interface FilterControls {
   /** The Filters disclosure button, for the toolbar. */
@@ -52,15 +52,7 @@ export function createFilterControls(change: (next: DimensionChange) => void): F
 
   const panel = el('div', 'filter-panel');
   panel.id = 'matrix-filters';
-  panel.hidden = true;
-
-  const toggle = el('button', 'chip filters-toggle', 'Filters') as HTMLButtonElement;
-  toggle.setAttribute('aria-expanded', 'false');
-  toggle.setAttribute('aria-controls', panel.id);
-  toggle.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    toggle.setAttribute('aria-expanded', String(!panel.hidden));
-  });
+  const toggle = disclosure('Filters', panel);
 
   const lists = {} as Record<FilterDimension, HTMLElement>;
   const publisherSearch = document.createElement('input');

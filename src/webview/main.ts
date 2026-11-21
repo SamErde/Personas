@@ -121,7 +121,8 @@ orphanButton.addEventListener('click', () => post({ type: 'requestOrphans' }));
 toolbar.append(orphanButton);
 
 // The legend sits behind its own disclosure beside Refresh, so the key is there when wanted without
-// standing between the toolbar and the table.
+// standing between the toolbar and the table. Keep it right after the orphan button: style.css
+// right-aligns it (`.chip.cleanup[hidden] + .chip`) whenever that button is hidden.
 const legend = createLegendControls();
 toolbar.append(legend.toggle);
 

@@ -55,7 +55,9 @@ body {
 .view-group .chip:first-child { border-radius: 4px 0 0 4px; }
 .view-group .chip:last-child { border-radius: 0 4px 4px 0; }
 .view-group .chip:hover:not(.active) { background: var(--vscode-radio-inactiveHoverBackground, var(--vscode-toolbar-hoverBackground)); }
-.view-group .chip.active {
+/* `:hover` is listed too, so the selected view keeps its fill under the pointer instead of taking
+ * the generic button hover, whose selector would otherwise outrank this one. */
+.view-group .chip.active, .view-group .chip.active:hover:not(:disabled):not(.cleanup) {
   z-index: 1;
   background: var(--vscode-radio-activeBackground, var(--vscode-inputOption-activeBackground));
   color: var(--vscode-radio-activeForeground, var(--vscode-inputOption-activeForeground, var(--vscode-foreground)));
@@ -65,9 +67,9 @@ body {
 /* The Filters and Legend disclosures. A chevron shows whether the panel is open by shape, so the cue
  * holds in every theme, including ones that leave the contrast borders unset. The empty alternative
  * text keeps it out of the button's accessible name, which aria-expanded already completes. */
-.filters-toggle::after, .disclosure::after { content: "▾" / ""; display: inline-block; margin-left: 0.35rem; }
-.filters-toggle[aria-expanded="true"]::after, .disclosure[aria-expanded="true"]::after { content: "▴" / ""; }
-.filters-toggle[aria-expanded="true"], .disclosure[aria-expanded="true"] {
+.disclosure::after { content: "▾" / ""; display: inline-block; margin-left: 0.35rem; }
+.disclosure[aria-expanded="true"]::after { content: "▴" / ""; }
+.disclosure[aria-expanded="true"] {
   border-color: var(--vscode-contrastActiveBorder, var(--vscode-button-border, var(--vscode-contrastBorder, transparent)));
 }
 /* Category, publisher, and source filters. The panel and the chip row set `display`, so each also

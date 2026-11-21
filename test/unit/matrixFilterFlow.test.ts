@@ -42,6 +42,7 @@ describe('view chips', () => {
     const group = document.querySelector<HTMLElement>('.toolbar [role="group"][aria-label="View"]');
     expect(group).not.toBeNull();
     expect([...group!.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['All', 'Applied to all profiles']);
+    expect(group!.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(1);
   });
 
   it('tell assistive technology which view is selected', () => {

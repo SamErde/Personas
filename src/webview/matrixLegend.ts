@@ -2,7 +2,7 @@
 // cell marks. Like the Filters disclosure, both elements are built once and live outside the rebuilt
 // table, so a rebuild never takes focus from the button or resets whether the panel is open.
 import { renderMatrixLegend } from './matrixTable';
-import { el } from './ui';
+import { disclosure, el } from './ui';
 
 /** One titled list in the panel. The title is for sighted readers only: each list's own label
  * already names it for assistive technology. */
@@ -23,35 +23,24 @@ export interface LegendControls {
   update(showWorkspace: boolean): void;
 }
 
-/** The key to the Current workspace column's marks. */
+/** The key to the Current workspace column's marks. A list, like the cell legend, so assistive
+ * technology announces its label. */
 function renderWorkspaceLegend(): HTMLElement {
-  const legend = el('div', 'workspace-legend');
+  const legend = el('ul', 'workspace-legend');
   legend.setAttribute('aria-label', 'Current workspace extension status legend');
-  legend.append(
-    el('span', '', '✓ Enabled'),
-    el('span', '', '○ Not enabled'),
-    el('span', '', '— Not installed in profile'),
-    el('span', '', '✓ W Workspace-local'),
-    el('span', '', '? Unknown'),
-  );
+  for (const entry of ['✓ Enabled', '○ Not enabled', '— Not installed in profile', '✓ W Workspace-local', '? Unknown']) {
+    legend.append(el('li', '', entry));
+  }
   return legend;
 }
 
 export function createLegendControls(): LegendControls {
   const panel = el('div', 'legend-panel');
-  panel.id = 'matrix-legend';
-  panel.hidden = true;
+  panel.id = 'matrix-legend-panel';
   const workspaceGroup = legendGroup('Current workspace', renderWorkspaceLegend());
   workspaceGroup.hidden = true;
   panel.append(legendGroup('Cells', renderMatrixLegend()), workspaceGroup);
-
-  const toggle = el('button', 'chip disclosure', 'Legend') as HTMLButtonElement;
-  toggle.setAttribute('aria-expanded', 'false');
-  toggle.setAttribute('aria-controls', panel.id);
-  toggle.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    toggle.setAttribute('aria-expanded', String(!panel.hidden));
-  });
+  const toggle = disclosure('Legend', panel);
 
   return {
     toggle,
