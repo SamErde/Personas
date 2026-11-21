@@ -7,10 +7,14 @@ Easily manage your dev personas: the different Git identities, VS Code profiles,
 ## Features
 
 Easily see and manage which extensions are installed in each VS Code profile, and compare them with
-the effective extension status of the current workspace, all from one convenient matrix.
+the effective extension status of the current workspace, all from the Extension Matrix. Open it
+from the **VS Code Profiles** section of the Personas Home sidebar.
 
-- **Profile x extension matrix**: Show every profile as a column and every extension as a row. Toggle any cell to install or uninstall the extension for that profile.
-- **Easy to navigate**: The row and column under the pointer or keyboard focus are highlighted, and the extension names stay in view when a wide matrix scrolls sideways.
+- **Profile x extension matrix**: Show every profile as a column and every extension as a row. Toggle any cell to install or uninstall the extension for that profile. Profiles appear in the same order on Home and in the matrix: Default, then the Agents window profile, then the rest in natural order.
+- **Find extensions fast**: Search by extension name, ID, or publisher. Show **All**, **Orphaned**, or **Applied to all profiles** extensions, then narrow further with **Filters** by category, publisher, and install source (Marketplace, VSIX, Other, or Unknown). Each filter value shows how many extensions it would match, and active filters appear as removable chips.
+- **Group by name or publisher**: Arrange rows under A–Z or publisher headings, each with its count.
+- **Readable at a glance**: Each cell state has its own symbol as well as its color (◆ applied to all profiles, ⤷ installed through Default, ✓ installed but locked, — not installed, ? unknown), with a legend above the table.
+- **Easy to navigate**: The row and column under the pointer or keyboard focus are highlighted, and the extension names stay in view when a wide matrix scrolls sideways. Keyboard focus stays in place when the matrix updates, screen readers announce each cell's extension, profile, and state, and the result count is announced as you filter. Your view, filters, and grouping are kept for the rest of the VS Code session.
 - **Current workspace status**: When a folder or workspace is open, a visually separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Clicking an `Enabled`, `Not enabled`, or `Workspace-local` cell opens the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including workspace-only rows. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Cross-profile install/uninstall**: Act on any profile directly from the matrix; you never have to switch into a profile just to add or remove an extension from it.
