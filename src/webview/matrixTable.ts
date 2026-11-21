@@ -3,6 +3,7 @@
 // host) stays in main.ts and reaches the table through the hooks below.
 import type { InstallState, ReadOnlyReason, RowVm, ViewModel } from './render';
 import { focusKey } from './matrixFocus';
+import type { RowGroup } from './matrixGroups';
 import { el } from './ui';
 
 export interface MatrixTableHooks {
@@ -18,7 +19,12 @@ export interface MatrixTableHooks {
   showWorkspaceEnablementGuide(extId: string): void;
 }
 
-export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLTableElement {
+/** Renders the matrix with one table body per group (by default, one body holding every row). */
+export function renderMatrixTable(
+  vm: ViewModel,
+  hooks: MatrixTableHooks,
+  groups: readonly RowGroup[] = [{ key: '', rows: vm.rows }],
+): HTMLTableElement {
   const table = document.createElement('table');
   const head = table.createTHead().insertRow();
   head.append(columnHeader('ext-col', 'Extension'));
@@ -36,8 +42,23 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
     head.append(workspaceHead);
   }
 
-  const body = table.createTBody();
-  for (const [rowIndex, row] of vm.rows.entries()) {
+  const columnCount = head.cells.length;
+  let rowIndex = 0;
+  for (const group of groups) {
+    const body = table.createTBody();
+    if (group.label !== undefined) body.append(groupHeading(group, columnCount));
+    for (const row of group.rows) renderRow(body, row, rowIndex++);
+  }
+
+  // Indexes for the crosshair highlight: every data row has one cell per column (no spans), so a
+  // cell's position is its column. Data rows count from 0 in the order shown; the head row and
+  // group heading rows get no index, so the crosshair never lands on them.
+  const dataRows = [...table.tBodies].flatMap((body) => [...body.rows]).filter((tr) => !tr.classList.contains('group-heading'));
+  dataRows.forEach((tr, i) => (tr.dataset['row'] = String(i)));
+  for (const tr of [head, ...dataRows]) [...tr.cells].forEach((cellEl, col) => (cellEl.dataset['col'] = String(col)));
+  return table;
+
+  function renderRow(body: HTMLTableSectionElement, row: RowVm, rowIndex: number): void {
     const tr = body.insertRow();
     tr.append(nameCell(row, hooks));
     row.cells.forEach((cell, index) => {
@@ -77,14 +98,21 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
     });
     if (vm.workspace) tr.append(workspaceCell(row, hooks));
   }
+}
 
-  // Indexes for the crosshair highlight: every row has one cell per column (no spans), so a
-  // cell's position is its column. Body rows count from 0, after the header row.
-  [...table.rows].forEach((tr, i) => {
-    if (i > 0) tr.dataset['row'] = String(i - 1);
-    [...tr.cells].forEach((cellEl, col) => (cellEl.dataset['col'] = String(col)));
-  });
-  return table;
+/** A group's heading row: one row-group header spanning every column, holding the group's name
+ * and count and no controls. NVDA announced this markup as the group heading (#129). */
+function groupHeading(group: RowGroup, columnCount: number): HTMLTableRowElement {
+  const tr = el('tr', 'group-heading') as HTMLTableRowElement;
+  const th = el('th', 'group-heading-cell') as HTMLTableCellElement;
+  th.setAttribute('scope', 'rowgroup');
+  th.colSpan = columnCount;
+  const count = group.rows.length;
+  const label = el('span', 'group-label', group.label);
+  label.append(el('span', 'group-count', `, ${count} ${count === 1 ? 'extension' : 'extensions'}`));
+  th.append(label);
+  tr.append(th);
+  return tr;
 }
 
 function columnHeader(className: string, text?: string): HTMLElement {

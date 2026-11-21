@@ -86,6 +86,7 @@ describe('view state across closing and reopening the panel', () => {
   it('is sent to the reopened panel before its first inventory', async () => {
     const state = {
       filters: { ...NO_FILTERS, view: 'orphaned' as const, text: 'Be', categories: ['Linters'], publishers: ['contoso'], sources: ['vsix'] },
+      groupBy: 'publisher' as const,
     };
 
     const posted = await reopenAfter(services, async (first) => {
@@ -101,7 +102,7 @@ describe('view state across closing and reopening the panel', () => {
     let finishRead: () => void = () => undefined;
     const slowRead = new Promise<void>((resolve) => (finishRead = resolve));
     const slow = { ...services, inventory: { getInventory: async () => (await slowRead, inv) } } as unknown as Services;
-    const state = { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles' as const } };
+    const state = { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles' as const }, groupBy: 'name' as const };
 
     const posted = await reopenAfter(slow, (first) => {
       first.receive({ type: 'refresh' }); // still running when the person changes the view and closes

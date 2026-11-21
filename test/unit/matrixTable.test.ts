@@ -4,7 +4,8 @@ import type { Inventory, WorkspaceInventory } from '../../src/core/types';
 import { gridHitAt, paintCrosshair } from '../../src/webview/crosshair';
 import { buildViewModel, NO_FILTERS } from '../../src/webview/render';
 import { renderMatrixLegend, renderMatrixTable, type MatrixTableHooks } from '../../src/webview/matrixTable';
-import { cellAt, inv, withInherited } from './matrixDom';
+import { groupRows } from '../../src/webview/matrixGroups';
+import { cellAt, faceted, inv, withInherited } from './matrixDom';
 
 let toggles: { extId: string; profileId: string; install: boolean }[];
 let pendingCells: Set<string>;
@@ -285,5 +286,68 @@ describe('crosshair highlight', () => {
     paintCrosshair(table, {});
 
     expect(table.querySelectorAll('.crosshair, .crosshair-label, .crosshair-cell')).toHaveLength(0);
+  });
+});
+
+describe('grouped rows', () => {
+  /** The faceted fixture grouped by publisher: Contoso Ltd (Alpha), fabrikam (Beta), Unknown (Gamma). */
+  function renderGrouped(workspace?: WorkspaceInventory): HTMLTableElement {
+    const vm = buildViewModel(faceted, NO_FILTERS, workspace);
+    const table = renderMatrixTable(vm, hooks, groupRows(vm.rows, 'publisher', vm.facets.publishers));
+    document.body.replaceChildren(table);
+    return table;
+  }
+  const headings = (table: HTMLTableElement) => [...table.querySelectorAll<HTMLTableCellElement>('tbody tr.group-heading > th')];
+
+  it('give each group its own body, led by a row-group heading that spans the row and counts the group', () => {
+    const table = renderGrouped();
+
+    expect(table.tBodies).toHaveLength(3);
+    expect([...table.tBodies].map((body) => body.rows[0]?.classList.contains('group-heading'))).toEqual([true, true, true]);
+    expect(headings(table).map((th) => [th.getAttribute('scope'), th.colSpan, th.textContent])).toEqual([
+      ['rowgroup', 4, 'Contoso Ltd, 1 extension'],
+      ['rowgroup', 4, 'fabrikam, 1 extension'],
+      ['rowgroup', 4, 'Unknown, 1 extension'],
+    ]);
+  });
+
+  it('span the workspace column too', () => {
+    const table = renderGrouped(workspaceWith([]));
+    expect(headings(table).map((th) => th.colSpan)).toEqual([5, 5, 5]);
+  });
+
+  it('render no heading row without grouping', () => {
+    const table = render(faceted);
+    expect(table.tBodies).toHaveLength(1);
+    expect(table.querySelectorAll('.group-heading')).toHaveLength(0);
+  });
+
+  it('number the crosshair rows in grouped order, skipping heading rows', () => {
+    const table = renderGrouped();
+    const dataRows = [...table.querySelectorAll<HTMLTableRowElement>('tbody tr:not(.group-heading)')];
+
+    expect(dataRows.map((tr) => [tr.dataset['row'], tr.cells[0]?.textContent])).toEqual([
+      ['0', 'AlphaALL'],
+      ['1', 'Beta'],
+      ['2', 'Gamma'],
+    ]);
+    for (const heading of headings(table)) {
+      expect(heading.closest('tr')!.dataset['row']).toBeUndefined();
+      expect(heading.dataset['col']).toBeUndefined();
+    }
+  });
+
+  it('keep heading rows out of the crosshair and out of the Tab order', () => {
+    const table = renderGrouped();
+    const [first, second] = headings(table);
+
+    expect(gridHitAt(first!, table)).toBeUndefined();
+    expect(gridHitAt(cellAt(table, 'Gamma', 'Work'), table)).toEqual({ kind: 'cell', row: 2, col: 2 });
+    paintCrosshair(table, { row: 1, col: 2, outlineCell: true });
+    expect(table.querySelectorAll('.group-heading .crosshair, .group-heading.crosshair, .group-heading .crosshair-label')).toHaveLength(0);
+    expect([...cellAt(table, 'Beta', 'Work').classList]).toContain('crosshair-cell');
+    for (const heading of [first!, second!]) {
+      expect(heading.querySelectorAll('[data-focus-key], button, input, [tabindex]')).toHaveLength(0);
+    }
   });
 });
