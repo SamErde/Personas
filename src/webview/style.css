@@ -5,7 +5,7 @@ body {
   padding: 0.5rem 1rem;
 }
 .toolbar { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
-.toolbar input, .filter-search {
+.toolbar input, .toolbar select, .filter-search {
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border, transparent);
@@ -61,7 +61,7 @@ body {
 .filters-toggle:focus-visible, .filter-chip:focus-visible, .filter-clear:focus-visible {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px;
 }
-.filter-option input:focus-visible, .filter-search:focus-visible {
+.filter-option input:focus-visible, .filter-search:focus-visible, .group-by select:focus-visible {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px;
 }
 /* Separate borders (with no spacing) so each cell owns its border: collapsed borders are painted
@@ -72,6 +72,19 @@ th, td { padding: 0.25rem 0.75rem; text-align: center; border-bottom: 1px solid 
  * stick to the left instead and keep body text weight, so only the head row is sticky on top. */
 thead th { position: sticky; top: 0; z-index: 2; background: var(--vscode-editor-background); }
 tbody th { font-weight: normal; }
+/* A group's heading row (Group by). It spans the row and is not sticky, so it scrolls under the
+ * sticky column headers. Its label sticks to the left like the name column, so it stays in view
+ * when a wide grid scrolls sideways. High-contrast themes often leave the section-header background
+ * unset, so the contrast border marks the row's top edge there. */
+.group-heading-cell {
+  text-align: left; font-weight: 600;
+  background: var(--vscode-sideBarSectionHeader-background, var(--vscode-editor-background));
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+  border-top: 1px solid var(--vscode-contrastBorder, transparent);
+}
+.group-label { position: sticky; left: 0.75rem; }
+.group-count { color: var(--vscode-descriptionForeground); font-weight: normal; }
+.group-by { display: inline-flex; align-items: center; gap: 0.35rem; }
 .workspace-col { border-left: 2px solid var(--vscode-focusBorder); }
 .workspace-header { min-width: 9.5rem; }
 .workspace-header-title, .workspace-header-name { display: block; }

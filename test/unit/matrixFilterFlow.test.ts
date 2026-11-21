@@ -28,7 +28,7 @@ beforeAll(() => loadMatrixWebview(posted));
 beforeEach(() => {
   vi.useFakeTimers();
   send({ type: 'cleanupResult', results: [] }); // back to the matrix if a test opened the cleanup view
-  send({ type: 'viewState', state: { filters: NO_FILTERS } });
+  send({ type: 'viewState', state: { filters: NO_FILTERS, groupBy: 'none' } });
   send({ type: 'inventory', inventory: inv, icons: {} });
   posted.length = 0;
 });
@@ -99,8 +99,8 @@ describe('view state kept by the host', () => {
     type('Be');
 
     expect(posted).toEqual([
-      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned' } } },
-      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'Be' } } },
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned' }, groupBy: 'none' } },
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'Be' }, groupBy: 'none' } },
     ]);
   });
 
@@ -115,7 +115,7 @@ describe('view state kept by the host', () => {
   });
 
   it('is restored from the host into the chips, the filter box, and the table', () => {
-    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles', text: 'Al' } } });
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles', text: 'Al' }, groupBy: 'none' } });
 
     expect(filterInput().value).toBe('Al');
     expect(viewChip('Applied to all profiles').getAttribute('aria-pressed')).toBe('true');
@@ -203,7 +203,7 @@ describe('filter groups', () => {
     press(option('Category', 'Themes'));
 
     expect(shownNames()).toEqual(['Alpha']);
-    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Themes'] } } }]);
+    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Themes'] }, groupBy: 'none' } }]);
     expect(announcement()).toBe('1 of 3 extensions');
     expect(chipNames()).toEqual(['Remove filter: Category Themes', 'Clear all filters']);
     expect(filtersButton().textContent).toBe('Filters (1)');
@@ -241,7 +241,7 @@ describe('filter groups', () => {
 describe('active-filter chips', () => {
   beforeEach(() => {
     send({ type: 'inventory', inventory: faceted, icons: {} });
-    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], publishers: ['fabrikam'], sources: ['vsix'] } } });
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], publishers: ['fabrikam'], sources: ['vsix'] }, groupBy: 'none' } });
     searchPublishers('');
     posted.length = 0;
   });
@@ -263,7 +263,7 @@ describe('active-filter chips', () => {
     press(chip('Remove filter: Publisher fabrikam'));
 
     expect(posted).toEqual([
-      { type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], sources: ['vsix'] } } },
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], sources: ['vsix'] }, groupBy: 'none' } },
     ]);
     expect(announcement()).toBe('1 of 3 extensions');
     expect(option('Publisher', 'fabrikam').checked).toBe(false);
@@ -293,19 +293,19 @@ describe('active-filter chips', () => {
 
   it('move focus to a neighbouring chip when a refresh removes the focused one', () => {
     chip('Remove filter: Publisher fabrikam').focus();
-    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], sources: ['vsix'] } } });
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, categories: ['Linters'], sources: ['vsix'] }, groupBy: 'none' } });
     expect(document.activeElement).toBe(chip('Remove filter: Source VSIX'));
   });
 
   it('are all cleared by Clear all filters, which keeps the view and the text and focuses the Filters button', () => {
     send({
       type: 'viewState',
-      state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a', categories: ['Linters'], sources: ['vsix'] } },
+      state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a', categories: ['Linters'], sources: ['vsix'] }, groupBy: 'none' },
     });
 
     press(chip('Clear all filters'));
 
-    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a' } } }]);
+    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a' }, groupBy: 'none' } }]);
     expect(chipRow().hidden).toBe(true);
     expect(document.activeElement).toBe(filtersButton());
     expect(announcement()).toBe('0 of 3 extensions');

@@ -1,11 +1,12 @@
 import type { Inventory, OrphanInfo, WorkspaceInventory } from '../core/types';
-import type { HostToMatrix, MatrixFilters, MatrixToHost, MatrixView } from '../protocol';
+import type { HostToMatrix, MatrixFilters, MatrixGroupBy, MatrixToHost, MatrixView } from '../protocol';
 import { orphanCount } from '../core/inventoryQueries';
 import { buildViewModel, NO_FILTERS, type RowVm } from './render';
 import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
 import { createFilterControls } from './matrixFilters';
+import { groupRows, isMatrixGroupBy } from './matrixGroups';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -17,6 +18,7 @@ let workspace: WorkspaceInventory | undefined;
 let renderedRows: RowVm[] = [];
 let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
 let filters: MatrixFilters = NO_FILTERS;
+let groupBy: MatrixGroupBy = 'none';
 /** The count announced after a filter change, from the last rebuild of the matrix. */
 let shownCount: { shown: number; total: number } | undefined;
 let pending = new Set<string>(); // `${extId}|${profileId}`, echoed back by the host
@@ -91,6 +93,20 @@ updateChipButtons();
 // three separate buttons wrapped the toolbar at a 1,000px panel width.
 const filterControls = createFilterControls(changeFilters);
 toolbar.append(filterControls.toggle);
+
+// Group by arranges the rows the filters chose, so it sits with the filters. A native select needs no
+// custom keyboard model, and it is built once, like the filter box, so a rebuild never takes its focus.
+const groupBySelect = document.createElement('select');
+const GROUP_BY_LABELS: Readonly<Record<MatrixGroupBy, string>> = { none: 'None', name: 'Name', publisher: 'Publisher' };
+for (const [value, label] of Object.entries(GROUP_BY_LABELS)) groupBySelect.append(new Option(label, value));
+groupBySelect.addEventListener('change', () => {
+  if (isMatrixGroupBy(groupBySelect.value)) groupBy = groupBySelect.value;
+  keepViewState();
+  renderContent();
+});
+const groupByLabel = el('label', 'group-by', 'Group by ');
+groupByLabel.append(groupBySelect);
+toolbar.append(groupByLabel);
 
 const orphanButton = el('button', 'chip cleanup', '');
 orphanButton.hidden = true;
@@ -401,7 +417,7 @@ window.addEventListener(
 // which never reaches `contentEl`).
 let pointerAt: { x: number; y: number } | undefined; // last position while over contentEl
 
-/** Body-row index of the extension whose hover card is open, if that row is rendered. */
+/** Data-row index, in the order shown, of the extension whose hover card is open, if it is rendered. */
 function openCardRow(): number | undefined {
   if (card.hidden) return undefined;
   const index = renderedRows.findIndex((r) => r.id === cardOwnerExtId);
@@ -460,7 +476,9 @@ window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
       // back, because the person did not change anything.
       clearFilterTimer();
       filters = { ...NO_FILTERS, ...m.state.filters };
+      groupBy = isMatrixGroupBy(m.state.groupBy) ? m.state.groupBy : 'none';
       filterInput.value = filters.text;
+      groupBySelect.value = groupBy;
       updateChipButtons();
       renderContent();
       return;
@@ -542,7 +560,7 @@ function changeFilters(next: Partial<MatrixFilters>): void {
 
 /** Gives the host the current view state to keep for the session. */
 function keepViewState(): void {
-  post({ type: 'viewState', state: { filters } });
+  post({ type: 'viewState', state: { filters, groupBy } });
 }
 
 function updateOrphanButton(): void {
@@ -597,7 +615,9 @@ function buildContent(): void {
 
   const vm = buildViewModel(inventory, filters, workspace);
   filterControls.update(filters, vm.facets);
-  renderedRows = vm.rows;
+  // The hover card and the crosshair index rows in the order shown, which grouping changes.
+  const groups = groupRows(vm.rows, groupBy, vm.facets.publishers);
+  renderedRows = groups.flatMap((group) => group.rows);
   shownCount = { shown: vm.rows.length, total: vm.total };
 
   for (const w of vm.warnings) {
@@ -645,7 +665,7 @@ function buildContent(): void {
       },
       showApplyToAllProfilesGuide: (extId) => post({ type: 'showApplyToAllProfilesGuide', extId }),
       showWorkspaceEnablementGuide: (extId) => post({ type: 'showWorkspaceEnablementGuide', extId }),
-    }),
+    }, groups),
   );
 
   // An open card survives the rebuild: re-anchored to the re-created name element and its

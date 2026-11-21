@@ -4,22 +4,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Inventory } from '../../src/core/types';
 import type { MatrixToHost } from '../../src/protocol';
-import { cellAt, inv, loadMatrixWebview, sendToMatrix as send, withInherited } from './matrixDom';
+import { checkbox, inv, loadMatrixWebview, nameOf, sendToMatrix as send, withInherited } from './matrixDom';
 
 const posted: MatrixToHost[] = [];
 
 function sendInventory(inventory: Inventory): void {
   send({ type: 'inventory', inventory, icons: {} });
-}
-
-const table = () => document.querySelector<HTMLTableElement>('.content table')!;
-
-function checkbox(extension: string, profile: string): HTMLInputElement {
-  return cellAt(table(), extension, profile).querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-}
-
-function nameOf(extension: string): HTMLElement {
-  return cellAt(table(), extension, 'Extension').querySelector<HTMLElement>('.name')!;
 }
 
 const card = () => document.querySelector<HTMLElement>('.ext-card')!;

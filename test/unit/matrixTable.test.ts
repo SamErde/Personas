@@ -4,7 +4,8 @@ import type { Inventory, WorkspaceInventory } from '../../src/core/types';
 import { gridHitAt, paintCrosshair } from '../../src/webview/crosshair';
 import { buildViewModel, NO_FILTERS } from '../../src/webview/render';
 import { renderMatrixLegend, renderMatrixTable, type MatrixTableHooks } from '../../src/webview/matrixTable';
-import { cellAt, inv, withInherited } from './matrixDom';
+import { groupRows } from '../../src/webview/matrixGroups';
+import { cellAt, faceted, inv, withInherited } from './matrixDom';
 
 let toggles: { extId: string; profileId: string; install: boolean }[];
 let pendingCells: Set<string>;
@@ -285,5 +286,86 @@ describe('crosshair highlight', () => {
     paintCrosshair(table, {});
 
     expect(table.querySelectorAll('.crosshair, .crosshair-label, .crosshair-cell')).toHaveLength(0);
+  });
+});
+
+describe('grouped rows', () => {
+  /** The faceted fixture grouped by publisher: Contoso Ltd (Alpha), fabrikam (Beta), Unknown (Gamma). */
+  function renderGrouped(workspace?: WorkspaceInventory, inventory: Inventory = faceted): HTMLTableElement {
+    const vm = buildViewModel(inventory, NO_FILTERS, workspace);
+    const table = renderMatrixTable(vm, hooks, groupRows(vm.rows, 'publisher', vm.facets.publishers));
+    document.body.replaceChildren(table);
+    return table;
+  }
+  const headings = (table: HTMLTableElement) => [...table.querySelectorAll<HTMLTableCellElement>('tbody tr.group-heading > th')];
+
+  it('give each group its own body, led by a row-group heading that spans the row and counts the group', () => {
+    const table = renderGrouped();
+
+    expect(table.tBodies).toHaveLength(3);
+    expect([...table.tBodies].map((body) => body.rows[0]?.classList.contains('group-heading'))).toEqual([true, true, true]);
+    expect(headings(table).map((th) => [th.getAttribute('scope'), th.colSpan, th.textContent])).toEqual([
+      ['rowgroup', 4, 'Contoso Ltd, 1 extension'],
+      ['rowgroup', 4, 'fabrikam, 1 extension'],
+      ['rowgroup', 4, 'Unknown, 1 extension'],
+    ]);
+  });
+
+  it("shows a group's symbol but announces its spoken name instead", () => {
+    const vm = buildViewModel(faceted, NO_FILTERS);
+    const table = renderMatrixTable(vm, hooks, [{ key: '#', label: '#', spokenLabel: 'Other', rows: vm.rows }]);
+    const [label] = [...table.querySelectorAll<HTMLElement>('.group-heading .group-label')];
+
+    expect(label!.querySelector('[aria-hidden="true"]')?.textContent).toBe('#');
+    expect(label!.querySelector('.sr-only')?.textContent).toBe('Other');
+    expect(label!.textContent).toBe('#Other, 3 extensions');
+  });
+
+  it('span the workspace column too', () => {
+    const table = renderGrouped(workspaceWith([]));
+    expect(headings(table).map((th) => th.colSpan)).toEqual([5, 5, 5]);
+  });
+
+  it('render no heading row without grouping', () => {
+    const table = render(faceted);
+    expect(table.tBodies).toHaveLength(1);
+    expect(table.querySelectorAll('.group-heading')).toHaveLength(0);
+  });
+
+  /** Alpha moves to a publisher with no display name, "zeta", so grouping puts fabrikam's Beta
+   * first and Alpha second, the reverse of their name order. */
+  const reordered: Inventory = {
+    ...faceted,
+    extensions: faceted.extensions.map((e) => (e.id === 'pub.a' ? { ...e, publisher: 'zeta', publisherDisplayName: undefined } : e)),
+  };
+
+  it('number the crosshair rows in grouped order, skipping heading rows', () => {
+    const table = renderGrouped(undefined, reordered);
+    const dataRows = [...table.querySelectorAll<HTMLTableRowElement>('tbody tr:not(.group-heading)')];
+
+    expect(dataRows.map((tr) => [tr.dataset['row'], tr.cells[0]?.textContent])).toEqual([
+      ['0', 'Beta'],
+      ['1', 'AlphaALL'],
+      ['2', 'Gamma'],
+    ]);
+    for (const heading of headings(table)) {
+      expect(heading.closest('tr')!.dataset['row']).toBeUndefined();
+      expect(heading.dataset['col']).toBeUndefined();
+    }
+  });
+
+  it('keep heading rows out of the crosshair and out of the Tab order', () => {
+    const table = renderGrouped(undefined, reordered);
+    const [first, second] = headings(table);
+
+    expect(gridHitAt(first!, table)).toBeUndefined();
+    expect(gridHitAt(cellAt(table, 'Gamma', 'Work'), table)).toEqual({ kind: 'cell', row: 2, col: 2 });
+    expect(gridHitAt(cellAt(table, 'Beta', 'Work'), table)).toEqual({ kind: 'cell', row: 0, col: 2 });
+    paintCrosshair(table, { row: 1, col: 2, outlineCell: true });
+    expect(table.querySelectorAll('.group-heading .crosshair, .group-heading.crosshair, .group-heading .crosshair-label')).toHaveLength(0);
+    expect([...cellAt(table, 'Alpha', 'Work').classList]).toContain('crosshair-cell');
+    for (const heading of [first!, second!]) {
+      expect(heading.querySelectorAll('[data-focus-key], button, input, [tabindex]')).toHaveLength(0);
+    }
   });
 });

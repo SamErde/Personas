@@ -54,6 +54,19 @@ export function cellAt(table: HTMLTableElement, extension: string, profileLabel:
   return cell;
 }
 
+/** The Extension Matrix table the loaded webview shows. */
+export const shownTable = () => document.querySelector<HTMLTableElement>('.content table')!;
+
+/** The checkbox where an extension's row meets a profile's column in the shown table. */
+export function checkbox(extension: string, profile: string): HTMLInputElement {
+  return cellAt(shownTable(), extension, profile).querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+}
+
+/** An extension's name, the button that opens its hover card, in the shown table. */
+export function nameOf(extension: string): HTMLElement {
+  return cellAt(shownTable(), extension, 'Extension').querySelector<HTMLElement>('.name')!;
+}
+
 /** The base inventory with filter data: Alpha is Contoso's (Linters and Themes, from the
  * Marketplace), Beta is Fabrikam's (Linters, from the Marketplace and a VSIX), and Gamma has no
  * publisher, categories, or install source. */

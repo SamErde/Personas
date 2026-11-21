@@ -1,9 +1,10 @@
 // The Extension Matrix table is built from a view model with no module state, so a jsdom test can
 // render it directly. Everything stateful (the hover card, pending markers, and posting to the
 // host) stays in main.ts and reaches the table through the hooks below.
-import type { InstallState, ReadOnlyReason, RowVm, ViewModel } from './render';
+import type { CellVm, InstallState, ReadOnlyReason, RowVm, ViewModel } from './render';
 import { focusKey } from './matrixFocus';
-import { el } from './ui';
+import type { RowGroup } from './matrixGroups';
+import { el, extensionCount } from './ui';
 
 export interface MatrixTableHooks {
   /** Returns the extension's icon, or a letter tile when it has none. */
@@ -18,9 +19,35 @@ export interface MatrixTableHooks {
   showWorkspaceEnablementGuide(extId: string): void;
 }
 
-export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLTableElement {
+/** Renders the matrix with one table body per group (by default, one body holding every row). */
+export function renderMatrixTable(
+  vm: ViewModel,
+  hooks: MatrixTableHooks,
+  groups: readonly RowGroup[] = [{ key: '', rows: vm.rows }],
+): HTMLTableElement {
   const table = document.createElement('table');
   const head = table.createTHead().insertRow();
+  fillHeaderRow(head, vm);
+
+  const columnCount = head.cells.length;
+  let rowIndex = 0;
+  for (const group of groups) {
+    const body = table.createTBody();
+    if (group.label !== undefined) body.append(groupHeading(group, columnCount));
+    for (const row of group.rows) body.append(dataRow(vm, hooks, row, rowIndex++));
+  }
+
+  // Indexes for the crosshair highlight: every data row has one cell per column (no spans), so a
+  // cell's position is its column. Data rows count from 0 in the order shown; the head row and
+  // group heading rows get no index, so the crosshair never lands on them.
+  const dataRows = [...table.tBodies].flatMap((body) => [...body.rows]).filter((tr) => !tr.classList.contains('group-heading'));
+  dataRows.forEach((tr, i) => (tr.dataset['row'] = String(i)));
+  for (const tr of [head, ...dataRows]) [...tr.cells].forEach((cellEl, col) => (cellEl.dataset['col'] = String(col)));
+  return table;
+}
+
+/** The column headers: Extension, one per profile, and the current workspace when one is open. */
+function fillHeaderRow(head: HTMLTableRowElement, vm: ViewModel): void {
   head.append(columnHeader('ext-col', 'Extension'));
   for (const p of vm.profileNames) {
     const th = columnHeader('', p.label);
@@ -35,56 +62,87 @@ export function renderMatrixTable(vm: ViewModel, hooks: MatrixTableHooks): HTMLT
     );
     head.append(workspaceHead);
   }
+}
 
-  const body = table.createTBody();
-  for (const [rowIndex, row] of vm.rows.entries()) {
-    const tr = body.insertRow();
-    tr.append(nameCell(row, hooks));
-    row.cells.forEach((cell, index) => {
-      // The cell's accessible name pairs the extension with the profile, as in "PowerShell in Work".
-      const cellName = `${row.displayName} in ${vm.profileNames[index]?.name ?? cell.profileId}`;
-      const isPending = hooks.isPending(row.id, cell.profileId);
-      const td = el('td', isPending ? 'cell pending' : 'cell');
-      // A pending writable cell stays a checkbox (below); a pending read-only cell has no control.
-      if (isPending && cell.readOnlyReason && cell.readOnlyReason !== 'workspaceOnly') {
-        labelCell(td, glyph('spinner', '◐'), `${cellName}: change in progress`);
-      } else if (cell.readOnlyReason) {
-        const shown = describeReadOnlyCell(cell.install, cell.readOnlyReason);
-        labelCell(td, glyph(`glyph ${shown.className}`, shown.glyph), `${cellName}: ${shown.state}`);
-        td.title = shown.title;
-      } else {
-        const box = document.createElement('input');
-        box.type = 'checkbox';
-        box.checked = cell.install === 'installed';
-        box.setAttribute('aria-label', cellName);
-        box.dataset['focusKey'] = focusKey({ extId: row.id, slot: `profile:${cell.profileId}` });
-        td.append(box);
-        if (isPending) {
-          // A pending cell stays a checkbox so it keeps focus and its name while the change is in
-          // flight. aria-disabled, unlike disabled, leaves it focusable. It shows the current
-          // install (not optimistic UI) until the host's next inventory confirms the change.
-          const status = el('span', 'sr-only', 'change in progress');
-          status.id = `pending-status-${rowIndex}-${index}`;
-          box.setAttribute('aria-disabled', 'true');
-          box.setAttribute('aria-describedby', status.id);
-          box.addEventListener('click', (e) => e.preventDefault());
-          td.append(glyph('spinner', '◐'), status);
-        } else {
-          box.addEventListener('change', () => hooks.toggleCell(row.id, cell.profileId, box.checked));
-        }
-      }
-      tr.append(td);
-    });
-    if (vm.workspace) tr.append(workspaceCell(row, hooks));
-  }
-
-  // Indexes for the crosshair highlight: every row has one cell per column (no spans), so a
-  // cell's position is its column. Body rows count from 0, after the header row.
-  [...table.rows].forEach((tr, i) => {
-    if (i > 0) tr.dataset['row'] = String(i - 1);
-    [...tr.cells].forEach((cellEl, col) => (cellEl.dataset['col'] = String(col)));
+/** One extension's row: its name, a cell per profile, and its workspace status. */
+function dataRow(vm: ViewModel, hooks: MatrixTableHooks, row: RowVm, rowIndex: number): HTMLTableRowElement {
+  const tr = document.createElement('tr');
+  tr.append(nameCell(row, hooks));
+  row.cells.forEach((cell, index) => {
+    // The cell's accessible name pairs the extension with the profile, as in "PowerShell in Work".
+    const cellName = `${row.displayName} in ${vm.profileNames[index]?.name ?? cell.profileId}`;
+    tr.append(profileCell(hooks, row, cell, cellName, `pending-status-${rowIndex}-${index}`));
   });
-  return table;
+  if (vm.workspace) tr.append(workspaceCell(row, hooks));
+  return tr;
+}
+
+function profileCell(hooks: MatrixTableHooks, row: RowVm, cell: CellVm, cellName: string, statusId: string): HTMLElement {
+  const isPending = hooks.isPending(row.id, cell.profileId);
+  const td = el('td', isPending ? 'cell pending' : 'cell');
+  // A pending writable cell stays a checkbox (below); a pending read-only cell has no control.
+  if (isPending && cell.readOnlyReason && cell.readOnlyReason !== 'workspaceOnly') {
+    labelCell(td, glyph('spinner', '◐'), `${cellName}: change in progress`);
+  } else if (cell.readOnlyReason) {
+    const shown = describeReadOnlyCell(cell.install, cell.readOnlyReason);
+    labelCell(td, glyph(`glyph ${shown.className}`, shown.glyph), `${cellName}: ${shown.state}`);
+    td.title = shown.title;
+  } else {
+    appendCheckbox(td, hooks, row, cell, cellName, isPending ? statusId : undefined);
+  }
+  return td;
+}
+
+/** A writable cell's checkbox. `pendingStatusId` is set while a change to the cell is in flight. */
+function appendCheckbox(
+  td: HTMLElement,
+  hooks: MatrixTableHooks,
+  row: RowVm,
+  cell: CellVm,
+  cellName: string,
+  pendingStatusId: string | undefined,
+): void {
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = cell.install === 'installed';
+  box.setAttribute('aria-label', cellName);
+  box.dataset['focusKey'] = focusKey({ extId: row.id, slot: `profile:${cell.profileId}` });
+  td.append(box);
+  if (pendingStatusId === undefined) {
+    box.addEventListener('change', () => hooks.toggleCell(row.id, cell.profileId, box.checked));
+    return;
+  }
+  // A pending cell stays a checkbox so it keeps focus and its name while the change is in
+  // flight. aria-disabled, unlike disabled, leaves it focusable. It shows the current
+  // install (not optimistic UI) until the host's next inventory confirms the change.
+  const status = el('span', 'sr-only', 'change in progress');
+  status.id = pendingStatusId;
+  box.setAttribute('aria-disabled', 'true');
+  box.setAttribute('aria-describedby', status.id);
+  box.addEventListener('click', (e) => e.preventDefault());
+  td.append(glyph('spinner', '◐'), status);
+}
+
+/** A group's heading row: one row-group header spanning every column, holding the group's name
+ * and count and no controls. NVDA announced this markup as the group heading (#129). */
+function groupHeading(group: RowGroup, columnCount: number): HTMLTableRowElement {
+  const tr = el('tr', 'group-heading') as HTMLTableRowElement;
+  const th = el('th', 'group-heading-cell') as HTMLTableCellElement;
+  th.setAttribute('scope', 'rowgroup');
+  th.colSpan = columnCount;
+  const label = el('span', 'group-label');
+  if (group.spokenLabel === undefined) {
+    label.append(group.label ?? '');
+  } else {
+    // The symbol stays on screen; a screen reader announces the spoken name instead.
+    const symbol = el('span', '', group.label);
+    symbol.setAttribute('aria-hidden', 'true');
+    label.append(symbol, el('span', 'sr-only', group.spokenLabel));
+  }
+  label.append(el('span', 'group-count', `, ${extensionCount(group.rows.length)}`));
+  th.append(label);
+  tr.append(th);
+  return tr;
 }
 
 function columnHeader(className: string, text?: string): HTMLElement {

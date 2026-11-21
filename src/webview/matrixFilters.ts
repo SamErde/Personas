@@ -5,7 +5,7 @@
 import type { FilterDimension, MatrixFilters } from '../protocol';
 import { activeFilterChips, DIMENSION_NAMES, FILTER_DIMENSIONS, optionName, type FacetOption, type Facets, type FilterChip } from './render';
 import { nearestSurvivor } from './matrixFocus';
-import { el } from './ui';
+import { el, extensionCount } from './ui';
 
 export interface FilterControls {
   /** The Filters disclosure button, for the toolbar. */
@@ -111,7 +111,7 @@ export function createFilterControls(change: (next: DimensionChange) => void): F
     box.checked = filters?.[dimension].includes(option.value) ?? option.selected;
     box.dataset['filterKey'] = optionKey(dimension, option.value);
     // The count is not the total after checking, since values in one group combine with "or".
-    box.setAttribute('aria-label', `${optionName(option)}, ${option.count} ${option.count === 1 ? 'extension' : 'extensions'}`);
+    box.setAttribute('aria-label', `${optionName(option)}, ${extensionCount(option.count)}`);
     box.addEventListener('change', () => select(dimension, option.value, box.checked));
     const count = el('span', 'filter-count', String(option.count));
     count.setAttribute('aria-hidden', 'true');

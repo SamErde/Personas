@@ -37,10 +37,16 @@ export interface MatrixFilters {
   sources: readonly string[];
 }
 
+/** How the matrix arranges the rows the filters chose: in one list, or in groups by the first
+ * letter of the name or by publisher. */
+export const MATRIX_GROUPINGS = ['none', 'name', 'publisher'] as const;
+export type MatrixGroupBy = (typeof MATRIX_GROUPINGS)[number];
+
 /** How the person has set up the matrix. The extension host keeps it for the session so that a
  * reopened panel comes back the same way; it is not saved across VS Code restarts. */
 export interface MatrixViewState {
   filters: MatrixFilters;
+  groupBy: MatrixGroupBy;
 }
 
 export type HostToMatrix =
