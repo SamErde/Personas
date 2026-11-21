@@ -52,14 +52,15 @@ describe('grouping by name', () => {
   });
 
   it('files Latin letters that do not decompose under their base letter', () => {
-    const rows = [row('Æther'), row('Øresund'), row('Łódź'), row('Đorđe'), row('Œuvre'), row('Þorn'), row('Ħamrun'), row('straße')];
+    const rows = [row('Æther'), row('Øresund'), row('Łódź'), row('Đorđe'), row('Œuvre'), row('Þorn'), row('Ħamrun'), row('ß Tools'), row('ılık')];
     expect(shape(groupRows(rows, 'name', []))).toEqual([
       ['A', ['Æther']],
       ['D', ['Đorđe']],
       ['H', ['Ħamrun']],
+      ['I', ['ılık']],
       ['L', ['Łódź']],
       ['O', ['Øresund', 'Œuvre']],
-      ['S', ['straße']],
+      ['S', ['ß Tools']],
       ['T', ['Þorn']],
     ]);
   });

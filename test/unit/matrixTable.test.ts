@@ -291,8 +291,8 @@ describe('crosshair highlight', () => {
 
 describe('grouped rows', () => {
   /** The faceted fixture grouped by publisher: Contoso Ltd (Alpha), fabrikam (Beta), Unknown (Gamma). */
-  function renderGrouped(workspace?: WorkspaceInventory): HTMLTableElement {
-    const vm = buildViewModel(faceted, NO_FILTERS, workspace);
+  function renderGrouped(workspace?: WorkspaceInventory, inventory: Inventory = faceted): HTMLTableElement {
+    const vm = buildViewModel(inventory, NO_FILTERS, workspace);
     const table = renderMatrixTable(vm, hooks, groupRows(vm.rows, 'publisher', vm.facets.publishers));
     document.body.replaceChildren(table);
     return table;
@@ -322,13 +322,20 @@ describe('grouped rows', () => {
     expect(table.querySelectorAll('.group-heading')).toHaveLength(0);
   });
 
+  /** Alpha moves to a publisher with no display name, "zeta", so grouping puts fabrikam's Beta
+   * first and Alpha second, the reverse of their name order. */
+  const reordered: Inventory = {
+    ...faceted,
+    extensions: faceted.extensions.map((e) => (e.id === 'pub.a' ? { ...e, publisher: 'zeta', publisherDisplayName: undefined } : e)),
+  };
+
   it('number the crosshair rows in grouped order, skipping heading rows', () => {
-    const table = renderGrouped();
+    const table = renderGrouped(undefined, reordered);
     const dataRows = [...table.querySelectorAll<HTMLTableRowElement>('tbody tr:not(.group-heading)')];
 
     expect(dataRows.map((tr) => [tr.dataset['row'], tr.cells[0]?.textContent])).toEqual([
-      ['0', 'AlphaALL'],
-      ['1', 'Beta'],
+      ['0', 'Beta'],
+      ['1', 'AlphaALL'],
       ['2', 'Gamma'],
     ]);
     for (const heading of headings(table)) {
@@ -338,14 +345,15 @@ describe('grouped rows', () => {
   });
 
   it('keep heading rows out of the crosshair and out of the Tab order', () => {
-    const table = renderGrouped();
+    const table = renderGrouped(undefined, reordered);
     const [first, second] = headings(table);
 
     expect(gridHitAt(first!, table)).toBeUndefined();
     expect(gridHitAt(cellAt(table, 'Gamma', 'Work'), table)).toEqual({ kind: 'cell', row: 2, col: 2 });
+    expect(gridHitAt(cellAt(table, 'Beta', 'Work'), table)).toEqual({ kind: 'cell', row: 0, col: 2 });
     paintCrosshair(table, { row: 1, col: 2, outlineCell: true });
     expect(table.querySelectorAll('.group-heading .crosshair, .group-heading.crosshair, .group-heading .crosshair-label')).toHaveLength(0);
-    expect([...cellAt(table, 'Beta', 'Work').classList]).toContain('crosshair-cell');
+    expect([...cellAt(table, 'Alpha', 'Work').classList]).toContain('crosshair-cell');
     for (const heading of [first!, second!]) {
       expect(heading.querySelectorAll('[data-focus-key], button, input, [tabindex]')).toHaveLength(0);
     }

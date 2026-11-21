@@ -5,7 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Inventory } from '../../src/core/types';
 import type { MatrixGroupBy, MatrixToHost } from '../../src/protocol';
 import { NO_FILTERS } from '../../src/webview/render';
-import { cellAt, faceted, loadMatrixWebview, sendToMatrix as send } from './matrixDom';
+import { checkbox, faceted, loadMatrixWebview, nameOf, sendToMatrix as send, shownTable as table } from './matrixDom';
 
 const posted: MatrixToHost[] = [];
 
@@ -24,18 +24,15 @@ const grouped: Inventory = {
   ],
 };
 
-const table = () => document.querySelector<HTMLTableElement>('.content table')!;
 const groupBySelect = () => document.querySelector<HTMLSelectElement>('.toolbar select')!;
 const card = () => document.querySelector<HTMLElement>('.ext-card')!;
 const shownNames = () => [...table().querySelectorAll<HTMLElement>('tbody .name')].map((name) => name.textContent);
 const headings = () => [...table().querySelectorAll<HTMLElement>('tr.group-heading > th')].map((th) => th.textContent);
 
-function checkbox(extension: string, profile: string): HTMLInputElement {
-  return cellAt(table(), extension, profile).querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-}
-
-function nameOf(extension: string): HTMLElement {
-  return cellAt(table(), extension, 'Extension').querySelector<HTMLElement>('.name')!;
+/** The table shows one list: no headings, every row in name order. */
+function expectOneList(): void {
+  expect(headings()).toEqual([]);
+  expect(shownNames()).toEqual(['42 Snippets', 'Ägypten', 'Alpha', 'Beta', 'Gamma']);
 }
 
 function chooseGroupBy(value: MatrixGroupBy): void {
@@ -87,8 +84,7 @@ describe('the Group by control', () => {
     chooseGroupBy('name');
     chooseGroupBy('none');
 
-    expect(headings()).toEqual([]);
-    expect(shownNames()).toEqual(['42 Snippets', 'Ägypten', 'Alpha', 'Beta', 'Gamma']);
+    expectOneList();
   });
 
   it("comes back from the host's view state for a reopened panel, without sending it back", () => {
@@ -103,8 +99,7 @@ describe('the Group by control', () => {
     send({ type: 'viewState', state: { filters: NO_FILTERS, groupBy: 'category' as MatrixGroupBy } });
 
     expect(groupBySelect().value).toBe('none');
-    expect(headings()).toEqual([]);
-    expect(shownNames()).toEqual(['42 Snippets', 'Ägypten', 'Alpha', 'Beta', 'Gamma']);
+    expectOneList();
   });
 
   it('keeps focus on itself when the grouping changes', () => {
