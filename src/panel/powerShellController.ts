@@ -86,7 +86,7 @@ export class PowerShellController implements vscode.Disposable {
   }
   private startReconcile(): void {
     this.stopReconcile();
-    if (this.reconcileMs > 0) this.reconcileTimer = setInterval(() => void this.reconcile(), this.reconcileMs);
+    if (this.reconcileMs > 0 && !this.disposed) this.reconcileTimer = setInterval(() => void this.reconcile(), this.reconcileMs);
   }
   private stopReconcile(): void {
     clearInterval(this.reconcileTimer);
@@ -100,20 +100,21 @@ export class PowerShellController implements vscode.Disposable {
     const bases = [...this.watchers.keys()];
     const identities = await pathIdentities([...this.dependencies, ...bases]);
     // A tick that outlived a deactivate/reactivate cycle must not seed or act on the new cycle.
-    if (generation !== this.reconcileGeneration || !this.active || this.disposed) return;
+    if (!this.isReconcileCurrent(generation)) return;
     const previous = this.identities;
     this.identities = identities;
     // The first sample has no baseline, so compare it with the shown inventory instead: a change made
     // between the last refresh and this sample must not become the baseline unnoticed.
-    if (!previous) {
-      if (this.contradictsInventory(identities)) this.schedule();
-      return;
-    }
-    const changed = changedIdentities(previous, identities);
-    if (!changed.length) return;
-    // A replaced or removed watched directory needs a fresh watch, as a structural event would cause.
+    const changed = previous ? this.markReplacedBases(changedIdentities(previous, identities), bases) : this.contradictsInventory(identities);
+    if (changed) this.schedule();
+  }
+  private isReconcileCurrent(generation: number): boolean {
+    return generation === this.reconcileGeneration && this.active && !this.disposed;
+  }
+  /** A replaced or removed watched directory needs a fresh watch, as a structural event would cause. */
+  private markReplacedBases(changed: readonly string[], bases: readonly string[]): boolean {
     for (const base of bases) if (changed.includes(base)) this.staleWatchRoots.add(base);
-    this.schedule();
+    return changed.length > 0;
   }
   private contradictsInventory(identities: ReadonlyMap<string, string>): boolean {
     return this.service.snapshot.rows.some(row => {

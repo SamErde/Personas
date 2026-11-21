@@ -210,6 +210,7 @@ it('reconciles only while active, with one timer however often Home reports visi
   expect(discover).not.toHaveBeenCalled();
   controller.dispose();
   controller.setActive(true);
+  expect(intervals).toHaveBeenCalledTimes(1); // A disposed controller never starts polling again.
   await sleep(500);
   expect(discover).not.toHaveBeenCalled();
 });
