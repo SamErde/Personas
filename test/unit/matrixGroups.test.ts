@@ -97,6 +97,15 @@ describe('grouping by name', () => {
     ]);
   });
 
+  it('ignores invisible format characters before the first letter', () => {
+    const rows = [row('​Alpha'), row('﻿­Beta'), row('​')];
+    expect(shape(groupRows(rows, 'name', []))).toEqual([
+      ['A', ['​Alpha']],
+      ['B', ['﻿­Beta']],
+      ['#', ['​']],
+    ]);
+  });
+
   it('ignores leading spaces and files a blank name under "#"', () => {
     const rows = [row('  zeta'), row('   ')];
     expect(shape(groupRows(rows, 'name', []))).toEqual([

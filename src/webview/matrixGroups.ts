@@ -72,7 +72,10 @@ const UNDECOMPOSED_LATIN: Readonly<Record<string, string>> = Object.freeze({
  * "#", with digits, other symbols, and other scripts.
  */
 function nameGroupOf(row: RowVm): string {
-  const first = [...row.displayName.trim()][0] ?? '';
+  // Invisible format characters (a zero-width space, a byte order mark) are not the first letter.
+  const visible = row.displayName.replace(/\p{Cf}/gu, '').trim();
+  const point = visible.codePointAt(0); // a whole code point, so 𝐀 is read as one character
+  const first = point === undefined ? '' : String.fromCodePoint(point);
   if (!/^\p{L}$/u.test(first)) return OTHER_NAME_GROUP;
   const upper = first.normalize('NFKD').replace(/\p{M}/gu, '').toUpperCase().charAt(0);
   const folded = UNDECOMPOSED_LATIN[upper] ?? upper;
