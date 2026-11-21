@@ -51,6 +51,19 @@ describe('grouping by name', () => {
     ]);
   });
 
+  it('files Latin letters that do not decompose under their base letter', () => {
+    const rows = [row('Æther'), row('Øresund'), row('Łódź'), row('Đorđe'), row('Œuvre'), row('Þorn'), row('Ħamrun'), row('straße')];
+    expect(shape(groupRows(rows, 'name', []))).toEqual([
+      ['A', ['Æther']],
+      ['D', ['Đorđe']],
+      ['H', ['Ħamrun']],
+      ['L', ['Łódź']],
+      ['O', ['Øresund', 'Œuvre']],
+      ['S', ['straße']],
+      ['T', ['Þorn']],
+    ]);
+  });
+
   it('files names in non-Latin scripts under "#"', () => {
     const rows = [row('日本語 Language Pack'), row('Ελληνικά'), row('Кириллица'), row('Beta')];
     expect(shape(groupRows(rows, 'name', []))).toEqual([
@@ -91,9 +104,9 @@ describe('grouping by publisher', () => {
   const fabrikam = { value: 'fabrikam', label: 'fabrikam', count: 1, selected: false };
   const unknown = { value: '', label: 'Unknown', count: 1, selected: false };
 
-  it("labels each group with the publisher's display name, sorted by it, with Unknown last", () => {
+  it("labels each group with the publisher's display name, in the publisher filter's order", () => {
     const rows = [row('Alpha', 'Contoso'), row('Beta'), row('Gamma', 'fabrikam'), row('Delta', 'contoso')];
-    expect(shape(groupRows(rows, 'publisher', [unknown, fabrikam, contoso]))).toEqual([
+    expect(shape(groupRows(rows, 'publisher', [contoso, fabrikam, unknown]))).toEqual([
       ['Contoso Ltd', ['Alpha', 'Delta']],
       ['fabrikam', ['Gamma']],
       ['Unknown', ['Beta']],
@@ -112,9 +125,11 @@ describe('grouping by publisher', () => {
     ]);
   });
 
-  it('falls back to the publisher ID, then Unknown, when no option names it', () => {
-    const rows = [row('Alpha', 'Northwind'), row('Beta')];
-    expect(shape(groupRows(rows, 'publisher', []))).toEqual([
+  it('labels a publisher no option names by its ID, after the named ones and before Unknown', () => {
+    const rows = [row('Beta'), row('Alpha', 'Northwind'), row('Gamma', 'fabrikam'), row('Delta', 'adatum')];
+    expect(shape(groupRows(rows, 'publisher', [fabrikam]))).toEqual([
+      ['fabrikam', ['Gamma']],
+      ['adatum', ['Delta']],
       ['northwind', ['Alpha']],
       ['Unknown', ['Beta']],
     ]);

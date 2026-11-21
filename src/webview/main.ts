@@ -6,7 +6,7 @@ import { crosshairFor, gridHitAt, paintCrosshair } from './crosshair';
 import { renderMatrixLegend, renderMatrixTable } from './matrixTable';
 import { focusMatrixControl, preserveMatrixFocus } from './matrixFocus';
 import { createFilterControls } from './matrixFilters';
-import { groupRows } from './matrixGroups';
+import { groupRows, isMatrixGroupBy } from './matrixGroups';
 import { el, formatBytes } from './ui';
 import { isTrustedHostMessageOrigin, safeImageSource } from './messageSecurity';
 
@@ -97,11 +97,10 @@ toolbar.append(filterControls.toggle);
 // Group by arranges the rows the filters chose, so it sits with the filters. A native select needs no
 // custom keyboard model, and it is built once, like the filter box, so a rebuild never takes its focus.
 const groupBySelect = document.createElement('select');
-for (const [value, label] of [['none', 'None'], ['name', 'Name'], ['publisher', 'Publisher']] as const) {
-  groupBySelect.append(new Option(label, value));
-}
+const GROUP_BY_LABELS: Readonly<Record<MatrixGroupBy, string>> = { none: 'None', name: 'Name', publisher: 'Publisher' };
+for (const [value, label] of Object.entries(GROUP_BY_LABELS)) groupBySelect.append(new Option(label, value));
 groupBySelect.addEventListener('change', () => {
-  groupBy = groupBySelect.value as MatrixGroupBy;
+  if (isMatrixGroupBy(groupBySelect.value)) groupBy = groupBySelect.value;
   keepViewState();
   renderContent();
 });
@@ -477,7 +476,7 @@ window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
       // back, because the person did not change anything.
       clearFilterTimer();
       filters = { ...NO_FILTERS, ...m.state.filters };
-      groupBy = m.state.groupBy ?? 'none';
+      groupBy = isMatrixGroupBy(m.state.groupBy) ? m.state.groupBy : 'none';
       filterInput.value = filters.text;
       groupBySelect.value = groupBy;
       updateChipButtons();

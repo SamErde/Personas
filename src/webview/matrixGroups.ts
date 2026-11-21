@@ -13,12 +13,19 @@ export interface RowGroup {
 /** The name group for every name that does not start with a Latin letter. */
 export const OTHER_NAME_GROUP = '#';
 
+const GROUPINGS: readonly MatrixGroupBy[] = ['none', 'name', 'publisher'];
+
+/** True for a grouping the matrix knows, so a stale or unexpected value can fall back to none. */
+export function isMatrixGroupBy(value: unknown): value is MatrixGroupBy {
+  return GROUPINGS.includes(value as MatrixGroupBy);
+}
+
 const UNKNOWN_LABEL = 'Unknown';
 
 /**
  * Splits `rows`, which arrive filtered and sorted, into groups. Each row lands in exactly one group
- * and keeps its order within it. Name groups run A to Z, then "#". Publisher groups are labelled as
- * the filter options label them, sorted by that label, with Unknown last.
+ * and keeps its order within it. Name groups run A to Z, then "#". Publisher groups are labelled and
+ * ordered as the publisher filter options are, with Unknown last.
  */
 export function groupRows(rows: readonly RowVm[], groupBy: MatrixGroupBy, publishers: readonly FacetOption[]): RowGroup[] {
   switch (groupBy) {
@@ -26,32 +33,39 @@ export function groupRows(rows: readonly RowVm[], groupBy: MatrixGroupBy, publis
       return [{ key: '', rows: [...rows] }];
     case 'name':
       return collect(rows, nameGroupOf, (key) => key).sort((a, b) => nameRank(a.key) - nameRank(b.key));
-    case 'publisher': {
-      const options = new Map(publishers.map((option) => [option.value, option]));
-      const plainLabel = (key: string) => options.get(key)?.label ?? (key === UNKNOWN_VALUE ? UNKNOWN_LABEL : key);
-      const label = (key: string) => {
-        const option = options.get(key);
-        return option ? optionName(option) : plainLabel(key);
-      };
-      // Sorted as the publisher filter options are: by label, then by ID for a shared label.
-      return collect(rows, (row) => row.publisher?.toLowerCase() ?? UNKNOWN_VALUE, label).sort(
-        (a, b) =>
-          Number(a.key === UNKNOWN_VALUE) - Number(b.key === UNKNOWN_VALUE) ||
-          plainLabel(a.key).toLowerCase().localeCompare(plainLabel(b.key).toLowerCase()) ||
-          a.key.localeCompare(b.key),
-      );
-    }
+    case 'publisher':
+      return publisherGroups(rows, publishers);
   }
 }
 
+/** Publisher groups follow the filter options' order, so the two can never disagree. A publisher
+ * with no option (which the view model never produces) comes after them by ID, before Unknown. */
+function publisherGroups(rows: readonly RowVm[], publishers: readonly FacetOption[]): RowGroup[] {
+  const options = new Map(publishers.map((option, index) => [option.value, { option, index }]));
+  const label = (key: string) => {
+    const found = options.get(key)?.option;
+    if (found) return optionName(found);
+    return key === UNKNOWN_VALUE ? UNKNOWN_LABEL : key;
+  };
+  const rank = (key: string) => options.get(key)?.index ?? publishers.length + Number(key === UNKNOWN_VALUE);
+  return collect(rows, (row) => row.publisher?.toLowerCase() ?? UNKNOWN_VALUE, label).sort(
+    (a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key),
+  );
+}
+
+/** Latin letters that NFD leaves whole, mapped to the letter they file under. */
+const UNDECOMPOSED_LATIN: Readonly<Record<string, string>> = Object.freeze({
+  Æ: 'A', Đ: 'D', Ħ: 'H', Ł: 'L', Ø: 'O', Œ: 'O', Þ: 'T',
+});
+
 /**
  * A name's group: the letter it starts with, with diacritics folded away so an accented Latin
- * letter files under its base letter. Anything else (digits, symbols, other scripts, and letters
- * such as Æ that do not decompose) files under "#".
+ * letter files under its base letter. Digits, symbols, and other scripts file under "#".
  */
 function nameGroupOf(row: RowVm): string {
   const first = [...row.displayName.trim()][0] ?? '';
-  const folded = first.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase().charAt(0);
+  const upper = first.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase().charAt(0);
+  const folded = UNDECOMPOSED_LATIN[upper] ?? upper;
   return /^[A-Z]$/.test(folded) ? folded : OTHER_NAME_GROUP;
 }
 

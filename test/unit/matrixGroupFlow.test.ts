@@ -99,6 +99,14 @@ describe('the Group by control', () => {
     expect(posted).toEqual([]);
   });
 
+  it('falls back to one list for a grouping it does not know', () => {
+    send({ type: 'viewState', state: { filters: NO_FILTERS, groupBy: 'category' as MatrixGroupBy } });
+
+    expect(groupBySelect().value).toBe('none');
+    expect(headings()).toEqual([]);
+    expect(shownNames()).toEqual(['42 Snippets', 'Ägypten', 'Alpha', 'Beta', 'Gamma']);
+  });
+
   it('keeps focus on itself when the grouping changes', () => {
     groupBySelect().focus();
 
@@ -129,6 +137,16 @@ describe('focus in a grouped table', () => {
 
     expect(headings()).toEqual(['Contoso Ltd, 1 extension', 'fabrikam, 2 extensions', 'Unknown, 1 extension']);
     expect(document.activeElement).toBe(checkbox('Gamma', 'Work'));
+  });
+
+  it('moves to the nearest row in grouped order when a filter change empties the focused row’s group', () => {
+    chooseGroupBy('name');
+    nameOf('42 Snippets').focus();
+
+    send({ type: 'viewState', state: { filters: { ...NO_FILTERS, publishers: ['contoso', 'fabrikam', ''] }, groupBy: 'name' } });
+
+    expect(headings()).toEqual(['A, 2 extensions', 'B, 1 extension', 'G, 1 extension']);
+    expect(document.activeElement).toBe(nameOf('Gamma'));
   });
 
   it('moves to the nearest row in grouped order when a refresh empties the focused row’s group', () => {

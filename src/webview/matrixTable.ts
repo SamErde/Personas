@@ -4,7 +4,7 @@
 import type { InstallState, ReadOnlyReason, RowVm, ViewModel } from './render';
 import { focusKey } from './matrixFocus';
 import type { RowGroup } from './matrixGroups';
-import { el } from './ui';
+import { el, extensionCount } from './ui';
 
 export interface MatrixTableHooks {
   /** Returns the extension's icon, or a letter tile when it has none. */
@@ -107,9 +107,8 @@ function groupHeading(group: RowGroup, columnCount: number): HTMLTableRowElement
   const th = el('th', 'group-heading-cell') as HTMLTableCellElement;
   th.setAttribute('scope', 'rowgroup');
   th.colSpan = columnCount;
-  const count = group.rows.length;
   const label = el('span', 'group-label', group.label);
-  label.append(el('span', 'group-count', `, ${count} ${count === 1 ? 'extension' : 'extensions'}`));
+  label.append(el('span', 'group-count', `, ${extensionCount(group.rows.length)}`));
   th.append(label);
   tr.append(th);
   return tr;
