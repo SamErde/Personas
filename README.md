@@ -6,9 +6,9 @@ Easily manage your dev personas: the different Git identities, VS Code profiles,
 
 ## Features
 
-Personas puts all of your VS Code profiles and their extensions on one screen, the Extension Matrix, which opens from the **VS Code Profiles** section of the Personas Home sidebar. The matrix stays easy to use however many extensions you have. You can search, filter, and group it to find what you need, and every cell shows its state with a symbol as well as a color. Its toolbar matches VS Code's own controls in every theme, including high contrast. It works fully from the keyboard and with a screen reader, keeps your place when the matrix updates, and remembers your view for the rest of the session.
+Personas brings your VS Code profiles and their extensions together in one view. The Extension Matrix shows every profile side by side, so you can compare, install, and remove extensions without switching between them, and search, filter, or group the list to find what you need. Distinct cell symbols, controls that match VS Code in every theme (including high contrast), and full keyboard and screen reader support make it comfortable to use, and it holds your place and your view as you work. The Personas Home sidebar opens the matrix and also lists your PowerShell profile scripts, so you can open, create, or remove them in one place.
 
-- **Every profile in one place**: Each profile is a column and each extension is a row. Check or clear a cell to install or uninstall that extension in that profile, without switching profiles. Profiles appear in the same order on Home and in the matrix: Default first, then the Agents window profile if you have one, then the rest in natural order.
+- **Every profile in one place**: Each profile is a column and each extension is a row. Check or clear a cell to install or uninstall that extension in that profile. Profiles appear in the same order on Home and in the matrix: Default first, then the Agents window profile if you have one, then the rest in natural order.
 - **Find extensions fast**: Search by name, ID, or publisher, or show only the extensions applied to all profiles. **Filters** narrow the list by category, publisher, and install source (Marketplace, VSIX, Other, or Unknown). Each choice shows how many extensions it would match, and active filters appear as chips you can remove one at a time.
 - **Group by name or publisher**: Arrange rows under A–Z or publisher headings, each with its count.
 - **Readable at a glance**: Every cell state has its own symbol as well as its color (◆ applied to all profiles, ⤷ installed through Default, ✓ installed but locked, — not installed, ? unknown), and the **Legend** button explains them.
@@ -20,7 +20,7 @@ Personas puts all of your VS Code profiles and their extensions on one screen, t
 - **Current workspace status**: When a folder or workspace is open, a separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Select an `Enabled`, `Not enabled`, or `Workspace-local` cell to open the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including ones that exist only in the workspace. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Orphan cleanup**: Extension versions on disk that no profile references appear struck through under **All**. **Review N orphaned…** lists them with their size and last-modified date, and moves the ones you choose to the Trash or Recycle Bin.
-- **PowerShell profiles**: Home also lists your PowerShell profile scripts, so you can open, create, or remove them in one place. See [PowerShell profiles](#powershell-profiles).
+- **PowerShell profiles**: Your profile scripts are grouped by PowerShell edition and listed in the order PowerShell loads them. [More about PowerShell profiles](#powershell-profiles).
 - **Privacy**: Personas never collects or transmits any data.
 
 ## Requirements & Limitations
