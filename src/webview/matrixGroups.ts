@@ -47,7 +47,9 @@ function publisherGroups(rows: readonly RowVm[], publishers: readonly FacetOptio
     if (found) return optionName(found);
     return key === UNKNOWN_VALUE ? UNKNOWN_LABEL : key;
   };
-  const rank = (key: string) => options.get(key)?.index ?? publishers.length + Number(key === UNKNOWN_VALUE);
+  // Unknown ranks after everything, whatever its option's position.
+  const rank = (key: string) =>
+    key === UNKNOWN_VALUE ? publishers.length + 1 : (options.get(key)?.index ?? publishers.length);
   return collect(rows, (row) => row.publisher?.toLowerCase() ?? UNKNOWN_VALUE, label).sort(
     (a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key),
   );

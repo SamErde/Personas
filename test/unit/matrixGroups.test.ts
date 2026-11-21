@@ -144,7 +144,7 @@ describe('grouping by publisher', () => {
 
   it('labels a publisher no option names by its ID, after the named ones and before Unknown', () => {
     const rows = [row('Beta'), row('Alpha', 'Northwind'), row('Gamma', 'fabrikam'), row('Delta', 'adatum')];
-    expect(shape(groupRows(rows, 'publisher', [fabrikam]))).toEqual([
+    expect(shape(groupRows(rows, 'publisher', [fabrikam, unknown]))).toEqual([
       ['fabrikam', ['Gamma']],
       ['adatum', ['Delta']],
       ['northwind', ['Alpha']],
