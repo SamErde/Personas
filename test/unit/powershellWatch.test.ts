@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { affectsProfile, profileDependencies, profileWatchPlan } from '../../src/powershell/watch';
+import { affectsProfile, changedIdentities, pathIdentities, profileDependencies, profileWatchPlan } from '../../src/powershell/watch';
 import { symlinksAvailable } from './symlinkCapability';
 vi.mock('node:fs/promises', {spy:true});
 const roots:string[]=[];
@@ -60,4 +60,30 @@ it.skipIf(path.sep==='\\').each(['darwin','linux'])('matches case variants conse
   expect(affectsProfile(file.toUpperCase(),[file])).toBe(platform!=='linux');
   expect(affectsProfile(path.dirname(file).toUpperCase(),[file])).toBe(platform!=='linux');
   expect(affectsProfile(path.resolve('profiles','unrelated.ps1'),[file])).toBe(false);
+});
+
+it('fingerprints which object a path names, not its contents',async()=>{
+  const base=await root(), file=path.join(base,'profile.ps1'), missing=path.join(base,'missing.ps1');
+  await fs.writeFile(file,'one',{flag:'wx'});
+  const before=await pathIdentities([file,missing,file]);
+  expect([...before.keys()]).toEqual([file,missing]);
+  expect(before.get(missing)).toBe('missing');
+  await fs.appendFile(file,'two');
+  expect(changedIdentities(before,await pathIdentities([file,missing]))).toEqual([]);
+  await fs.rename(file,file+'.old'); await fs.writeFile(file,'replacement',{flag:'wx'}); await fs.writeFile(missing,'now here',{flag:'wx'});
+  expect(changedIdentities(before,await pathIdentities([file,missing])).sort()).toEqual([file,missing].sort());
+});
+
+it('reports only paths that both snapshots know',()=>{
+  const previous=new Map([['a','1'],['b','missing']]);
+  expect(changedIdentities(previous,new Map([['a','1'],['c','2']]))).toEqual([]);
+  expect(changedIdentities(previous,new Map([['a','missing'],['b','missing']]))).toEqual(['a']);
+});
+
+it.skipIf(!symlinksAvailable)('treats a retargeted link as a new identity even if its inode is reused',async()=>{
+  const base=await root(), link=path.join(base,'profile.ps1');
+  await fs.symlink('first.ps1',link);
+  const before=await pathIdentities([link]);
+  await fs.unlink(link); await fs.symlink('second.ps1',link);
+  expect(changedIdentities(before,await pathIdentities([link]))).toEqual([link]);
 });

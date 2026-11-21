@@ -50,12 +50,12 @@ afterEach(async()=>{
   mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;mock.commands.length=0;
   for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});
 });
-async function setup() {
+async function setup(reconcileMs=0) {
   const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'personas-events-')); roots.push(temporary);
   const root=await fs.realpath(temporary);
   const discover=vi.fn(async()=>[{edition:'PowerShell 7' as const,userDirectory:root,installations:[]}]);
   const service=new PowerShellService(discover,undefined,'linux');
-  const controller=new PowerShellController(()=>{},service);
+  const controller=new PowerShellController(()=>{},service,undefined,{reconcileMs});
   controllers.push(controller);
   return {root,discover,service,controller};
 }
@@ -163,6 +163,121 @@ it('reattaches watches when a profile directory is externally replaced at the sa
   await vi.waitFor(()=>expect(service.snapshot.rows.find(row=>row.host==='All Hosts')?.state).toBe('missing'),{timeout:3000});
 });
 
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+/** An active controller with the reconciliation backstop on and, unless `settle` is false, a recorded baseline. */
+async function reconciling(content?:string,{reconcileMs=40,settle=true}={}) {
+  const context=await setup(reconcileMs);
+  const file=path.join(context.root,'profile.ps1');
+  if(content!==undefined) await fs.writeFile(file,content,{flag:'wx'});
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  if(settle) await sleep(100);
+  context.discover.mockClear();
+  const state=()=>context.service.snapshot.rows.find(row=>row.host==='All Hosts')?.state;
+  return {...context,file,state};
+}
+
+it('reconciles directory replacement when every watcher event is dropped',async()=>{
+  const {root,file,state}=await reconciling('original');
+  const moved=root+'-moved'; roots.push(moved);
+  const original=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
+  expect(state()).toBe('existing');
+  // No watcher callback is ever invoked below: only the reconciliation backstop can notice.
+  await fs.rename(root,moved);
+  await vi.waitFor(()=>expect(state()).toBe('missing'),{timeout:3000});
+  await vi.waitFor(()=>expect(original.disposed).toBe(true)); // Re-planned after the state was published.
+  await fs.mkdir(root);
+  await fs.writeFile(file,'replacement',{flag:'wx'});
+  await vi.waitFor(()=>expect(state()).toBe('existing'),{timeout:3000});
+  await vi.waitFor(()=>expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true),{timeout:3000});
+});
+
+it('catches a change dropped before the first tick by checking the shown inventory',async()=>{
+  const {file,state}=await reconciling('original',{reconcileMs:200,settle:false});
+  expect(state()).toBe('existing');
+  await fs.unlink(file); // Before any baseline exists, and no watcher callback fires.
+  await vi.waitFor(()=>expect(state()).toBe('missing'),{timeout:3000});
+});
+
+it.skipIf(!symlinksAvailable)('catches a link target removed before the first tick',async()=>{
+  const context=await setup(200);
+  const target=path.join(context.root,'target.ps1');
+  await fs.writeFile(target,'original',{flag:'wx'});
+  await fs.symlink(target,path.join(context.root,'profile.ps1'));
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  const state=()=>context.service.snapshot.rows.find(row=>row.host==='All Hosts')?.state;
+  expect(state()).toBe('existing');
+  await fs.unlink(target); // The link itself is untouched, so its own identity does not change.
+  await vi.waitFor(()=>expect(state()).toBe('brokenLink'),{timeout:3000});
+});
+
+it('re-arms a watched directory replaced before the first tick while the profile still exists',async()=>{
+  const {root,file,state}=await reconciling('original',{reconcileMs:200,settle:false});
+  const moved=root+'-moved'; roots.push(moved);
+  const original=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
+  await fs.rename(root,moved); await fs.mkdir(root); await fs.writeFile(file,'replacement',{flag:'wx'});
+  expect(state()).toBe('existing'); // Shown state is still right, so only the directory identity can tell.
+  await vi.waitFor(()=>expect(original.disposed).toBe(true),{timeout:3000});
+  expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true);
+});
+
+/** A profile link to `first`, with `second` as another existing file and ticks driven by hand so their order is deterministic. */
+async function linkedProfile() {
+  const context=await setup(60_000);
+  const first=path.join(context.root,'first.ps1'), second=path.join(context.root,'second.ps1'), link=path.join(context.root,'profile.ps1');
+  await fs.writeFile(first,'one',{flag:'wx'}); await fs.writeFile(second,'two',{flag:'wx'}); await fs.symlink(first,link);
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  const internal=context.controller as unknown as {reconcile():Promise<void>; dependencies:string[]};
+  const row=()=>context.service.snapshot.rows.find(item=>item.host==='All Hosts');
+  const retarget=async()=>{await fs.unlink(link); await fs.symlink(second,link);}; // The new link may reuse the old inode.
+  return {first,second,internal,row,retarget};
+}
+
+it.skipIf(!symlinksAvailable)('checks the shown rows when a refresh adds dependencies that have no baseline',async()=>{
+  const {second,internal,row,retarget}=await linkedProfile();
+  await internal.reconcile(); // Baseline.
+  await retarget();
+  await internal.reconcile(); // The link's identity (including its text) changed: refresh, which adds `second`.
+  await vi.waitFor(()=>expect(internal.dependencies).toContain(second),{timeout:3000});
+  await fs.unlink(second); // Before any tick has a baseline for it, and no watcher callback fires.
+  await internal.reconcile();
+  await vi.waitFor(()=>expect(row()?.state).toBe('brokenLink'),{timeout:3000});
+});
+
+it.skipIf(!symlinksAvailable)('notices a link retargeted between existing files before the first tick',async()=>{
+  const {first,second,internal,row,retarget}=await linkedProfile();
+  expect(row()?.target).toBe(first);
+  await retarget(); // Both targets exist, so the state stays `existing`.
+  await internal.reconcile(); // First sample: no baseline yet, and no watcher callback fires.
+  await vi.waitFor(()=>expect(row()?.target).toBe(second),{timeout:3000});
+});
+
+it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
+  const intervals=vi.spyOn(globalThis,'setInterval');
+  const {file,controller,discover}=await reconciling();
+  controller.setActive(true);
+  expect(intervals).toHaveBeenCalledTimes(1);
+  controller.setActive(false);
+  await fs.writeFile(file,'created while hidden',{flag:'wx'});
+  await sleep(500);
+  expect(discover).not.toHaveBeenCalled();
+  controller.dispose();
+  controller.setActive(true);
+  expect(intervals).toHaveBeenCalledTimes(1); // A disposed controller never starts polling again.
+  await sleep(500);
+  expect(discover).not.toHaveBeenCalled();
+});
+
+it('ignores content-only edits that keep the same file identity',async()=>{
+  const {file,discover}=await reconciling('original');
+  await fs.appendFile(file,'# edited in place');
+  await sleep(500);
+  expect(discover).not.toHaveBeenCalled();
+});
+
+
 it('blocks deletion while a hard-linked alias of the profile has unsaved edits',async()=>{
   const {root,controller,service}=await setup();
   const file=path.join(root,'profile.ps1'), alias=path.join(root,'dotfiles.ps1'), unrelated=path.join(root,'unrelated.ps1');
@@ -183,7 +298,7 @@ it('blocks deletion while a hard-linked alias of the profile has unsaved edits',
 it('reveals the nearest existing folder when a missing profile has no folder yet',async()=>{
   const {root}=await setup();
   const service=new PowerShellService(async()=>[{edition:'PowerShell 7' as const,userDirectory:path.join(root,'absent','powershell'),installations:[]}],undefined,'linux');
-  const controller=new PowerShellController(()=>{},service);
+  const controller=new PowerShellController(()=>{},service,undefined,{reconcileMs:0});
   controllers.push(controller);
   await controller.refresh();
   const row=service.snapshot.rows.find(row=>row.host==='All Hosts')!;

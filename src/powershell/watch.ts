@@ -81,3 +81,26 @@ export function affectsProfile(changed: string, dependencies: readonly string[])
     return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep));
   });
 }
+
+/** Filesystem identity per path: which object a path names, not its contents.
+ * A content-only edit leaves this unchanged; replacement, removal, or creation changes it.
+ */
+export async function pathIdentities(paths: Iterable<string>): Promise<Map<string, string>> {
+  const identities = new Map<string, string>();
+  for (const file of new Set(paths)) {
+    try {
+      const stat = await fs.lstat(file, {bigint:true});
+      // A replaced link can reuse its inode (seen on Linux), so its text is part of its identity.
+      const link = stat.isSymbolicLink() ? ':' + await fs.readlink(file) : '';
+      identities.set(file, `${stat.dev}:${stat.ino}:${stat.mode}${link}`);
+    } catch {
+      identities.set(file, 'missing');
+    }
+  }
+  return identities;
+}
+
+/** Paths present in both snapshots whose identity differs. Paths only one snapshot knows have no baseline yet. */
+export function changedIdentities(previous: ReadonlyMap<string, string>, next: ReadonlyMap<string, string>): string[] {
+  return [...next].filter(([file, identity]) => previous.has(file) && previous.get(file) !== identity).map(([file]) => file);
+}
