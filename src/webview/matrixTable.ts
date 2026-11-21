@@ -130,7 +130,15 @@ function groupHeading(group: RowGroup, columnCount: number): HTMLTableRowElement
   const th = el('th', 'group-heading-cell') as HTMLTableCellElement;
   th.setAttribute('scope', 'rowgroup');
   th.colSpan = columnCount;
-  const label = el('span', 'group-label', group.label);
+  const label = el('span', 'group-label');
+  if (group.spokenLabel === undefined) {
+    label.append(group.label ?? '');
+  } else {
+    // The symbol stays on screen; a screen reader announces the spoken name instead.
+    const symbol = el('span', '', group.label);
+    symbol.setAttribute('aria-hidden', 'true');
+    label.append(symbol, el('span', 'sr-only', group.spokenLabel));
+  }
   label.append(el('span', 'group-count', `, ${extensionCount(group.rows.length)}`));
   th.append(label);
   tr.append(th);

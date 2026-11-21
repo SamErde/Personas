@@ -7,11 +7,16 @@ import { optionName, UNKNOWN_VALUE, type FacetOption, type RowVm } from './rende
 export interface RowGroup {
   key: string;
   label?: string;
+  /** What a screen reader announces in place of a label that is a symbol. */
+  spokenLabel?: string;
   rows: RowVm[];
 }
 
 /** The name group for every name that does not start with a Latin letter. */
 export const OTHER_NAME_GROUP = '#';
+
+/** The "#" group's spoken name. NVDA reads "#" as "number" at its default symbol level. */
+const OTHER_NAME_GROUP_SPOKEN = 'Other';
 
 const GROUPINGS: readonly MatrixGroupBy[] = ['none', 'name', 'publisher'];
 
@@ -32,7 +37,9 @@ export function groupRows(rows: readonly RowVm[], groupBy: MatrixGroupBy, publis
     case 'none':
       return [{ key: '', rows: [...rows] }];
     case 'name':
-      return collect(rows, nameGroupOf, (key) => key).sort((a, b) => nameRank(a.key) - nameRank(b.key));
+      return collect(rows, nameGroupOf, (key) => key)
+        .sort((a, b) => nameRank(a.key) - nameRank(b.key))
+        .map((group) => (group.key === OTHER_NAME_GROUP ? { ...group, spokenLabel: OTHER_NAME_GROUP_SPOKEN } : group));
     case 'publisher':
       return publisherGroups(rows, publishers);
   }

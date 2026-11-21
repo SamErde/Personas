@@ -27,7 +27,18 @@ const grouped: Inventory = {
 const groupBySelect = () => document.querySelector<HTMLSelectElement>('.toolbar select')!;
 const card = () => document.querySelector<HTMLElement>('.ext-card')!;
 const shownNames = () => [...table().querySelectorAll<HTMLElement>('tbody .name')].map((name) => name.textContent);
-const headings = () => [...table().querySelectorAll<HTMLElement>('tr.group-heading > th')].map((th) => th.textContent);
+/** Each heading's text with the parts matching `hidden` taken out. */
+function headingText(hidden: string): string[] {
+  return [...table().querySelectorAll<HTMLElement>('tr.group-heading > th')].map((th) => {
+    const copy = th.cloneNode(true) as HTMLElement;
+    for (const node of copy.querySelectorAll(hidden)) node.remove();
+    return copy.textContent ?? '';
+  });
+}
+/** What each heading shows on screen. */
+const headings = () => headingText('.sr-only');
+/** What a screen reader announces for each heading. */
+const spokenHeadings = () => headingText('[aria-hidden="true"]');
 
 /** The table shows one list: no headings, every row in name order. */
 function expectOneList(): void {
@@ -69,6 +80,7 @@ describe('the Group by control', () => {
     chooseGroupBy('name');
 
     expect(headings()).toEqual(['A, 2 extensions', 'B, 1 extension', 'G, 1 extension', '#, 1 extension']);
+    expect(spokenHeadings()).toEqual(['A, 2 extensions', 'B, 1 extension', 'G, 1 extension', 'Other, 1 extension']);
     expect(shownNames()).toEqual(['Ägypten', 'Alpha', 'Beta', 'Gamma', '42 Snippets']);
     expect(posted).toEqual([{ type: 'viewState', state: { filters: NO_FILTERS, groupBy: 'name' } }]);
   });
@@ -77,6 +89,7 @@ describe('the Group by control', () => {
     chooseGroupBy('publisher');
 
     expect(headings()).toEqual(['Contoso Ltd, 1 extension', 'fabrikam, 2 extensions', 'zeta, 1 extension', 'Unknown, 1 extension']);
+    expect(spokenHeadings()).toEqual(headings());
     expect(shownNames()).toEqual(['Alpha', 'Ägypten', 'Beta', '42 Snippets', 'Gamma']);
   });
 

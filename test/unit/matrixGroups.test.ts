@@ -89,6 +89,14 @@ describe('grouping by name', () => {
     ]);
   });
 
+  it('gives only the "#" group a spoken name, "Other"', () => {
+    const groups = groupRows([row('42 Snippets'), row('Beta')], 'name', []);
+    expect(groups.map((g) => [g.label, g.spokenLabel])).toEqual([
+      ['B', undefined],
+      ['#', 'Other'],
+    ]);
+  });
+
   it('ignores leading spaces and files a blank name under "#"', () => {
     const rows = [row('  zeta'), row('   ')];
     expect(shape(groupRows(rows, 'name', []))).toEqual([

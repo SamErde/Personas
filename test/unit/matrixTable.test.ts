@@ -311,6 +311,16 @@ describe('grouped rows', () => {
     ]);
   });
 
+  it("shows a group's symbol but announces its spoken name instead", () => {
+    const vm = buildViewModel(faceted, NO_FILTERS);
+    const table = renderMatrixTable(vm, hooks, [{ key: '#', label: '#', spokenLabel: 'Other', rows: vm.rows }]);
+    const [label] = [...table.querySelectorAll<HTMLElement>('.group-heading .group-label')];
+
+    expect(label!.querySelector('[aria-hidden="true"]')?.textContent).toBe('#');
+    expect(label!.querySelector('.sr-only')?.textContent).toBe('Other');
+    expect(label!.textContent).toBe('#Other, 3 extensions');
+  });
+
   it('span the workspace column too', () => {
     const table = renderGrouped(workspaceWith([]));
     expect(headings(table).map((th) => th.colSpan)).toEqual([5, 5, 5]);
