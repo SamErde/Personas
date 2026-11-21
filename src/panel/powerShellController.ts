@@ -99,13 +99,14 @@ export class PowerShellController implements vscode.Disposable {
     const generation = this.reconcileGeneration;
     const bases = [...this.watchers.keys()];
     const identities = await pathIdentities([...this.dependencies, ...bases]);
+    // The first sample has no baseline, so re-inspect the shown rows instead: a change made between the
+    // last refresh and this sample (including a link target's) must not become the baseline unnoticed.
+    const inventoryStale = this.identities ? false : await this.inventoryIsStale();
     // A tick that outlived a deactivate/reactivate cycle must not seed or act on the new cycle.
     if (!this.isReconcileCurrent(generation)) return;
     const previous = this.identities;
     this.identities = identities;
-    // The first sample has no baseline, so compare it with the shown inventory instead: a change made
-    // between the last refresh and this sample must not become the baseline unnoticed.
-    const changed = previous ? this.markReplacedBases(changedIdentities(previous, identities), bases) : this.contradictsInventory(identities);
+    const changed = previous ? this.markReplacedBases(changedIdentities(previous, identities), bases) : inventoryStale;
     if (changed) this.schedule();
   }
   private isReconcileCurrent(generation: number): boolean {
@@ -116,12 +117,11 @@ export class PowerShellController implements vscode.Disposable {
     for (const base of bases) if (changed.includes(base)) this.staleWatchRoots.add(base);
     return changed.length > 0;
   }
-  private contradictsInventory(identities: ReadonlyMap<string, string>): boolean {
-    return this.service.snapshot.rows.some(row => {
-      const identity = row.path ? identities.get(row.path) : undefined;
-      if (identity === undefined) return false;
-      return row.state === 'missing' ? identity !== 'missing' : row.state === 'existing' && identity === 'missing';
-    });
+  /** Whether any shown row's state differs from a fresh inspection, the same check the inventory itself uses. */
+  private async inventoryIsStale(): Promise<boolean> {
+    const rows = this.service.snapshot.rows;
+    const current = await Promise.all(rows.map(row => inspectProfile(row)));
+    return current.some((row, index) => row.state !== rows[index]?.state);
   }
   private async watch(): Promise<void> {
     if (!this.active || this.disposed) return;

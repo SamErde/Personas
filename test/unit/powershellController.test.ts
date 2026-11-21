@@ -199,6 +199,19 @@ it('catches a change dropped before the first tick by checking the shown invento
   await vi.waitFor(()=>expect(state()).toBe('missing'),{timeout:3000});
 });
 
+it.skipIf(!symlinksAvailable)('catches a link target removed before the first tick',async()=>{
+  const context=await setup(200);
+  const target=path.join(context.root,'target.ps1');
+  await fs.writeFile(target,'original',{flag:'wx'});
+  await fs.symlink(target,path.join(context.root,'profile.ps1'));
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  const state=()=>context.service.snapshot.rows.find(row=>row.host==='All Hosts')?.state;
+  expect(state()).toBe('existing');
+  await fs.unlink(target); // The link itself is untouched, so its own identity does not change.
+  await vi.waitFor(()=>expect(state()).toBe('brokenLink'),{timeout:3000});
+});
+
 it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
   const intervals=vi.spyOn(globalThis,'setInterval');
   const {file,controller,discover}=await reconciling();
