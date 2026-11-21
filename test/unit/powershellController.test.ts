@@ -50,12 +50,12 @@ afterEach(async()=>{
   mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;mock.commands.length=0;
   for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});
 });
-async function setup() {
+async function setup(reconcileMs=0) {
   const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'personas-events-')); roots.push(temporary);
   const root=await fs.realpath(temporary);
   const discover=vi.fn(async()=>[{edition:'PowerShell 7' as const,userDirectory:root,installations:[]}]);
   const service=new PowerShellService(discover,undefined,'linux');
-  const controller=new PowerShellController(()=>{},service);
+  const controller=new PowerShellController(()=>{},service,undefined,{reconcileMs});
   controllers.push(controller);
   return {root,discover,service,controller};
 }
@@ -163,6 +163,59 @@ it('reattaches watches when a profile directory is externally replaced at the sa
   await vi.waitFor(()=>expect(service.snapshot.rows.find(row=>row.host==='All Hosts')?.state).toBe('missing'),{timeout:3000});
 });
 
+it('reconciles directory replacement when every watcher event is dropped',async()=>{
+  const {root,controller,service}=await setup(40);
+  const file=path.join(root,'profile.ps1'), moved=root+'-moved';
+  roots.push(moved);
+  await fs.writeFile(file,'original',{flag:'wx'});
+  controller.setActive(true);
+  await controller.refresh();
+  const state=()=>service.snapshot.rows.find(row=>row.host==='All Hosts')?.state;
+  const original=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
+  expect(state()).toBe('existing');
+  await new Promise(resolve=>setTimeout(resolve,100)); // Let a tick record the baseline.
+  // No watcher callback is ever invoked below: only the reconciliation backstop can notice.
+  await fs.rename(root,moved);
+  await vi.waitFor(()=>expect(state()).toBe('missing'),{timeout:3000});
+  await vi.waitFor(()=>expect(original.disposed).toBe(true)); // Re-planned after the state was published.
+  await fs.mkdir(root);
+  await fs.writeFile(file,'replacement',{flag:'wx'});
+  await vi.waitFor(()=>expect(state()).toBe('existing'),{timeout:3000});
+  await vi.waitFor(()=>expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true),{timeout:3000});
+});
+
+it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
+  const {root,controller,discover}=await setup(40);
+  const file=path.join(root,'profile.ps1');
+  const intervals=vi.spyOn(globalThis,'setInterval');
+  controller.setActive(true); controller.setActive(true);
+  expect(intervals).toHaveBeenCalledTimes(1);
+  await controller.refresh();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  controller.setActive(false);
+  discover.mockClear();
+  await fs.writeFile(file,'created while hidden',{flag:'wx'});
+  await new Promise(resolve=>setTimeout(resolve,500));
+  expect(discover).not.toHaveBeenCalled();
+  controller.dispose();
+  controller.setActive(true);
+  await new Promise(resolve=>setTimeout(resolve,500));
+  expect(discover).not.toHaveBeenCalled();
+});
+
+it('ignores content-only edits that keep the same file identity',async()=>{
+  const {root,controller,discover}=await setup(40);
+  const file=path.join(root,'profile.ps1');
+  await fs.writeFile(file,'original',{flag:'wx'});
+  controller.setActive(true);
+  await controller.refresh();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  discover.mockClear();
+  await fs.appendFile(file,'# edited in place');
+  await new Promise(resolve=>setTimeout(resolve,500));
+  expect(discover).not.toHaveBeenCalled();
+});
+
 it('blocks deletion while a hard-linked alias of the profile has unsaved edits',async()=>{
   const {root,controller,service}=await setup();
   const file=path.join(root,'profile.ps1'), alias=path.join(root,'dotfiles.ps1'), unrelated=path.join(root,'unrelated.ps1');
@@ -183,7 +236,7 @@ it('blocks deletion while a hard-linked alias of the profile has unsaved edits',
 it('reveals the nearest existing folder when a missing profile has no folder yet',async()=>{
   const {root}=await setup();
   const service=new PowerShellService(async()=>[{edition:'PowerShell 7' as const,userDirectory:path.join(root,'absent','powershell'),installations:[]}],undefined,'linux');
-  const controller=new PowerShellController(()=>{},service);
+  const controller=new PowerShellController(()=>{},service,undefined,{reconcileMs:0});
   controllers.push(controller);
   await controller.refresh();
   const row=service.snapshot.rows.find(row=>row.host==='All Hosts')!;

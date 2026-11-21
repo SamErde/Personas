@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
-import { affectsProfile, profileWatchPlan } from '../powershell/watch';
+import { affectsProfile, changedIdentities, pathIdentities, profileWatchPlan } from '../powershell/watch';
 import * as path from 'node:path';
 import { PowerShellService } from '../powershell/service';
 import { createProfile, deleteProfile, inspectProfile, nearestExistingDirectory } from '../powershell/files';
 import type { HostToHome, HomeToHost } from '../protocol';
 
 const helpUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
+/** Watcher events are best effort; a dropped one must not leave the view stale (#136). */
+const defaultReconcileMs = 5000;
 export class PowerShellController implements vscode.Disposable {
 
   private watchers = new Map<string, vscode.FileSystemWatcher>();
@@ -17,12 +19,18 @@ export class PowerShellController implements vscode.Disposable {
   private disposed = false;
   private queue: Promise<void> = Promise.resolve();
   private readonly events: vscode.Disposable[];
+  private reconcileTimer?: NodeJS.Timeout;
+  private reconcileGeneration = 0;
+  private identities?: Map<string, string>;
+  private readonly reconcileMs: number;
   constructor(
     private readonly post: (message: HostToHome) => void,
     private readonly service = new PowerShellService(),
     private readonly confirmCreate: (file: string) => Promise<boolean> = async file =>
       await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
+    options: {reconcileMs?: number} = {},
   ) {
+    this.reconcileMs = options.reconcileMs ?? defaultReconcileMs;
     this.events = [
       vscode.workspace.onDidSaveTextDocument(document => this.changed([document.uri])),
       vscode.workspace.onDidCreateFiles(event => this.changed(event.files, true)),
@@ -49,8 +57,11 @@ export class PowerShellController implements vscode.Disposable {
     return this.queue;
   }
   setActive(active: boolean): void {
+    const activated = active && !this.active;
     this.active = active;
+    if (activated) this.startReconcile();
     if (!active) {
+      this.stopReconcile();
       clearTimeout(this.timer);
       for (const watcher of this.watchers.values()) watcher.dispose();
       this.watchers.clear();
@@ -72,6 +83,31 @@ export class PowerShellController implements vscode.Disposable {
     this.timer = setTimeout(() => {
       if (this.active && !this.disposed) void this.refresh(true);
     }, 300);
+  }
+  private startReconcile(): void {
+    this.stopReconcile();
+    if (this.reconcileMs > 0) this.reconcileTimer = setInterval(() => void this.reconcile(), this.reconcileMs);
+  }
+  private stopReconcile(): void {
+    clearInterval(this.reconcileTimer);
+    this.reconcileTimer = undefined;
+    this.reconcileGeneration++;
+    this.identities = undefined;
+  }
+  /** Backstop for dropped watcher events: refresh when a dependency or watched directory is replaced, removed, or created. */
+  private async reconcile(): Promise<void> {
+    const generation = this.reconcileGeneration;
+    const bases = [...this.watchers.keys()];
+    const identities = await pathIdentities([...this.dependencies, ...bases]);
+    // A tick that outlived a deactivate/reactivate cycle must not seed or act on the new cycle.
+    if (generation !== this.reconcileGeneration || !this.active || this.disposed) return;
+    const previous = this.identities;
+    this.identities = identities;
+    const changed = previous ? changedIdentities(previous, identities) : [];
+    if (!changed.length) return;
+    // A replaced or removed watched directory needs a fresh watch, as a structural event would cause.
+    for (const base of bases) if (changed.includes(base)) this.staleWatchRoots.add(base);
+    this.schedule();
   }
   private async watch(): Promise<void> {
     if (!this.active || this.disposed) return;
@@ -157,6 +193,7 @@ export class PowerShellController implements vscode.Disposable {
   }
   dispose(): void {
     this.disposed = true;
+    this.stopReconcile();
     clearTimeout(this.timer);
     for (const item of [...this.watchers.values(), ...this.events]) item.dispose();
   }
