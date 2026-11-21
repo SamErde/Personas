@@ -205,7 +205,6 @@ export function buildViewModel(
     const publisherDisplayName = extension?.publisherDisplayName;
     const values = dimensionValues(extension, publisher);
     const matchesViewAndText =
-      (filters.view !== 'orphaned' || (profileBacked && orphaned)) &&
       (filters.view !== 'appliedToAllProfiles' || (profileBacked && applyToAllProfiles)) &&
       (!text || [id, displayName, publisher, publisherDisplayName].some((value) => value?.toLowerCase().includes(text)));
     candidates.push({ values, matchesViewAndText, ...(publisherDisplayName ? { publisherDisplayName } : {}) });

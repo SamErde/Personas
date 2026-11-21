@@ -12,8 +12,9 @@ import type {
 
 // --- Extension Matrix ---
 
-/** A view is a lens on the whole list rather than an attribute, so exactly one is selected. */
-export type MatrixView = 'all' | 'orphaned' | 'appliedToAllProfiles';
+/** A view is a lens on the whole list rather than an attribute, so exactly one is selected. Orphans
+ * have no view of their own: the matrix offers to review them whenever there are any. */
+export type MatrixView = 'all' | 'appliedToAllProfiles';
 
 /** The filters that narrow by any of several values. */
 export type FilterDimension = 'categories' | 'publishers' | 'sources';

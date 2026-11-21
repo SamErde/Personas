@@ -38,9 +38,15 @@ afterEach(() => {
 });
 
 describe('view chips', () => {
+  it('are All and Applied to all profiles, in a group named View', () => {
+    const group = document.querySelector<HTMLElement>('.toolbar [role="group"][aria-label="View"]');
+    expect(group).not.toBeNull();
+    expect([...group!.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['All', 'Applied to all profiles']);
+  });
+
   it('tell assistive technology which view is selected', () => {
     expect(viewChip('All').getAttribute('aria-pressed')).toBe('true');
-    expect(viewChip('Orphaned').getAttribute('aria-pressed')).toBe('false');
+    expect(viewChip('Applied to all profiles').getAttribute('aria-pressed')).toBe('false');
 
     viewChip('Applied to all profiles').click();
 
@@ -83,7 +89,7 @@ describe('result announcement', () => {
   });
 
   it('stays quiet when the host refreshes the list', () => {
-    viewChip('Orphaned').click();
+    viewChip('Applied to all profiles').click();
     viewChip('All').click();
     const before = announcement();
 
@@ -95,18 +101,18 @@ describe('result announcement', () => {
 
 describe('view state kept by the host', () => {
   it('is sent to the host when the view changes, and on every keystroke so a quick close keeps the text', () => {
-    viewChip('Orphaned').click();
+    viewChip('Applied to all profiles').click();
     type('Be');
 
     expect(posted).toEqual([
-      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned' }, groupBy: 'none' } },
-      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'Be' }, groupBy: 'none' } },
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles' }, groupBy: 'none' } },
+      { type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles', text: 'Be' }, groupBy: 'none' } },
     ]);
   });
 
   it('is not sent again by a typing pause that a view change already applied', () => {
     type('Be');
-    viewChip('Orphaned').click();
+    viewChip('Applied to all profiles').click();
     posted.length = 0;
 
     vi.advanceTimersByTime(300);
@@ -126,7 +132,7 @@ describe('view state kept by the host', () => {
 
 // --- Category, publisher, and source filters ----------------------------------------------------
 
-const filtersButton = () => document.querySelector<HTMLButtonElement>('.toolbar button[aria-controls]')!;
+const filtersButton = () => document.querySelector<HTMLButtonElement>('.toolbar button[aria-controls="matrix-filters"]')!;
 const filterPanel = () => document.getElementById(filtersButton().getAttribute('aria-controls')!)!;
 const chipRow = () => document.querySelector<HTMLElement>('.filter-chips')!;
 const chipButtons = () => [...chipRow().querySelectorAll<HTMLButtonElement>('button')];
@@ -300,14 +306,14 @@ describe('active-filter chips', () => {
   it('are all cleared by Clear all filters, which keeps the view and the text and focuses the Filters button', () => {
     send({
       type: 'viewState',
-      state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a', categories: ['Linters'], sources: ['vsix'] }, groupBy: 'none' },
+      state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles', text: 'a', categories: ['Linters'], sources: ['vsix'] }, groupBy: 'none' },
     });
 
     press(chip('Clear all filters'));
 
-    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'orphaned', text: 'a' }, groupBy: 'none' } }]);
+    expect(posted).toEqual([{ type: 'viewState', state: { filters: { ...NO_FILTERS, view: 'appliedToAllProfiles', text: 'a' }, groupBy: 'none' } }]);
     expect(chipRow().hidden).toBe(true);
     expect(document.activeElement).toBe(filtersButton());
-    expect(announcement()).toBe('0 of 3 extensions');
+    expect(announcement()).toBe('1 of 3 extensions');
   });
 });
