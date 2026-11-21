@@ -77,6 +77,19 @@ describe('the Legend disclosure', () => {
     expect(shown()).toBe(false);
   });
 
+  it('follows the workspace while the orphan cleanup view is open', () => {
+    const workspaceGroupHidden = () =>
+      legendPanel().querySelector('[aria-label="Current workspace extension status legend"]')!.closest('[hidden]') !== null;
+    legendButton().click();
+    send({ type: 'orphans', orphans: [] });
+
+    send({ type: 'inventory', inventory: inv, workspace: openFolder, icons: {} });
+    expect(workspaceGroupHidden()).toBe(false);
+
+    send({ type: 'inventory', inventory: inv, icons: {} });
+    expect(workspaceGroupHidden()).toBe(true);
+  });
+
   it('stays open while the host refreshes the matrix', () => {
     legendButton().click();
     send({ type: 'inventory', inventory: inv, icons: {} });

@@ -470,6 +470,8 @@ window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
     case 'inventory':
       inventory = m.inventory;
       workspace = m.workspace;
+      // Here rather than in buildContent, which skips the matrix while the cleanup view is open.
+      legend.update(workspace !== undefined);
       icons = m.icons;
       pending = new Set();
       localPending = new Set();
@@ -646,7 +648,6 @@ function buildContent(): void {
     banner = '';
   }
 
-  legend.update(vm.workspace !== undefined);
   contentEl.append(
     renderMatrixTable(vm, {
       icon: extIcon,
