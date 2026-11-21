@@ -2,6 +2,24 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.4.0](https://github.com/SamErde/Personas/compare/v1.3.0...v1.4.0) (2026-11-21)
+
+
+### Features
+
+* accessible Extension Matrix cells with distinct states ([#131](https://github.com/SamErde/Personas/issues/131)) ([fcd68f4](https://github.com/SamErde/Personas/commit/fcd68f4c0d38c94b078cf53a8542cf3592664810))
+* add categories and install sources to extension records ([#130](https://github.com/SamErde/Personas/issues/130)) ([f89ea31](https://github.com/SamErde/Personas/commit/f89ea316e96e631399b20f68f8c84ca209178f4a))
+* category, publisher, and source filters for the Extension Matrix ([#137](https://github.com/SamErde/Personas/issues/137)) ([4deccd3](https://github.com/SamErde/Personas/commit/4deccd36d43290ebbbfecb3ba1f4a21b25cca75c))
+* Extension Matrix filter model, publisher search, and session view state ([#135](https://github.com/SamErde/Personas/issues/135)) ([5b8812c](https://github.com/SamErde/Personas/commit/5b8812cfe845ee1a38df3dd816468c332da64f2e))
+* group the Extension Matrix by name or publisher ([#138](https://github.com/SamErde/Personas/issues/138)) ([278080b](https://github.com/SamErde/Personas/commit/278080b82c5d35d6fcd91fb6822abba9b003ca30))
+* keep keyboard focus through Extension Matrix rebuilds ([#134](https://github.com/SamErde/Personas/issues/134)) ([2033a6b](https://github.com/SamErde/Personas/commit/2033a6b0cab726ea85086bb08a230e65a09d6410))
+* shared profile order and Home's VS Code Profiles section ([#132](https://github.com/SamErde/Personas/issues/132)) ([ec1fb02](https://github.com/SamErde/Personas/commit/ec1fb022ccfd4f00713b5ed13b9c60756d1146e6))
+
+
+### Bug Fixes
+
+* reconcile PowerShell profile state when a watcher event is dropped ([#139](https://github.com/SamErde/Personas/issues/139)) ([bad70fa](https://github.com/SamErde/Personas/commit/bad70fab2a80b4dc8a121621484fe65ab3910ee8))
+
 ## [1.3.0](https://github.com/SamErde/Personas/compare/v1.2.0...v1.3.0) (2026-11-15)
 
 
