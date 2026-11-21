@@ -104,15 +104,32 @@ $Vsix = Get-ChildItem -LiteralPath .\releases -Filter 'personas-*.vsix' |
 
 Run **Developer: Reload Window** in the sandbox after reinstalling.
 
-To install or launch Personas in a particular disposable profile, add `--profile`:
+### Sandbox profiles
+
+Create sandbox profiles in the sandbox window's Profiles editor.
+
+Opening the sandbox with `--profile` and a name that does not exist yet can also create a profile,
+but only when no sandbox window is open, so it creates at most one profile per launch. In testing
+on Windows with VS Code 1.147.0, a `--profile` launch made while a sandbox window was already open
+created no profile, and later `--install-extension --profile` calls failed with
+`Profile '<name>' not found`. Whether other platforms or versions behave the same way is not
+verified.
+
+Before installing into a profile, check that the command line can see it:
+
+```powershell
+& code @CodeArgs --profile 'Personas Test' --list-extensions
+```
+
+If the command reports that the profile is not found, create it in the Profiles editor first. Then
+install or launch Personas in that profile:
 
 ```powershell
 & code @CodeArgs --profile 'Personas Test' --install-extension $Vsix.FullName --force
 & code @CodeArgs --profile 'Personas Test' --new-window $WorkspacePath
 ```
 
-VS Code creates a named profile when a workspace is opened with a profile name that does not yet
-exist. All `code` commands used for the sandbox must retain the same `--user-data-dir` and
+All `code` commands used for the sandbox must retain the same `--user-data-dir` and
 `--extensions-dir` values.
 
 ## Repeatable UI iteration
@@ -190,8 +207,9 @@ $FixtureVsix = (Resolve-Path '.\test\fixtures\hello-ext\fixture.vsix').Path
 & code @CodeArgs --install-extension $FixtureVsix --force
 ```
 
-Create additional profiles through the VS Code Profiles UI or the `--profile` option. Keep every
-test command pointed at the disposable user-data and extension directories.
+Create additional profiles in the sandbox's Profiles editor, as described in
+[Sandbox profiles](#sandbox-profiles). Keep every test command pointed at the disposable user-data
+and extension directories.
 
 ## Local package versus published package
 
