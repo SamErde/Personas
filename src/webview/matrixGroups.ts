@@ -1,6 +1,6 @@
 // Groups the Extension Matrix's rows for the Group by control. Grouping only arranges the rows the
 // filters already chose, so it changes neither which rows show nor any count.
-import type { MatrixGroupBy } from '../protocol';
+import { MATRIX_GROUPINGS, type MatrixGroupBy } from '../protocol';
 import { optionName, UNKNOWN_VALUE, type FacetOption, type RowVm } from './render';
 
 /** One table body's rows. A group without a label renders without a heading row. */
@@ -18,11 +18,9 @@ export const OTHER_NAME_GROUP = '#';
 /** The "#" group's spoken name. NVDA reads "#" as "number" at its default symbol level. */
 const OTHER_NAME_GROUP_SPOKEN = 'Other';
 
-const GROUPINGS: readonly MatrixGroupBy[] = ['none', 'name', 'publisher'];
-
 /** True for a grouping the matrix knows, so a stale or unexpected value can fall back to none. */
 export function isMatrixGroupBy(value: unknown): value is MatrixGroupBy {
-  return GROUPINGS.includes(value as MatrixGroupBy);
+  return (MATRIX_GROUPINGS as readonly unknown[]).includes(value);
 }
 
 const UNKNOWN_LABEL = 'Unknown';
