@@ -222,6 +222,23 @@ it('re-arms a watched directory replaced before the first tick while the profile
   expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true);
 });
 
+it.skipIf(!symlinksAvailable)('checks the shown rows when a refresh adds dependencies that have no baseline',async()=>{
+  const context=await setup(60_000); // Ticks are driven by hand below, so their order is deterministic.
+  const first=path.join(context.root,'first.ps1'), second=path.join(context.root,'second.ps1'), link=path.join(context.root,'profile.ps1');
+  await fs.writeFile(first,'one',{flag:'wx'}); await fs.writeFile(second,'two',{flag:'wx'}); await fs.symlink(first,link);
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  const internal=context.controller as unknown as {reconcile():Promise<void>; dependencies:string[]};
+  const row=()=>context.service.snapshot.rows.find(item=>item.host==='All Hosts');
+  await internal.reconcile(); // Baseline.
+  await fs.unlink(link); await fs.symlink(second,link);
+  await internal.reconcile(); // The link's own identity changed: refresh, which adds `second` as a dependency.
+  await vi.waitFor(()=>expect(internal.dependencies).toContain(second),{timeout:3000});
+  await fs.unlink(second); // Before any tick has a baseline for it, and no watcher callback fires.
+  await internal.reconcile();
+  await vi.waitFor(()=>expect(row()?.state).toBe('brokenLink'),{timeout:3000});
+});
+
 it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
   const intervals=vi.spyOn(globalThis,'setInterval');
   const {file,controller,discover}=await reconciling();

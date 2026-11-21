@@ -101,16 +101,21 @@ export class PowerShellController implements vscode.Disposable {
     const generation = this.reconcileGeneration;
     const bases = [...this.watchers.keys()];
     const identities = await pathIdentities([...this.dependencies, ...bases]);
-    // The first sample has no baseline, so re-inspect the shown rows instead: a change made between the
-    // last refresh and this sample (including a link target's) must not become the baseline unnoticed.
-    const inventoryStale = this.identities ? false : await this.inventoryIsStale();
+    // Paths without a baseline (the first sample, or dependencies a refresh just added such as a new link
+    // target) are checked by re-inspecting the shown rows: a change made between that refresh and this
+    // sample must not become the baseline unnoticed.
+    const inventoryStale = this.lacksBaseline(identities) ? await this.inventoryIsStale() : false;
     // A tick that outlived a deactivate/reactivate cycle must not seed or act on the new cycle.
     if (!this.isReconcileCurrent(generation)) return;
     const previous = this.identities;
     this.identities = identities;
-    const changed = previous ? changedIdentities(previous, identities).length > 0 : inventoryStale;
+    const changed = inventoryStale || (previous !== undefined && changedIdentities(previous, identities).length > 0);
     const replaced = this.markReplacedBases(identities);
     if (changed || replaced) this.schedule();
+  }
+  private lacksBaseline(identities: ReadonlyMap<string, string>): boolean {
+    const baseline = this.identities;
+    return !baseline || [...identities.keys()].some(file => !baseline.has(file));
   }
   private isReconcileCurrent(generation: number): boolean {
     return generation === this.reconcileGeneration && this.active && !this.disposed;
