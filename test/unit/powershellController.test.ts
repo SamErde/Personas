@@ -212,6 +212,16 @@ it.skipIf(!symlinksAvailable)('catches a link target removed before the first ti
   await vi.waitFor(()=>expect(state()).toBe('brokenLink'),{timeout:3000});
 });
 
+it('re-arms a watched directory replaced before the first tick while the profile still exists',async()=>{
+  const {root,file,state}=await reconciling('original',{reconcileMs:200,settle:false});
+  const moved=root+'-moved'; roots.push(moved);
+  const original=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
+  await fs.rename(root,moved); await fs.mkdir(root); await fs.writeFile(file,'replacement',{flag:'wx'});
+  expect(state()).toBe('existing'); // Shown state is still right, so only the directory identity can tell.
+  await vi.waitFor(()=>expect(original.disposed).toBe(true),{timeout:3000});
+  expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true);
+});
+
 it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
   const intervals=vi.spyOn(globalThis,'setInterval');
   const {file,controller,discover}=await reconciling();

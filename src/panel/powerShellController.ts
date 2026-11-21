@@ -22,6 +22,7 @@ export class PowerShellController implements vscode.Disposable {
   private reconcileTimer?: NodeJS.Timeout;
   private reconcileGeneration = 0;
   private identities?: Map<string, string>;
+  private readonly armedIdentities = new Map<string, string>();
   private readonly reconcileMs: number;
   constructor(
     private readonly post: (message: HostToHome) => void,
@@ -65,6 +66,7 @@ export class PowerShellController implements vscode.Disposable {
       clearTimeout(this.timer);
       for (const watcher of this.watchers.values()) watcher.dispose();
       this.watchers.clear();
+      this.armedIdentities.clear();
       this.staleWatchRoots.clear();
     }
   }
@@ -106,16 +108,24 @@ export class PowerShellController implements vscode.Disposable {
     if (!this.isReconcileCurrent(generation)) return;
     const previous = this.identities;
     this.identities = identities;
-    const changed = previous ? this.markReplacedBases(changedIdentities(previous, identities), bases) : inventoryStale;
-    if (changed) this.schedule();
+    const changed = previous ? changedIdentities(previous, identities).length > 0 : inventoryStale;
+    const replaced = this.markReplacedBases(identities);
+    if (changed || replaced) this.schedule();
   }
   private isReconcileCurrent(generation: number): boolean {
     return generation === this.reconcileGeneration && this.active && !this.disposed;
   }
-  /** A replaced or removed watched directory needs a fresh watch, as a structural event would cause. */
-  private markReplacedBases(changed: readonly string[], bases: readonly string[]): boolean {
-    for (const base of bases) if (changed.includes(base)) this.staleWatchRoots.add(base);
-    return changed.length > 0;
+  /** A watched directory replaced or removed since its watch was attached needs a fresh watch, as a structural event would cause. */
+  private markReplacedBases(identities: ReadonlyMap<string, string>): boolean {
+    let replaced = false;
+    for (const [base, armed] of this.armedIdentities) {
+      const identity = identities.get(base);
+      // Already marked: its refresh is pending, and re-scheduling would keep pushing that refresh back.
+      if (identity === undefined || identity === armed || this.staleWatchRoots.has(base)) continue;
+      this.staleWatchRoots.add(base);
+      replaced = true;
+    }
+    return replaced;
   }
   /** Whether any shown row's state differs from a fresh inspection, the same check the inventory itself uses. */
   private async inventoryIsStale(): Promise<boolean> {
@@ -127,6 +137,8 @@ export class PowerShellController implements vscode.Disposable {
     if (!this.active || this.disposed) return;
     const files = this.service.snapshot.rows.flatMap(row => row.path ? [row.path] : []);
     const plan = await profileWatchPlan(files);
+    // Taken before attaching, so a replacement racing the attach reads as changed rather than adopted.
+    const armed = await pathIdentities(plan.directories);
     if (!this.active || this.disposed) return;
     this.dependencies = plan.paths;
     const bases = new Set(plan.directories);
@@ -134,11 +146,13 @@ export class PowerShellController implements vscode.Disposable {
       if (!bases.has(base) || this.staleWatchRoots.has(base)) {
         watcher.dispose();
         this.watchers.delete(base);
+        this.armedIdentities.delete(base);
       }
     }
     this.staleWatchRoots.clear();
     for (const base of plan.directories) {
       if (this.watchers.has(base)) continue;
+      this.armedIdentities.set(base, armed.get(base) ?? 'missing');
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), '*'));
       watcher.onDidCreate(uri => this.changed([uri], true));
       watcher.onDidChange(uri => this.changed([uri]));
