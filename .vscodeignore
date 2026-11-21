@@ -22,3 +22,4 @@ vitest.config.*
 # Sourcemaps stay in local and test builds for debugging; nothing in the
 # installed extension uses them, so they only add VSIX size.
 dist/**/*.map
+.claude/
