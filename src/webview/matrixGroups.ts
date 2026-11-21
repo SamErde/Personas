@@ -59,12 +59,15 @@ const UNDECOMPOSED_LATIN: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /**
- * A name's group: the letter it starts with, with diacritics folded away so an accented Latin
- * letter files under its base letter. Digits, symbols, and other scripts file under "#".
+ * A name's group: the letter it starts with, folded with NFKD so an accented Latin letter and a
+ * compatibility form (fullwidth Ａ, the ǆ digraph, mathematical 𝐀) file under its base letter.
+ * Only a letter can file under a letter: a symbol that NFKD would turn into one (™, Ⓐ) stays in
+ * "#", with digits, other symbols, and other scripts.
  */
 function nameGroupOf(row: RowVm): string {
   const first = [...row.displayName.trim()][0] ?? '';
-  const upper = first.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase().charAt(0);
+  if (!/^\p{L}$/u.test(first)) return OTHER_NAME_GROUP;
+  const upper = first.normalize('NFKD').replace(/\p{M}/gu, '').toUpperCase().charAt(0);
   const folded = UNDECOMPOSED_LATIN[upper] ?? upper;
   return /^[A-Z]$/.test(folded) ? folded : OTHER_NAME_GROUP;
 }

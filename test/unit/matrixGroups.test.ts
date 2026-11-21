@@ -65,6 +65,22 @@ describe('grouping by name', () => {
     ]);
   });
 
+  it('folds compatibility forms of Latin letters to their base letter', () => {
+    const rows = [row('Ａbc'), row('ǆungla'), row('𝐀lpha')];
+    expect(shape(groupRows(rows, 'name', []))).toEqual([
+      ['A', ['Ａbc', '𝐀lpha']],
+      ['D', ['ǆungla']],
+    ]);
+  });
+
+  it('files symbols under "#", even those that fold to a letter', () => {
+    const rows = [row('™ Tools'), row('Ⓐ Circle'), row('Zed')];
+    expect(shape(groupRows(rows, 'name', []))).toEqual([
+      ['Z', ['Zed']],
+      ['#', ['™ Tools', 'Ⓐ Circle']],
+    ]);
+  });
+
   it('files names in non-Latin scripts under "#"', () => {
     const rows = [row('日本語 Language Pack'), row('Ελληνικά'), row('Кириллица'), row('Beta')];
     expect(shape(groupRows(rows, 'name', []))).toEqual([
