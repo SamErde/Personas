@@ -49,8 +49,11 @@ body {
 }
 .filter-group legend { padding: 0 0.25rem; font-weight: 600; }
 .filter-search { width: 100%; box-sizing: border-box; margin: 0.2rem 0 0.4rem; }
-/* A long list scrolls inside its group instead of pushing the matrix down. */
-.filter-options { max-height: 12rem; overflow-y: auto; }
+/* A long list scrolls inside its group instead of pushing the matrix down. The list reaches into the
+ * group's right padding (0.6rem, on .filter-group) and pads itself back by the same amount: with no
+ * scroll bar nothing moves, and with one the bar sits at the group's edge, so the counts keep the
+ * same gap from it that they keep from the border in a list that does not scroll. */
+.filter-options { max-height: 12rem; overflow-y: auto; margin-right: -0.6rem; padding-right: 0.6rem; }
 .filter-option { display: flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0; cursor: pointer; }
 .filter-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filter-detail, .filter-count, .filter-empty { color: var(--vscode-descriptionForeground); font-size: 0.85em; }

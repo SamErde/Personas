@@ -58,7 +58,8 @@ let filterTimer: ReturnType<typeof setTimeout> | undefined;
 
 const filterInput = document.createElement('input');
 filterInput.type = 'search';
-filterInput.placeholder = 'Filter by name, ID, or publisher…';
+// Short enough for the box's default width; the accessible name below gives the full description.
+filterInput.placeholder = 'Filter extensions…';
 filterInput.setAttribute('aria-label', 'Filter extensions by name, ID, or publisher');
 filterInput.addEventListener('input', () => {
   // The text is kept, and given to the host, at once, so a rebuild for a host message uses it and
