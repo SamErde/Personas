@@ -103,11 +103,24 @@ export class PowerShellController implements vscode.Disposable {
     if (generation !== this.reconcileGeneration || !this.active || this.disposed) return;
     const previous = this.identities;
     this.identities = identities;
-    const changed = previous ? changedIdentities(previous, identities) : [];
+    // The first sample has no baseline, so compare it with the shown inventory instead: a change made
+    // between the last refresh and this sample must not become the baseline unnoticed.
+    if (!previous) {
+      if (this.contradictsInventory(identities)) this.schedule();
+      return;
+    }
+    const changed = changedIdentities(previous, identities);
     if (!changed.length) return;
     // A replaced or removed watched directory needs a fresh watch, as a structural event would cause.
     for (const base of bases) if (changed.includes(base)) this.staleWatchRoots.add(base);
     this.schedule();
+  }
+  private contradictsInventory(identities: ReadonlyMap<string, string>): boolean {
+    return this.service.snapshot.rows.some(row => {
+      const identity = row.path ? identities.get(row.path) : undefined;
+      if (identity === undefined) return false;
+      return row.state === 'missing' ? identity !== 'missing' : row.state === 'existing' && identity === 'missing';
+    });
   }
   private async watch(): Promise<void> {
     if (!this.active || this.disposed) return;

@@ -163,17 +163,25 @@ it('reattaches watches when a profile directory is externally replaced at the sa
   await vi.waitFor(()=>expect(service.snapshot.rows.find(row=>row.host==='All Hosts')?.state).toBe('missing'),{timeout:3000});
 });
 
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+/** An active controller with the reconciliation backstop on and, unless `settle` is false, a recorded baseline. */
+async function reconciling(content?:string,{reconcileMs=40,settle=true}={}) {
+  const context=await setup(reconcileMs);
+  const file=path.join(context.root,'profile.ps1');
+  if(content!==undefined) await fs.writeFile(file,content,{flag:'wx'});
+  context.controller.setActive(true);
+  await context.controller.refresh();
+  if(settle) await sleep(100);
+  context.discover.mockClear();
+  const state=()=>context.service.snapshot.rows.find(row=>row.host==='All Hosts')?.state;
+  return {...context,file,state};
+}
+
 it('reconciles directory replacement when every watcher event is dropped',async()=>{
-  const {root,controller,service}=await setup(40);
-  const file=path.join(root,'profile.ps1'), moved=root+'-moved';
-  roots.push(moved);
-  await fs.writeFile(file,'original',{flag:'wx'});
-  controller.setActive(true);
-  await controller.refresh();
-  const state=()=>service.snapshot.rows.find(row=>row.host==='All Hosts')?.state;
+  const {root,file,state}=await reconciling('original');
+  const moved=root+'-moved'; roots.push(moved);
   const original=mock.watchers.find(w=>!w.disposed && w.pattern.baseUri.fsPath===root);
   expect(state()).toBe('existing');
-  await new Promise(resolve=>setTimeout(resolve,100)); // Let a tick record the baseline.
   // No watcher callback is ever invoked below: only the reconciliation backstop can notice.
   await fs.rename(root,moved);
   await vi.waitFor(()=>expect(state()).toBe('missing'),{timeout:3000});
@@ -184,37 +192,35 @@ it('reconciles directory replacement when every watcher event is dropped',async(
   await vi.waitFor(()=>expect(mock.watchers.some(w=>!w.disposed && w.pattern.baseUri.fsPath===root)).toBe(true),{timeout:3000});
 });
 
+it('catches a change dropped before the first tick by checking the shown inventory',async()=>{
+  const {file,state}=await reconciling('original',{reconcileMs:200,settle:false});
+  expect(state()).toBe('existing');
+  await fs.unlink(file); // Before any baseline exists, and no watcher callback fires.
+  await vi.waitFor(()=>expect(state()).toBe('missing'),{timeout:3000});
+});
+
 it('reconciles only while active, with one timer however often Home reports visibility',async()=>{
-  const {root,controller,discover}=await setup(40);
-  const file=path.join(root,'profile.ps1');
   const intervals=vi.spyOn(globalThis,'setInterval');
-  controller.setActive(true); controller.setActive(true);
+  const {file,controller,discover}=await reconciling();
+  controller.setActive(true);
   expect(intervals).toHaveBeenCalledTimes(1);
-  await controller.refresh();
-  await new Promise(resolve=>setTimeout(resolve,100));
   controller.setActive(false);
-  discover.mockClear();
   await fs.writeFile(file,'created while hidden',{flag:'wx'});
-  await new Promise(resolve=>setTimeout(resolve,500));
+  await sleep(500);
   expect(discover).not.toHaveBeenCalled();
   controller.dispose();
   controller.setActive(true);
-  await new Promise(resolve=>setTimeout(resolve,500));
+  await sleep(500);
   expect(discover).not.toHaveBeenCalled();
 });
 
 it('ignores content-only edits that keep the same file identity',async()=>{
-  const {root,controller,discover}=await setup(40);
-  const file=path.join(root,'profile.ps1');
-  await fs.writeFile(file,'original',{flag:'wx'});
-  controller.setActive(true);
-  await controller.refresh();
-  await new Promise(resolve=>setTimeout(resolve,100));
-  discover.mockClear();
+  const {file,discover}=await reconciling('original');
   await fs.appendFile(file,'# edited in place');
-  await new Promise(resolve=>setTimeout(resolve,500));
+  await sleep(500);
   expect(discover).not.toHaveBeenCalled();
 });
+
 
 it('blocks deletion while a hard-linked alias of the profile has unsaved edits',async()=>{
   const {root,controller,service}=await setup();
