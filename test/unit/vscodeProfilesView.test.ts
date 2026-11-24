@@ -53,6 +53,11 @@ function show(extensionFolders: string[] = [], visible = true) {
 const states = (posted: HostToVsCodeProfiles[]) => posted.filter((message) => message.type === 'state');
 const settled = (posted: HostToVsCodeProfiles[], count: number) =>
   vi.waitFor(() => expect(states(posted)).toHaveLength(count));
+/** Once the view has loaded its content, the Extension Matrix has still not been opened. */
+async function staysClosed(posted: HostToVsCodeProfiles[]): Promise<void> {
+  await settled(posted, 1);
+  expect(matrixOpened()).toBe(0);
+}
 const matrixOpened = () => vscodeState.commands.filter((command) => command === 'personas.showMatrix').length;
 
 it('reads the profiles once per show of the view', async () => {
@@ -120,26 +125,15 @@ it('leaves the Extension Matrix closed when the view is hidden while Personas is
   const { page } = show();
   page.setVisible(false);
   finishBuilding();
-  await settled(page.posted, 1);
-  expect(matrixOpened()).toBe(0);
+  await staysClosed(page.posted);
 });
 
-it('leaves the Extension Matrix closed while the view is not visible', async () => {
-  const { page } = show([], false);
-  await settled(page.posted, 1);
-  expect(matrixOpened()).toBe(0);
-});
+it('leaves the Extension Matrix closed while the view is not visible', () => staysClosed(show([], false).page.posted));
 
-it('leaves the Extension Matrix closed when the user turned opening with the sidebar off', async () => {
-  vscodeState.settings = { 'extensionMatrix.openWithSidebar': { globalValue: false } };
-  const { page } = show();
-  await settled(page.posted, 1);
-  expect(matrixOpened()).toBe(0);
-});
-
-it('still honors the setting under the name it had before the rename', async () => {
-  vscodeState.settings = { openMatrixOnActivityBarClick: { globalValue: false } };
-  const { page } = show();
-  await settled(page.posted, 1);
-  expect(matrixOpened()).toBe(0);
+it.each([
+  ['when the user turned opening with the sidebar off', 'extensionMatrix.openWithSidebar'],
+  ['when the user turned it off under the name the setting had before the rename', 'openMatrixOnActivityBarClick'],
+])('leaves the Extension Matrix closed %s', async (_when, setting) => {
+  vscodeState.settings = { [setting]: { globalValue: false } };
+  await staysClosed(show().page.posted);
 });
