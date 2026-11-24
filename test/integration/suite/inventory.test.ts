@@ -2,12 +2,14 @@ import { PowerShellController } from '../../../src/panel/powerShellController';
 import { PowerShellService } from '../../../src/powershell/service';
 import { deleteProfile } from '../../../src/powershell/files';
 import * as assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { after, describe, it } from 'node:test';
 import * as vscode from 'vscode';
 import { InventoryService, type InventoryIo } from '../../../src/core/inventory';
 import { createCliRunner } from '../../../src/core/cliRunner';
+import { withoutRepositoryOverrides } from '../../../src/git/configService';
 import { MutationService } from '../../../src/core/mutations';
 import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/paths';
 import {
@@ -213,6 +215,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       const before = await vscode.commands.getCommands(true);
       assert.ok(before.includes('personas.vscodeProfiles.focus'));
       assert.ok(before.includes('personas.powerShellProfiles.focus'));
+      assert.ok(before.includes('personas.gitConfiguration.focus'));
       assert.ok(!before.includes('personas.home.focus'));
       await vscode.commands.executeCommand('personas.vscodeProfiles.focus');
       await vscode.commands.executeCommand('personas.powerShellProfiles.focus');
@@ -223,6 +226,30 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.ok(after.includes('personas.powerShellProfiles.refresh'));
       assert.ok(after.includes('personas.powerShellProfiles.help'));
       await vscode.commands.executeCommand('personas.powerShellProfiles.refresh');
+    }));
+
+    it('shows the effective Git configuration of the repository the active file is in', guard(async () => {
+      const repository = path.join(workspaceDir, 'git-fixture');
+      // The caller's Git environment must not reach the fixture: an inherited repository would
+      // take the write below, and injected config can stop `git init` before the test begins.
+      const env = { ...withoutRepositoryOverrides(process.env), GIT_CONFIG_COUNT: '0' };
+      execFileSync('git', ['init', '-q', repository], { env });
+      execFileSync('git', ['-C', repository, 'config', '--local', 'user.name', 'Personas Fixture'], { env });
+      const file = path.join(repository, 'note.txt');
+      fs.writeFileSync(file, 'fixture');
+      await vscode.window.showTextDocument(vscode.Uri.file(file));
+
+      await vscode.commands.executeCommand('personas.gitConfiguration.focus');
+      await vscode.commands.executeCommand('personas.gitConfiguration.refresh');
+      await vscode.commands.executeCommand('personas.gitConfiguration.showEffective');
+
+      const effective = vscode.window.activeTextEditor!.document;
+      assert.strictEqual(effective.uri.scheme, 'personas-readonly');
+      const text = effective.getText();
+      // The fixture repository, its identity value, and the file that value comes from. An error
+      // document also starts with "# ", so the header alone would prove nothing.
+      assert.match(text, /^# Effective Git configuration\n# Repository: .*git-fixture\n/);
+      assert.match(text, /\n {4}Personas Fixture\n {8}local {2}.*git-fixture[\\/]\.git[\\/]config\n/);
     }));
 
     it('opens a disposable PowerShell profile and blocks deletion of unsaved editor contents', guard(async () => {
