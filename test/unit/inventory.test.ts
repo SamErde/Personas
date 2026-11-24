@@ -1004,3 +1004,37 @@ describe('profileManifestPath', () => {
     expect(profileManifestPath(winPaths, p)).toBe('C:\\Users\\me\\profiles\\aaa\\extensions.json');
   });
 });
+
+describe('InventoryService package metadata', () => {
+  it('reads extension folders together rather than one after another', async () => {
+    const paths: ResolvedPaths = {
+      ...({} as ResolvedPaths),
+      platform: 'linux',
+      storageJson: '/data/User/globalStorage/storage.json',
+      globalExtensionsJson: '/ext/extensions.json',
+      obsoleteFile: '/ext/.obsolete',
+      extensionsDir: '/ext',
+      profilesDir: '/data/User/profiles',
+    };
+    let reading = 0;
+    let mostAtOnce = 0;
+    const order: string[] = [];
+    const io: InventoryIo = {
+      readFile: () => Promise.resolve(undefined),
+      listDirs: () => Promise.resolve(['pub.alpha-1.0.0', 'pub.alpha-2.0.0', 'pub.beta-1.0.0']),
+      readPackageMeta: async (folder) => {
+        mostAtOnce = Math.max(mostAtOnce, ++reading);
+        // The first folder answers last, so directory order must not depend on arrival order.
+        await new Promise((resolve) => setTimeout(resolve, folder.endsWith('alpha-1.0.0') ? 20 : 1));
+        reading--;
+        order.push(folder);
+        return { displayName: folder };
+      },
+    };
+    const inv = await new InventoryService(paths, io).getInventory();
+    expect(mostAtOnce).toBe(3);
+    expect(order[2]).toBe('/ext/pub.alpha-1.0.0');
+    // The first folder in directory order still names the extension.
+    expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.displayName).toBe('/ext/pub.alpha-1.0.0');
+  });
+});
