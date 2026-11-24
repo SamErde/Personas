@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import { areFsPathsEqual, type Platform, type WatchTarget } from './core/paths';
-import { HomeViewProvider } from './panel/homeView';
+import { PowerShellProfilesViewProvider } from './panel/powerShellProfilesView';
+import { VsCodeProfilesViewProvider } from './panel/vscodeProfilesView';
 import { MatrixPanel } from './panel/matrixPanel';
 import { registerPersonasReadOnlyProvider, type PersonasReadOnlyContentProvider } from './panel/readOnlyProvider';
 import { getOrBuildServices, setOnServicesBuilt, type Services } from './servicesFactory';
 
-let homeProvider: HomeViewProvider | undefined;
+let vscodeProfiles: VsCodeProfilesViewProvider | undefined;
 let readOnlyProvider: PersonasReadOnlyContentProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -13,18 +14,26 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Watchers start with service construction, not with the showMatrix command: Home and open
   // personas-readonly documents must live-update even when the user disables
-  // openMatrixOnActivityBarClick and never opens the matrix. Fires once, on the first successful
+  // personas.extensionMatrix.openWithSidebar and never opens the matrix. Fires once, on the first successful
   // build, from whichever caller (showMatrix or Home) builds services first; the unsupported-
   // environment error path never fires it.
   setOnServicesBuilt((ctx, services) => watchForChanges(ctx, services));
 
-  homeProvider = new HomeViewProvider(context);
+  // Home: one sidebar view per area. Each loads on its own, so a slow one never holds up another.
+  vscodeProfiles = new VsCodeProfilesViewProvider(context);
+  const powerShellProfiles = new PowerShellProfilesViewProvider(context);
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('personas.showAgentsWindowProfile')) scheduleRefresh();
     }),
   );
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider('personas.home', homeProvider));
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(VsCodeProfilesViewProvider.viewId, vscodeProfiles),
+    vscode.window.registerWebviewViewProvider(PowerShellProfilesViewProvider.viewId, powerShellProfiles),
+    // The buttons in the PowerShell Profiles view's title bar.
+    vscode.commands.registerCommand('personas.powerShellProfiles.refresh', () => powerShellProfiles.refresh()),
+    vscode.commands.registerCommand('personas.powerShellProfiles.help', () => powerShellProfiles.help()),
+  );
   context.subscriptions.push(
     vscode.commands.registerCommand('personas.showMatrix', async () => {
       const setup = await getOrBuildServices(context);
@@ -57,7 +66,7 @@ function scheduleRefresh(): void {
   clearTimeout(watchTimer);
   watchTimer = setTimeout(() => {
     void MatrixPanel.current?.refresh();
-    void homeProvider?.refresh();
+    void vscodeProfiles?.refresh();
     // Open personas-readonly documents are live windows onto profile or workspace manifests.
     readOnlyProvider?.refreshOpenDocuments();
   }, 300);

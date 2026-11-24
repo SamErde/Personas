@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { resolveWorkspaceManifestAction } from '../../src/panel/homeActions';
-import type { HomeToHost } from '../../src/protocol';
+import type { VsCodeProfilesToHost } from '../../src/protocol';
 import {
   homeContentSecurityPolicy,
   matrixContentSecurityPolicy,
@@ -44,13 +44,13 @@ describe('webview security and workspace protocol smoke checks', () => {
   });
 
   it('uses exact host-only workspace manifest commands and ignores a forged path property', () => {
-    type EditWorkspaceMessage = Extract<HomeToHost, { type: 'editWorkspaceFile' }>;
+    type EditWorkspaceMessage = Extract<VsCodeProfilesToHost, { type: 'editWorkspaceFile' }>;
     expectTypeOf<EditWorkspaceMessage>().toEqualTypeOf<{ type: 'editWorkspaceFile' }>();
 
     const forged = {
       type: 'editWorkspaceFile',
       path: 'C:\\attacker\\other.code-workspace',
-    } as HomeToHost & { path: string };
+    } as VsCodeProfilesToHost & { path: string };
     expect(resolveWorkspaceManifestAction(forged, 'C:\\safe\\shared.code-workspace')).toEqual({
       mode: 'edit',
       filePath: 'C:\\safe\\shared.code-workspace',

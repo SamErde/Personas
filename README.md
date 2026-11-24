@@ -20,6 +20,7 @@ Personas brings your VS Code profiles and their extensions together in one view.
 - **Current workspace status**: When a folder or workspace is open, a separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Select an `Enabled`, `Not enabled`, or `Workspace-local` cell to open the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including ones that exist only in the workspace. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Orphan cleanup**: Extension versions on disk that no profile references appear struck through under **All**. **Review N orphaned…** lists them with their size and last-modified date, and moves the ones you choose to the Trash or Recycle Bin.
+- **A sidebar you can arrange**: Home, the Personas sidebar, has one view per area: **VS Code Profiles** and **PowerShell Profiles**. Collapse, reorder, or hide them as you would any VS Code view. Showing VS Code Profiles also opens the Extension Matrix; turn that off with the `personas.extensionMatrix.openWithSidebar` setting, or collapse the view.
 - **PowerShell profiles**: Your profile scripts are grouped by PowerShell edition and listed in the order PowerShell loads them. [More about PowerShell profiles](#powershell-profiles).
 - **Privacy**: Personas never collects or transmits any data.
 
@@ -59,7 +60,7 @@ Personas reads the same files VS Code itself maintains: the profile registry and
 
 ## PowerShell profiles
 
-The Personas Home sidebar includes a PowerShell Profiles section. It lists the
+Home, the Personas sidebar, includes a PowerShell Profiles view. It lists the
 PowerShell profiles that exist, grouped by edition and labeled by host and
 scope, in the order PowerShell loads them. Locations that have no script yet
 fold into one collapsed line per edition. PowerShell 7 is supported on Windows,
@@ -75,11 +76,12 @@ to remove a link: the extension cannot guarantee link-only Trash behavior on
 every platform.
 
 Discovery is passive by default and respects redirected Documents information.
-When a location cannot be resolved, the section says so and offers to run the
+When a location cannot be resolved, the view says so and offers to run the
 detected executable (for example, "Run pwsh.exe to resolve"). That action
 launches it once with profiles disabled and a five-second timeout. Successful
-results are cached for the session. Refresh never launches PowerShell. Help
-opens Microsoft's about_Profiles documentation.
+results are cached for the session. The Refresh and Help buttons are in the
+view's title bar: Refresh never launches PowerShell, and Help opens Microsoft's
+about_Profiles documentation.
 
 This feature currently supports local desktop windows. WSL is the next planned
 scope; SSH and container windows may follow. Preview and custom installations,

@@ -1,12 +1,12 @@
-import type { HomeToHost } from '../protocol';
+import type { PowerShellAction } from '../protocol';
 import type { EditionInfo, Installation, PowerShellInventory, ProfileRow } from '../powershell/profiles';
 import { el } from './ui';
 
-type Send = (message: HomeToHost) => void;
-type Action = Extract<HomeToHost, { type: 'powerShellAction' }>['action'];
+type Send = (message: PowerShellAction) => void;
+type Action = PowerShellAction['action'];
 
 /**
- * The PowerShell Profiles section of Home, drawn as a compact list in the manner of VS Code's own
+ * The PowerShell Profiles view of Home, drawn as a compact list in the manner of VS Code's own
  * views. PowerShell profiles that exist are rows; locations with no script yet sit behind one
  * collapsed line per edition. A row's single primary action opens the script, and everything else
  * lives in a menu that overlays the list. The section redraws whenever files change on disk, so
@@ -23,8 +23,6 @@ const iconPaths = {
   script: 'M3.25 2.75h9.5a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5h-9.5a1.5 1.5 0 0 1-1.5-1.5v-7.5a1.5 1.5 0 0 1 1.5-1.5ZM4.5 6 7 8l-2.5 2M8.5 10.25h3',
   add: 'M8 3.5v9M3.5 8h9',
   more: 'M3.5 8h.01M8 8h.01M12.5 8h.01',
-  refresh: 'M13 8a5 5 0 1 1-1.6-3.7M13 2.75v2.5h-2.5',
-  help: 'M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2ZM6.4 6.3a1.7 1.7 0 1 1 2.5 1.5c-.6.35-.9.7-.9 1.4M8 11.4v.01',
   chevron: 'M6 4l4 4-4 4',
   warning: 'M8 2.5 14.25 13.25H1.75ZM8 6.5v3M8 11.25v.01',
   lock: 'M4.25 7.25h7.5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-7.5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1ZM5.5 7.25V5.5a2.5 2.5 0 0 1 5 0v1.75',
@@ -62,7 +60,6 @@ export function renderPowerShell(inventory: PowerShellInventory, send: Send): vo
   if (!root) return;
   post = send;
   listenOnce(root);
-  renderToolbar();
   const restoreInteraction = captureInteraction(root);
   root.replaceChildren();
   if (inventory.error) {
@@ -73,19 +70,6 @@ export function renderPowerShell(inventory: PowerShellInventory, send: Send): vo
     }
   }
   restoreInteraction();
-}
-
-/** Refresh and Help sit beside the section heading and are created once, so they keep focus across redraws. */
-function renderToolbar(): void {
-  const toolbar = document.getElementById('powershell-toolbar');
-  if (!toolbar || toolbar.childElementCount) return;
-  const refresh = button('ps-tool', 'refresh', () => dispatch('refresh'));
-  describe(refresh, 'Refresh PowerShell profiles');
-  refresh.append(icon('refresh'));
-  const help = button('ps-tool', 'help', () => dispatch('help'));
-  describe(help, 'About PowerShell profiles and their load order (opens Microsoft Learn)');
-  help.append(icon('help'));
-  toolbar.append(refresh, help);
 }
 
 function renderEdition(edition: EditionInfo, rows: ProfileRow[]): HTMLElement {
@@ -412,8 +396,7 @@ function captureInteraction(root: HTMLElement): () => void {
     const replacement = reachable.find(control => key(control) === focusedKey)
       ?? reachable.find(control => focusedRow && rowOf(control) === focusedRow)
       ?? reachable.find(control => focusedEdition && editionOf(control) === focusedEdition)
-      ?? reachable[0]
-      ?? document.querySelector<HTMLElement>('#powershell-toolbar button');
+      ?? reachable[0];
     replacement?.focus({ preventScroll: true });
   };
 }

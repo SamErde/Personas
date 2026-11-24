@@ -208,6 +208,23 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.strictEqual(remaining, undefined);
     }));
 
+    it('contributes one Home view per area, each of which VS Code can show', guard(async () => {
+      // VS Code creates a focus command for every contributed view.
+      const before = await vscode.commands.getCommands(true);
+      assert.ok(before.includes('personas.vscodeProfiles.focus'));
+      assert.ok(before.includes('personas.powerShellProfiles.focus'));
+      assert.ok(!before.includes('personas.home.focus'));
+      await vscode.commands.executeCommand('personas.vscodeProfiles.focus');
+      await vscode.commands.executeCommand('personas.powerShellProfiles.focus');
+      // Showing a view activates the extension in its own time; wait for it here. Activation
+      // registers the commands behind the PowerShell Profiles title-bar buttons.
+      await vscode.extensions.getExtension('SamErde.personas')!.activate();
+      const after = await vscode.commands.getCommands(true);
+      assert.ok(after.includes('personas.powerShellProfiles.refresh'));
+      assert.ok(after.includes('personas.powerShellProfiles.help'));
+      await vscode.commands.executeCommand('personas.powerShellProfiles.refresh');
+    }));
+
     it('opens a disposable PowerShell profile and blocks deletion of unsaved editor contents', guard(async () => {
       const directory = path.join(workspaceDir, 'powershell-fixture');
       const service = new PowerShellService(async () => [{

@@ -140,7 +140,7 @@ let onFirstBuild: ((context: vscode.ExtensionContext, services: Services) => voi
  * Registers the hook run exactly once, when services are first built successfully. extension.ts
  * uses it to start the file watchers that drive live refresh (matrix, Home, open
  * personas-readonly documents) — tied to service construction rather than the showMatrix command, so
- * the sidebar-only path (Home resolve, with openMatrixOnActivityBarClick disabled) gets
+ * the sidebar-only path (Home resolve, with extensionMatrix.openWithSidebar off) gets
  * watchers too. Lives here as a hook, not a direct call, because servicesFactory importing
  * extension.ts would be circular. Never invoked on the unsupported-environment error path.
  */
