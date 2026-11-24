@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -19,6 +19,7 @@ import { findGitExecutable } from '../../src/git/executable';
  */
 const roots: string[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true });
 });
 
@@ -35,7 +36,9 @@ async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => s
   await fs.mkdir(home);
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    // No repository the caller's environment names: every `git init` and `git config --local` a
+    // test runs with this environment must land in the sandbox, never in the caller's repository.
+    ...withoutRepositoryOverrides(process.env),
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
     HOME: home,
@@ -43,9 +46,6 @@ async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => s
     GIT_CONFIG_COUNT: '0',
     ...extraEnv,
   };
-  // Nor a repository it points Git at: `git init` below must create the sandbox's own.
-  delete env['GIT_DIR'];
-  delete env['GIT_WORK_TREE'];
   execFileSync('git', ['init', '-q', '-b', 'main', repo], { env });
   await fs.writeFile(path.join(home, '.gitconfig'), globalConfig({ home, repo }));
   const service = new GitConfigService({
@@ -268,6 +268,16 @@ it('judges each include line on its own when several name the same file', async 
 });
 
 it('reads the repository of the folder it is given, whatever repository the environment names', async () => {
+  // A repository outside the sandbox, which the caller's environment names in every way Git allows.
+  const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'personas-git-outside-')));
+  roots.push(outside);
+  execFileSync('git', ['init', '-q', '-b', 'main', outside], { env: withoutRepositoryOverrides(process.env) });
+  const outsideConfig = path.join(outside, '.git', 'config');
+  const before = await fs.readFile(outsideConfig);
+  vi.stubEnv('GIT_DIR', path.join(outside, '.git'));
+  vi.stubEnv('GIT_WORK_TREE', outside);
+  vi.stubEnv('GIT_COMMON_DIR', path.join(outside, '.git'));
+
   const { root, repo, env } = await sandbox(() => base);
   const other = path.join(root, 'other');
   execFileSync('git', ['init', '-q', '-b', 'main', other], { env });
@@ -285,6 +295,8 @@ it('reads the repository of the folder it is given, whatever repository the envi
   expect(snapshot.repository?.root).toBe(repo);
   // The identity is the inspected repository's too, not the one the environment names.
   expect(snapshot.identity[0]).toMatchObject({ value: 'Base', scope: 'global' });
+  // None of the fixture's own writes reached the repository the caller's environment names.
+  expect((await fs.readFile(outsideConfig)).equals(before)).toBe(true);
 });
 
 it('drops repository overrides whatever their case on Windows, and only exact names elsewhere', () => {
