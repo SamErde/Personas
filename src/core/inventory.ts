@@ -507,7 +507,16 @@ export class InventoryService {
     // Keyed by folder, not id: composeInventory picks the folders that the manifests point to.
     const folderCategories = new Map<string, string[]>();
     const packageMetaWarnings: ParseWarning[] = [];
-    for (const folderName of diskFolders) {
+    // Read together: one read per installed extension folder, and waiting on each in turn made a
+    // cold first load take seconds (#150). The results are still applied in directory order below.
+    const metas = await Promise.all(
+      diskFolders.map((folderName) =>
+        parseExtensionFolderName(folderName)
+          ? this.io.readPackageMeta(join(this.paths.extensionsDir, folderName))
+          : undefined,
+      ),
+    );
+    for (const [index, folderName] of diskFolders.entries()) {
       const parsed = parseExtensionFolderName(folderName);
       if (!parsed) continue;
       const needDisplayName = !displayNames.has(parsed.id);
@@ -516,7 +525,7 @@ export class InventoryService {
       const needPublisher = !publishers.has(parsed.id);
       // Read every folder, even when its fields are already known, so a broken package.json is
       // reported regardless of directory order.
-      const meta = await this.io.readPackageMeta(join(this.paths.extensionsDir, folderName));
+      const meta = metas[index];
       if (meta instanceof Error) {
         // Metadata only: the record falls back to its id and letter tile, so nothing is disabled.
         packageMetaWarnings.push({

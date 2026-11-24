@@ -24,20 +24,27 @@ export class PowerShellController implements vscode.Disposable {
   private identities?: Map<string, string>;
   private readonly armedIdentities = new Map<string, string>();
   private readonly reconcileMs: number;
+  private readonly post: (message: HostToHome) => void;
+  private lastPosted?: HostToHome;
   constructor(
-    private readonly post: (message: HostToHome) => void,
+    post: (message: HostToHome) => void,
     private readonly service = new PowerShellService(),
     private readonly confirmCreate: (file: string) => Promise<boolean> = async file =>
       await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
     options: {reconcileMs?: number} = {},
   ) {
     this.reconcileMs = options.reconcileMs ?? defaultReconcileMs;
+    this.post = message => { this.lastPosted = message; post(message); };
     this.events = [
       vscode.workspace.onDidSaveTextDocument(document => this.changed([document.uri])),
       vscode.workspace.onDidCreateFiles(event => this.changed(event.files, true)),
       vscode.workspace.onDidDeleteFiles(event => this.changed(event.files, true)),
       vscode.workspace.onDidRenameFiles(event => this.changed(event.files.flatMap(file => [file.oldUri, file.newUri]), true)),
     ];
+  }
+  /** Show the last known state again, for a view that was rebuilt and would otherwise sit empty until the next refresh (#150). */
+  paintLastKnown(): void {
+    if (this.lastPosted && !this.disposed) this.post(this.lastPosted);
   }
   refresh(background = false): Promise<void> {
     this.queue = this.queue.then(async () => {

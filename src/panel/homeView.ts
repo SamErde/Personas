@@ -1,4 +1,5 @@
 import { PowerShellController } from './powerShellController';
+import { PowerShellService } from '../powershell/service';
 import * as vscode from 'vscode';
 import { buildOrphanInfos } from '../core/cleanup';
 import { asError } from '../core/errors';
@@ -26,17 +27,19 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
   private profiles: HomeProfileVm[] = [];
   private workspaceManifestPath: string | undefined;
   private renderGeneration = 0;
+  /** What the VS Code Profiles section last showed, repainted when the view is rebuilt (#150). */
+  private lastState: Exclude<HostToHome, { type: 'powerShellState' | 'orphanSize' }> | undefined;
+  private lastOrphanSize: Extract<HostToHome, { type: 'orphanSize' }> | undefined;
 
   private readonly powerShell: PowerShellController;
-  constructor(private readonly context: vscode.ExtensionContext) {
-    this.powerShell = new PowerShellController(message => this.post(message));
+  constructor(private readonly context: vscode.ExtensionContext, powerShellService = new PowerShellService()) {
+    this.powerShell = new PowerShellController(message => this.post(message), powerShellService);
     context.subscriptions.push(this.powerShell);
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     this.powerShell.setActive(webviewView.visible);
-    if (webviewView.visible) void this.powerShell.refresh(true);
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist')],
@@ -46,17 +49,15 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
 
     // resolveWebviewView doesn't re-fire on later re-clicks (the view stays resolved once
     // created), so also auto-open on visibility change to visible — this covers re-clicking the
-    // activity-bar icon after the matrix editor tab was closed. Home itself is
-    // re-rendered on the same trigger, so it never goes stale while hidden.
+    // activity-bar icon after the matrix editor tab was closed.
+    //
+    // Neither place loads Home's content. VS Code discards this webview's page whenever the view
+    // is hidden and loads it again when shown, and the page's script sends `ready` each time it
+    // loads. That message alone drives the load, so each section is read once per show (#150).
     this.maybeAutoOpen();
-    void this.render();
     const visibilityListener = webviewView.onDidChangeVisibility(() => {
       this.powerShell.setActive(webviewView.visible);
-      if (webviewView.visible) {
-        void this.powerShell.refresh(true);
-        this.maybeAutoOpen();
-        void this.render();
-      }
+      if (webviewView.visible) this.maybeAutoOpen();
     });
     webviewView.onDidDispose(() => {
       visibilityListener.dispose();
@@ -96,7 +97,9 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     if ('error' in setup) {
       this.profiles = [];
       this.workspaceManifestPath = undefined;
-      this.post({ type: 'unsupported', reason: setup.error });
+      this.lastState = { type: 'unsupported', reason: setup.error };
+      this.lastOrphanSize = undefined;
+      this.post(this.lastState);
       return;
     }
     const inventory = await setup.inventory.getInventory();
@@ -131,13 +134,17 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
       : undefined;
     this.profiles = profiles;
     this.workspaceManifestPath = workspace?.manifestFsPath;
-    this.post({
+    this.lastState = {
       type: 'state',
       profiles,
       ...(workspace ? { workspace } : {}),
       orphanCount: orphanedCount,
       warnings: inventory.warnings,
-    });
+    };
+    // The size belongs to the orphans just counted; an unchanged set is sized again below.
+    if (orphanedCount === 0) this.lastOrphanSize = undefined;
+    this.post(this.lastState);
+    if (this.lastOrphanSize) this.post(this.lastOrphanSize);
 
     if (orphanedCount > 0) {
       // Sent as a follow-up patch, not blocking the state push above: the size walk is a real
@@ -145,7 +152,8 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
       const orphans = await buildOrphanInfos(inventory, statFolder);
       if (generation !== this.renderGeneration) return;
       const totalSizeBytes = orphans.reduce((sum, o) => sum + o.totalSizeBytes, 0);
-      this.post({ type: 'orphanSize', totalSizeBytes });
+      this.lastOrphanSize = { type: 'orphanSize', totalSizeBytes };
+      this.post(this.lastOrphanSize);
     }
   }
 
@@ -167,6 +175,10 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
     }
     switch (m.type) {
       case 'ready':
+        // The page was just rebuilt and is empty: show what each section last held, then refresh.
+        if (this.lastState) this.post(this.lastState);
+        if (this.lastOrphanSize) this.post(this.lastOrphanSize);
+        this.powerShell.paintLastKnown();
         if (this.view?.visible) void this.powerShell.refresh(true);
         await this.render();
         return;
