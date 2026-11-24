@@ -14,8 +14,19 @@ const SCHEME = 'personas-readonly';
 export class PersonasReadOnlyContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changeEmitter.event;
+  private readonly generated = new Map<string, () => string>();
+
+  /**
+   * Serves the document titled `label` from `render` instead of from a file on disk, for content
+   * Personas composes itself. Like a file, it is rendered again on every provide call.
+   */
+  registerGenerated(label: string, render: () => string): void {
+    this.generated.set(`/${label}`, render);
+  }
 
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+    const render = uri.query === '' ? this.generated.get(uri.path) : undefined;
+    if (render) return render();
     // Fresh read on every invocation — no caching — so each onDidChange fire re-reads disk.
     // A live refresh can race a file that is mid-rewrite or just deleted (VS Code rewrites
     // manifests non-atomically at times), so a read failure renders a short placeholder in the
@@ -53,9 +64,18 @@ export function registerPersonasReadOnlyProvider(context: vscode.ExtensionContex
  * place as the file changes on disk. Never throws: an open failure surfaces as an error toast,
  * and a content read failure renders as placeholder text in the document body (see the provider).
  */
-export async function openReadOnly(label: string, fsPath: string, languageId = 'json'): Promise<void> {
+export function openReadOnly(label: string, fsPath: string, languageId = 'json'): Promise<void> {
+  return open(label, fsPath, languageId);
+}
+
+/** Opens the document registered under `label` with `registerGenerated`. Never throws, like `openReadOnly`. */
+export function openGeneratedReadOnly(label: string, languageId: string): Promise<void> {
+  return open(label, '', languageId);
+}
+
+async function open(label: string, query: string, languageId: string): Promise<void> {
   try {
-    const uri = vscode.Uri.from({ scheme: SCHEME, path: `/${label}`, query: fsPath });
+    const uri = vscode.Uri.from({ scheme: SCHEME, path: `/${label}`, query });
     const doc = await vscode.workspace.openTextDocument(uri);
     await vscode.languages.setTextDocumentLanguage(doc, languageId).then(undefined, () => undefined);
     await vscode.window.showTextDocument(doc, { preview: true });

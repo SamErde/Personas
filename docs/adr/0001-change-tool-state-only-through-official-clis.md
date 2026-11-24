@@ -32,5 +32,7 @@ the reads are in `docs/spikes/findings.md`.
 ## Consequences
 
 - Personas never writes `storage.json`, any `extensions.json`, or a Git config file directly.
+  Opening a Git config file in the VS Code editor for the user to edit and save is not a write
+  by Personas.
 - Outside the exceptions above, a change that no official CLI supports (for example, toggling "Apply Extension to all
   Profiles") ships as a guided hand-off to the tool's own UI instead.

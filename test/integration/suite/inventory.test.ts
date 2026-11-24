@@ -213,6 +213,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       const before = await vscode.commands.getCommands(true);
       assert.ok(before.includes('personas.vscodeProfiles.focus'));
       assert.ok(before.includes('personas.powerShellProfiles.focus'));
+      assert.ok(before.includes('personas.gitConfiguration.focus'));
       assert.ok(!before.includes('personas.home.focus'));
       await vscode.commands.executeCommand('personas.vscodeProfiles.focus');
       await vscode.commands.executeCommand('personas.powerShellProfiles.focus');
@@ -223,6 +224,13 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.ok(after.includes('personas.powerShellProfiles.refresh'));
       assert.ok(after.includes('personas.powerShellProfiles.help'));
       await vscode.commands.executeCommand('personas.powerShellProfiles.refresh');
+      // Git Configuration: its title-bar buttons run, and the effective configuration opens read-only.
+      await vscode.commands.executeCommand('personas.gitConfiguration.focus');
+      await vscode.commands.executeCommand('personas.gitConfiguration.refresh');
+      await vscode.commands.executeCommand('personas.gitConfiguration.showEffective');
+      const effective = vscode.window.activeTextEditor!.document;
+      assert.strictEqual(effective.uri.scheme, 'personas-readonly');
+      assert.ok(effective.getText().startsWith('# '));
     }));
 
     it('opens a disposable PowerShell profile and blocks deletion of unsaved editor contents', guard(async () => {

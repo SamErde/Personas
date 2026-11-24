@@ -42,11 +42,29 @@ _Avoid_: install everywhere, install in all profiles
 A startup script stored at a standard, user- and host-scoped location that PowerShell loads automatically when starting a session with profile loading enabled. It customizes the shell through variables, functions, modules, prompts, and other session settings.
 _Avoid_: unqualified "profile", VS Code profile, persona
 
+### Git configuration
+
+**Current repository**:
+The repository the Git Configuration view reports on: the one containing the active editor's file, or else the first workspace folder.
+_Avoid_: active repository, selected repository
+
+**Effective configuration**:
+Every Git config value that applies to the current repository, in the order Git reads it. For a single-valued key the last value wins.
+_Avoid_: resolved config, merged config
+
+**Include status**:
+Whether a file named by an `include` or `includeIf` rule takes part in the effective configuration: Applied, Not applied here, Empty, or Missing. Inferred from Git's own output; Personas does not evaluate conditions.
+_Avoid_: matched, active, enabled
+
 ### Product surfaces
 
 **Home**:
-The Personas sidebar, made up of one view per area, including VS Code Profiles and PowerShell Profiles.
+The Personas sidebar, made up of one view per area: VS Code Profiles, PowerShell Profiles, and Git Configuration.
 _Avoid_: welcome view, dashboard
+
+**Git Configuration**:
+The Home view that shows the Git identity in effect for the current repository and the config files it comes from. Read-only.
+_Avoid_: gitconfig pane, Git settings
 
 **Extension Matrix**:
 The Personas panel that shows every extension against every profile.

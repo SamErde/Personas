@@ -3,7 +3,10 @@ import type { Platform } from './paths';
 
 export type CliResult = { code: number; stdout: string; stderr: string };
 
-export type CliRunner = (cliPath: string, args: string[]) => Promise<CliResult>;
+/** Where and with what environment to run; the host's own when omitted. */
+export type CliRunOptions = { cwd?: string; env?: NodeJS.ProcessEnv };
+
+export type CliRunner = (cliPath: string, args: string[], options?: CliRunOptions) => Promise<CliResult>;
 
 export class CliTimeoutError extends Error {
   constructor(cliPath: string, timeoutMs: number) {
@@ -34,7 +37,7 @@ export type CliChild = {
 export type CliSpawn = (
   command: string,
   args: string[],
-  options: { shell: boolean; detached?: boolean },
+  options: { shell: boolean; detached?: boolean } & CliRunOptions,
 ) => CliChild;
 
 /**
@@ -83,11 +86,16 @@ export function createCliRunner(opts: {
       }
     }
   };
-  return (cliPath, args) =>
+  return (cliPath, args, options = {}) =>
     new Promise((resolve, reject) => {
       const cmd = buildSpawnCommand(opts.platform, cliPath, args);
       // detached on POSIX makes the child a process-group leader, so the group can be killed.
-      const child = spawn(cmd.command, cmd.args, isWin ? { shell: cmd.shell } : { shell: cmd.shell, detached: true });
+      const child = spawn(cmd.command, cmd.args, {
+        shell: cmd.shell,
+        ...(isWin ? {} : { detached: true }),
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+        ...(options.env === undefined ? {} : { env: options.env }),
+      });
       let stdout = '';
       let stderr = '';
       let settled = false;

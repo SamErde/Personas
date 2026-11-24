@@ -20,8 +20,9 @@ Personas brings your VS Code profiles and their extensions together in one view.
 - **Current workspace status**: When a folder or workspace is open, a separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Select an `Enabled`, `Not enabled`, or `Workspace-local` cell to open the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including ones that exist only in the workspace. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Orphan cleanup**: Extension versions on disk that no profile references appear struck through under **All**. **Review N orphaned…** lists them with their size and last-modified date, and moves the ones you choose to the Trash or Recycle Bin.
-- **A sidebar you can arrange**: Home, the Personas sidebar, has one view per area: **VS Code Profiles** and **PowerShell Profiles**. Collapse, reorder, or hide them as you would any VS Code view. Showing VS Code Profiles also opens the Extension Matrix; turn that off with the `personas.extensionMatrix.openWithSidebar` setting. Collapsing the view stops it too, but only while both views are shown: when you hide PowerShell Profiles, VS Code expands the one view that is left and removes its header, so it can no longer be collapsed.
+- **A sidebar you can arrange**: Home, the Personas sidebar, has one view per area: **VS Code Profiles**, **PowerShell Profiles**, and **Git Configuration**. Collapse, reorder, or hide them as you would any VS Code view. Showing VS Code Profiles also opens the Extension Matrix; turn that off with the `personas.extensionMatrix.openWithSidebar` setting. Collapsing the view stops it too, but only while another view is shown too: when you hide the others, VS Code expands the one view that is left and removes its header, so it can no longer be collapsed.
 - **PowerShell profiles**: Your profile scripts are grouped by PowerShell edition and listed in the order PowerShell loads them. [More about PowerShell profiles](#powershell-profiles).
+- **Git configuration**: See the Git identity in effect for the current repository, and which config file each value comes from. [More about Git configuration](#git-configuration).
 - **Privacy**: Personas never collects or transmits any data.
 
 ## Requirements & Limitations
@@ -57,6 +58,40 @@ or install state.
 ## How It Works
 
 Personas reads the same files VS Code itself maintains: the profile registry and each profile's extension list. All installs and uninstalls run through the official `code` command-line interface, scoped to the right profile (and, when applicable, the right `--user-data-dir`/`--extensions-dir`). Workspace status additionally uses the stable `vscode.extensions` API and a bounded read-only scan of immediate child directories under each local workspace root's `.vscode/extensions` folder. Personas does not read or write VS Code's SQLite state.
+
+## Git configuration
+
+Home, the Personas sidebar, includes a Git Configuration view. It answers one
+question: which Git configuration is in effect here, and where does it come
+from? The current repository is the one that contains the file in the active
+editor, or else the first workspace folder; its name appears in the view's
+title.
+
+The view lists the effective `user.name` and `user.email` with the file each
+comes from, then the system, global, local, and worktree config files that hold
+values. Every `include` and `includeIf` target is nested under the file that
+names it, with the condition as written and a status:
+
+- **Applied**: Git takes values from the file for the current repository.
+- **Not applied here**: the file has values, but none are in effect.
+- **Empty**: the file exists and holds no values.
+- **Missing**: the file does not exist.
+
+Personas reads the status from Git's own output and does not evaluate
+conditions itself. Because of that, a file that two rules include shows the
+same status under both. With no repository open, the view shows system and
+global configuration only and gives no status for `includeIf` rules.
+
+Each file has an open button that opens it in the editor, where you edit and
+save it yourself. Personas never writes a Git config file, and does not create
+or delete one. **Show Effective Git Configuration** in the view's title bar
+opens a read-only document of every value in the order Git reads it, grouped by
+key, each with its scope and source file. It has the same content as
+`git config --list`, so treat it with the same care if your config holds
+credentials.
+
+The view uses the `git` command: the one VS Code's `git.path` setting names, or
+else the one on your `PATH`. It works in local desktop windows only.
 
 ## PowerShell profiles
 
