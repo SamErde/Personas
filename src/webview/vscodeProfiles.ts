@@ -1,10 +1,9 @@
-import { renderPowerShell } from './powershell';
 import type { ParseWarning } from '../core/types';
-import type { HomeProfileVm, HomeToHost, HomeWorkspaceVm, HostToHome } from '../protocol';
+import type { HomeProfileVm, HomeWorkspaceVm, HostToVsCodeProfiles, VsCodeProfilesToHost } from '../protocol';
 import { isTrustedHostMessageOrigin } from './messageSecurity';
 import { el, formatBytes } from './ui';
 
-declare function acquireVsCodeApi(): { postMessage(m: HomeToHost): void };
+declare function acquireVsCodeApi(): { postMessage(m: VsCodeProfilesToHost): void };
 const vscode = acquireVsCodeApi();
 
 let state:
@@ -19,7 +18,7 @@ let orphanSizeText = '';
 
 document.getElementById('open')?.addEventListener('click', () => vscode.postMessage({ type: 'openMatrix' }));
 
-window.addEventListener('message', (event: MessageEvent<HostToHome>) => {
+window.addEventListener('message', (event: MessageEvent<HostToVsCodeProfiles>) => {
   // Same origin check as the matrix webview (main.ts): host messages are
   // delivered same-origin in VS Code's webview architecture. Do NOT use
   // `event.source !== window` here — the sender is the host page, never this
@@ -27,9 +26,6 @@ window.addEventListener('message', (event: MessageEvent<HostToHome>) => {
   if (!isTrustedHostMessageOrigin(event.origin, window.location.origin)) return;
   const m = event.data;
   switch (m.type) {
-    case 'powerShellState':
-      renderPowerShell(m.inventory, message => vscode.postMessage(message));
-      return;
     case 'state':
       state = m;
       orphanSizeText = '';

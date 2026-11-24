@@ -4,7 +4,7 @@ import { affectsProfile, changedIdentities, pathIdentities, profileWatchPlan } f
 import * as path from 'node:path';
 import { PowerShellService } from '../powershell/service';
 import { createProfile, deleteProfile, inspectProfile, nearestExistingDirectory } from '../powershell/files';
-import type { HostToHome, HomeToHost } from '../protocol';
+import type { HostToPowerShellProfiles, PowerShellAction } from '../protocol';
 
 const helpUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
 /** Watcher events are best effort; a dropped one must not leave the view stale (#136). */
@@ -24,10 +24,10 @@ export class PowerShellController implements vscode.Disposable {
   private identities?: Map<string, string>;
   private readonly armedIdentities = new Map<string, string>();
   private readonly reconcileMs: number;
-  private readonly post: (message: HostToHome) => void;
-  private lastPosted?: HostToHome;
+  private readonly post: (message: HostToPowerShellProfiles) => void;
+  private lastPosted?: HostToPowerShellProfiles;
   constructor(
-    post: (message: HostToHome) => void,
+    post: (message: HostToPowerShellProfiles) => void,
     private readonly service = new PowerShellService(),
     private readonly confirmCreate: (file: string) => Promise<boolean> = async file =>
       await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
@@ -172,7 +172,7 @@ export class PowerShellController implements vscode.Disposable {
       this.watchers.set(base, watcher);
     }
   }
-  async handle(message: Extract<HomeToHost, {type:'powerShellAction'}>): Promise<void> {
+  async handle(message: PowerShellAction): Promise<void> {
     if (vscode.env.remoteName) return;
     try {
       if (message.action === 'help') { await vscode.env.openExternal(vscode.Uri.parse(helpUrl)); return; }

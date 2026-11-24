@@ -24,13 +24,17 @@ const webviewCtx = await esbuild.context({
   sourcemap: true,
 });
 
+// One script per Home view: each sidebar view is its own webview page.
 const homeCtx = await esbuild.context({
-  entryPoints: ['src/webview/home.ts'],
+  entryPoints: {
+    vscodeProfiles: 'src/webview/vscodeProfiles.ts',
+    powerShellProfiles: 'src/webview/powerShellProfiles.ts',
+  },
   bundle: true,
   platform: 'browser',
   format: 'iife',
   target: 'es2022',
-  outfile: 'dist/home.js',
+  outdir: 'dist',
   sourcemap: true,
 });
 

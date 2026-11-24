@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
-import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildProfileLocations, type EditionInfo, type PowerShellInventory, type ProfileRow } from '../../src/powershell/profiles';
-import type { HomeToHost } from '../../src/protocol';
+import { powerShellProfilesBody } from '../../src/panel/powerShellProfilesMarkup';
+import type { PowerShellAction } from '../../src/protocol';
 import { renderPowerShell } from '../../src/webview/powershell';
 
-/** The section's real markup, read from the Home view so that this test cannot drift from it. */
-const section = /<section class="home-section" aria-labelledby="powershell-heading">[\s\S]*?<\/section>/
-  .exec(readFileSync('src/panel/homeView.ts', 'utf8'))?.[0];
-if (!section) throw new Error('PowerShell Profiles section not found in src/panel/homeView.ts');
-const markup = `${section}<button id="outside">Outside</button>`;
+/** The view's real markup, so that this test cannot drift from it. */
+const markup = powerShellProfilesBody + '<button id="outside">Outside</button>';
 
 const user = '/home/me/.config/powershell';
 const home = '/opt/microsoft/powershell/7';
@@ -28,7 +25,7 @@ function inventory(states: Record<string, Partial<ProfileRow>> = {}, editions: E
 }
 const console7 = { 'Current User/Console': { state: 'existing' } } as const;
 
-let sent: HomeToHost[];
+let sent: PowerShellAction[];
 const render = (data: PowerShellInventory) => renderPowerShell(data, message => sent.push(message));
 const one = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const found = document.querySelector<T>(selector);
@@ -68,14 +65,12 @@ describe('automatic refresh', () => {
     expect(document.activeElement?.textContent).toBe('Reveal in File Manager');
   });
 
-  it('keeps Refresh focused but never steals focus from outside the section', () => {
+  it('keeps the focused row focused but never steals focus from outside the view', () => {
     render(inventory(console7));
-    const refresh = one('[data-ps-action="refresh"]');
-    refresh.focus();
+    rowFor('Current User/Console').querySelector<HTMLElement>('.ps-open')!.focus();
 
     render(inventory(console7));
-    expect(document.activeElement).toBe(refresh);
-    expect(all('#powershell-toolbar button')).toHaveLength(2);
+    expect(document.activeElement).toBe(rowFor('Current User/Console').querySelector('.ps-open'));
 
     one('#outside').focus();
     render(inventory(console7));
@@ -227,16 +222,6 @@ describe('row menu', () => {
 });
 
 describe('section actions', () => {
-  it('sends refresh and help from the toolbar', () => {
-    render(inventory());
-    one('[data-ps-action="refresh"]').click();
-    one('[data-ps-action="help"]').click();
-    expect(sent).toEqual([
-      { type: 'powerShellAction', action: 'refresh', id: undefined },
-      { type: 'powerShellAction', action: 'help', id: undefined },
-    ]);
-  });
-
   it('offers to resolve only where a location is unresolved, and names the program it will start', () => {
     render(inventory(console7));
     expect(all('.ps-resolve')).toHaveLength(0);
@@ -266,11 +251,10 @@ describe('section actions', () => {
     expect(all('.ps-folded .ps-description').map(description => description.textContent)).toContain('usr · All Users');
   });
 
-  it('renders the error for remote windows in place of the list, and keeps the toolbar', () => {
+  it('renders the error for remote windows in place of the list', () => {
     render({ editions: [], rows: [], error: 'PowerShell profiles support local desktop windows. WSL support is planned next.' });
 
     expect(one('#powershell').textContent).toBe('PowerShell profiles support local desktop windows. WSL support is planned next.');
     expect(all('.ps-row')).toHaveLength(0);
-    expect(all('#powershell-toolbar button')).toHaveLength(2);
   });
 });

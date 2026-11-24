@@ -111,8 +111,8 @@ export interface HomeWorkspaceVm {
   warnings: string[];
 }
 
-export type HostToHome =
-  | { type: 'powerShellState'; inventory: PowerShellInventory }
+/** Home is several sidebar views, each with its own page and its own messages. */
+export type HostToVsCodeProfiles =
   | {
       type: 'state';
       profiles: HomeProfileVm[];
@@ -123,11 +123,20 @@ export type HostToHome =
   | { type: 'orphanSize'; totalSizeBytes: number }
   | { type: 'unsupported'; reason: string };
 
-export type HomeToHost =
-  | { type: 'powerShellAction'; action: 'refresh' | 'help' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal'; id?: string }
+export type VsCodeProfilesToHost =
   | { type: 'ready' }
   | { type: 'openMatrix' }
   | { type: 'editProfileFile'; profileId: string }
   | { type: 'openWorkspaceReadOnly' }
   | { type: 'editWorkspaceFile' }
   | { type: 'reviewOrphans' };
+
+export type HostToPowerShellProfiles = { type: 'powerShellState'; inventory: PowerShellInventory };
+
+/** Refresh and Help are buttons in the view's title bar, so the host starts them; the page sends the rest. */
+export type PowerShellAction = {
+  type: 'powerShellAction';
+  action: 'refresh' | 'help' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal';
+  id?: string;
+};
+export type PowerShellProfilesToHost = { type: 'ready' } | PowerShellAction;
