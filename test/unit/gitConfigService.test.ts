@@ -244,6 +244,26 @@ it.skipIf(platform === 'win32')('lets Git expand an include under a named user\'
   expect(include!.status).toBe('missing');
 });
 
+it('still lists the local config as a file of its own when the global config includes it', async () => {
+  const { home, repo, service } = await sandbox(({ repo }) =>
+    [
+      base,
+      `[includeIf "gitdir:/nowhere/"]\n\tpath = ${slash(path.join(repo, '.git', 'config'))}\n`,
+      `[include]\n\tpath = ${slash(path.join(repo, '.git', 'config'))}\n`,
+    ].join(''),
+  );
+
+  const snapshot = await inspect(service, repo);
+
+  const local = path.join(repo, '.git', 'config');
+  expect(snapshot.files.map((file) => [file.scope, file.path])).toEqual([
+    ['global', path.join(home, '.gitconfig')],
+    ['local', local],
+  ]);
+  // The rule that did not match is not credited with the read Git makes for the local scope.
+  expect(snapshot.files[0]!.includes.map((include) => include.status)).toEqual(['notApplied', 'applied']);
+});
+
 it('judges each include line on its own when several name the same file', async () => {
   const { home, repo, service } = await sandbox(({ repo }) =>
     [

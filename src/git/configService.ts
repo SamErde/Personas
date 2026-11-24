@@ -150,8 +150,13 @@ function buildFileTree(
   const files: GitConfigFile[] = [];
   const occurrences: Occurrence[] = [];
   const stack: Frame[] = [];
+  let scope: string | undefined;
   for (const entry of entries) {
     if (entry.file === undefined) continue;
+    // Each scope is a read of its own: a file the global config included is read again, from
+    // the top, when it is also the repository's local config.
+    if (entry.scope !== scope) stack.length = 0;
+    scope = entry.scope;
     const frame = enter(stack, files, { ...entry, file: entry.file });
     delete frame.pending;
     const rule = includeKey.exec(entry.key);

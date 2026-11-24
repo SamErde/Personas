@@ -351,6 +351,22 @@ it('refreshes when the active editor moves to another repository, not when it mo
   expect(service.inspect).toHaveBeenCalledTimes(1);
 });
 
+it('reads again when the active editor moves into a repository Git cannot read, so the error shows', async () => {
+  const { service, view } = setup(snapshot(null));
+  await view.refresh();
+  vi.useFakeTimers();
+  service.inspect.mockClear();
+
+  mock.activeFile = at('code', 'broken', 'a.ts');
+  service.resolveRepository.mockRejectedValueOnce(new Error('bad config line 3'));
+  service.result = { kind: 'error', message: 'bad config line 3' };
+  mock.editorChanged();
+  await vi.advanceTimersByTimeAsync(350);
+
+  expect(service.inspect).toHaveBeenCalledTimes(1);
+  expect(mock.tree.message).toBe('Git configuration could not be read: bad config line 3');
+});
+
 it('renders the effective configuration of what it last read', async () => {
   const { view } = setup();
   await view.refresh();

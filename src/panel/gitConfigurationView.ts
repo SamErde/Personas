@@ -193,7 +193,9 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
     // A read still under way decides what is shown, so the comparison waits for it, before and after asking Git.
     await this.queue;
     if (this.result?.kind !== 'ok' || vscode.env.remoteName) return this.refresh(true);
-    const current = await this.service.resolveRepository(this.candidateFolders()).then((repository) => repository?.root, () => undefined);
+    // A repository Git cannot read is not "no repository": a full read is what reports the error.
+    const unreadable = Symbol('unreadable');
+    const current = await this.service.resolveRepository(this.candidateFolders()).then((repository) => repository?.root, () => unreadable);
     await this.queue;
     const shown = this.result?.kind === 'ok' ? this.result.repository?.root : undefined;
     if (current !== shown) await this.refresh(true);
