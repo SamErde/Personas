@@ -266,6 +266,23 @@ it('matches a config file whose name has glob characters', async () => {
   expect(service.inspect).toHaveBeenCalledTimes(1);
 });
 
+it('keeps watching after a failed read, so correcting the file is seen', async () => {
+  const { service, view } = setup();
+  await view.refresh();
+  service.result = { kind: 'error', message: 'bad config line 3' };
+  await view.refresh();
+  expect(mock.tree.message).toBe('Git configuration could not be read: bad config line 3');
+  vi.useFakeTimers();
+  service.inspect.mockClear();
+
+  service.result = snapshot();
+  change(globalFile);
+  await vi.advanceTimersByTimeAsync(350);
+
+  expect(service.inspect).toHaveBeenCalledTimes(1);
+  expect(mock.tree.message).toBeUndefined();
+});
+
 it('keeps a change that arrives while a read is under way', async () => {
   const { service, view } = setup();
   await view.refresh();

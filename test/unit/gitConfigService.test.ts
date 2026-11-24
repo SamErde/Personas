@@ -29,7 +29,7 @@ async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => s
   const repo = path.join(root, 'repo');
   await fs.mkdir(home);
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
@@ -38,6 +38,9 @@ async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => s
     GIT_CONFIG_COUNT: '0',
     ...extraEnv,
   };
+  // Nor a repository it points Git at: `git init` below must create the sandbox's own.
+  delete env['GIT_DIR'];
+  delete env['GIT_WORK_TREE'];
   execFileSync('git', ['init', '-q', '-b', 'main', repo], { env });
   await fs.writeFile(path.join(home, '.gitconfig'), globalConfig({ home, repo }));
   const service = new GitConfigService({
@@ -240,6 +243,20 @@ it('judges each include line on its own when several name the same file', async 
     ['shared.inc', 'notApplied', []],
     ['shared.inc', 'applied', nested],
   ]);
+});
+
+it('reads the repository of the folder it is given, whatever repository the environment names', async () => {
+  const { root, repo, env } = await sandbox(() => base);
+  const other = path.join(root, 'other');
+  execFileSync('git', ['init', '-q', '-b', 'main', other], { env });
+  const inherited = { ...env, GIT_DIR: path.join(other, '.git'), GIT_WORK_TREE: other };
+  const service = new GitConfigService({
+    run: createCliRunner({ platform, timeoutMs: 20_000 }),
+    gitPath: () => findGitExecutable([], { platform, env: inherited }),
+    env: inherited,
+  });
+
+  expect((await inspect(service, repo)).repository?.root).toBe(repo);
 });
 
 it('takes the first folder that is inside a repository as the current repository', async () => {

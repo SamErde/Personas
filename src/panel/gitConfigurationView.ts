@@ -190,9 +190,12 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
 
   /** The active editor moved: read again only if that changes which repository is the current one. */
   private async followEditor(): Promise<void> {
+    // A read still under way decides what is shown, so the comparison waits for it, before and after asking Git.
+    await this.queue;
     if (this.result?.kind !== 'ok' || vscode.env.remoteName) return this.refresh(true);
-    const shown = this.result.repository?.root;
     const current = await this.service.resolveRepository(this.candidateFolders()).then((repository) => repository?.root, () => undefined);
+    await this.queue;
+    const shown = this.result?.kind === 'ok' ? this.result.repository?.root : undefined;
     if (current !== shown) await this.refresh(true);
   }
 
@@ -218,6 +221,8 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
    * safe glob pattern (`active[1].inc`). A read already scheduled survives the watchers' renewal.
    */
   private watch(): void {
+    // A failed read keeps the last known watches: correcting the file that broke it must be seen.
+    if (this.tree.visible && this.result !== undefined && this.result.kind !== 'ok') return;
     this.releaseWatchers();
     if (!this.tree.visible || this.result?.kind !== 'ok') return;
     const byFolder = new Map<string, Set<string>>();

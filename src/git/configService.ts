@@ -73,6 +73,9 @@ const exists = (file: string) => fs.access(file).then(() => true, () => false);
 /** How many `git config --file` reads run at once. */
 const statusReadsAtOnce = 8;
 
+/** Environment variables that tell Git which repository to use, whatever folder it runs in. */
+const repositoryOverrides = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_NAMESPACE'];
+
 class GitMissingError extends Error {}
 
 /** Runs Git in `cwd`. With `discover` off, Git does not look for a repository around `cwd`. */
@@ -180,15 +183,14 @@ export class GitConfigService {
   private async session(): Promise<GitRun> {
     const executable = await this.options.gitPath();
     if (executable === undefined) throw new GitMissingError();
-    const base = this.options.env;
+    // An inherited repository location would answer for whatever folder Git is run in.
+    const base = { ...(this.options.env ?? process.env) };
+    for (const name of repositoryOverrides) delete base[name];
     // Pointed at a repository that does not exist, Git reads system and global configuration
     // without finding one around `cwd`. A home folder that is itself a repository would
     // otherwise decide which `includeIf` rules apply.
-    const outside = { ...(base ?? process.env), GIT_DIR: path.join(this.home, '.personas-no-repository') };
-    return (args, cwd, discover = true) => {
-      const env = discover ? base : outside;
-      return this.options.run(executable, args, { cwd, ...(env === undefined ? {} : { env }) });
-    };
+    const outside = { ...base, GIT_DIR: path.join(this.home, '.personas-no-repository') };
+    return (args, cwd, discover = true) => this.options.run(executable, args, { cwd, env: discover ? base : outside });
   }
 
   /**
