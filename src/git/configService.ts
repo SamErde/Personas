@@ -78,6 +78,15 @@ const statusReadsAtOnce = 8;
 /** Environment variables that tell Git which repository to use, whatever folder it runs in. */
 const repositoryOverrides = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_NAMESPACE'];
 
+/**
+ * A copy of `env` without the variables that name a repository. Windows variable names ignore
+ * case, and a copy is a plain object that no longer does, so there they are matched in any case.
+ */
+export function withoutRepositoryOverrides(env: NodeJS.ProcessEnv, platform: string = process.platform): NodeJS.ProcessEnv {
+  const named = (name: string) => repositoryOverrides.includes(platform === 'win32' ? name.toUpperCase() : name);
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !named(name)));
+}
+
 class GitMissingError extends Error {}
 
 /** Runs Git in `cwd`. With `discover` off, Git does not look for a repository around `cwd`. */
@@ -198,8 +207,7 @@ export class GitConfigService {
     const executable = await this.options.gitPath();
     if (executable === undefined) throw new GitMissingError();
     // An inherited repository location would answer for whatever folder Git is run in.
-    const base = { ...(this.options.env ?? process.env) };
-    for (const name of repositoryOverrides) delete base[name];
+    const base = withoutRepositoryOverrides(this.options.env ?? process.env);
     // Pointed at a repository that does not exist, Git reads system and global configuration
     // without finding one around `cwd`. A home folder that is itself a repository would
     // otherwise decide which `includeIf` rules apply.
@@ -277,14 +285,15 @@ export class GitConfigService {
 
   /**
    * Include paths under a named user's home (`~alice/shared.inc`), expanded by Git itself: asked
-   * for a key that is not set, with the path as the default, Git answers with the path expanded.
+   * for a key with the path as its default, Git answers with the path expanded. It is asked of an
+   * empty config source, where no key is set, so the answer is never some configured value.
    */
   private async expandNamedUsers(git: GitRun, entries: readonly GitConfigEntry[], cwd: string): Promise<Map<string, string>> {
     const expanded = new Map<string, string>();
     for (const entry of entries) {
       const written = entry.value;
       if (written === undefined || expanded.has(written) || !namedUserPath.test(written) || !includeKey.test(entry.key)) continue;
-      const result = await git(['config', '--type=path', '--default', written, '--get', 'personas.unset.path'], cwd);
+      const result = await git(['config', '--file', os.devNull, '--type=path', '--default', written, '--get', 'personas.unset.path'], cwd);
       const answer = result.stdout.replace(/\r?\n$/, '');
       if (result.code === 0 && answer !== '') expanded.set(written, path.resolve(answer));
     }

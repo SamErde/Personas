@@ -4,11 +4,17 @@ import { pathFor, type Platform } from '../core/paths';
 export type ExecutableLookup = {
   platform: Platform;
   env: NodeJS.ProcessEnv;
-  /** Whether a path names an existing file. Defaults to asking the file system. */
+  /** Whether a path names a file that can be run. Defaults to asking the file system. */
   isFile?: (file: string) => Promise<boolean>;
 };
 
-const onDisk = (file: string) => fs.stat(file).then((stat) => stat.isFile(), () => false);
+/** A regular file and, where the file system records it, one this user may execute. */
+async function onDisk(file: string): Promise<boolean> {
+  const isFile = await fs.stat(file).then((stat) => stat.isFile(), () => false);
+  if (!isFile || process.platform === 'win32') return isFile;
+  // A file that cannot be run must not stop the search before a working Git is reached.
+  return fs.access(file, fs.constants.X_OK).then(() => true, () => false);
+}
 
 /** An environment variable by name; Windows names ignore case (`Path`, `PATH`). */
 function variable(lookup: ExecutableLookup, name: string): string {

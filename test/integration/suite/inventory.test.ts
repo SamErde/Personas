@@ -9,6 +9,7 @@ import { after, describe, it } from 'node:test';
 import * as vscode from 'vscode';
 import { InventoryService, type InventoryIo } from '../../../src/core/inventory';
 import { createCliRunner } from '../../../src/core/cliRunner';
+import { withoutRepositoryOverrides } from '../../../src/git/configService';
 import { MutationService } from '../../../src/core/mutations';
 import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/paths';
 import {
@@ -229,8 +230,11 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
 
     it('shows the effective Git configuration of the repository the active file is in', guard(async () => {
       const repository = path.join(workspaceDir, 'git-fixture');
-      execFileSync('git', ['init', '-q', repository]);
-      execFileSync('git', ['-C', repository, 'config', '--local', 'user.name', 'Personas Fixture']);
+      // The caller's Git environment must not reach the fixture: an inherited repository would
+      // take the write below, and injected config can stop `git init` before the test begins.
+      const env = { ...withoutRepositoryOverrides(process.env), GIT_CONFIG_COUNT: '0' };
+      execFileSync('git', ['init', '-q', repository], { env });
+      execFileSync('git', ['-C', repository, 'config', '--local', 'user.name', 'Personas Fixture'], { env });
       const file = path.join(repository, 'note.txt');
       fs.writeFileSync(file, 'fixture');
       await vscode.window.showTextDocument(vscode.Uri.file(file));

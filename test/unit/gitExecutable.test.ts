@@ -1,4 +1,7 @@
 import { expect, it } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { findGitExecutable, type ExecutableLookup } from '../../src/git/executable';
 
 /** A lookup over a made-up disk, recording every path that was asked about. */
@@ -44,6 +47,23 @@ it('ignores a relative git.path entry, which would depend on the folder Git runs
   const { lookup, asked } = disk('linux', { PATH: '/usr/bin' }, ['/usr/bin/git']);
   expect(await findGitExecutable(['./bin/git'], lookup)).toBe('/usr/bin/git');
   expect(asked).toEqual(['/usr/bin/git']);
+});
+
+it.skipIf(process.platform === 'win32')('passes over a file that cannot be run, on a real disk', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-exec-'));
+  try {
+    const [first, second] = [path.join(root, 'first'), path.join(root, 'second')];
+    await fs.mkdir(first);
+    await fs.mkdir(second);
+    await fs.writeFile(path.join(first, 'git'), '', { mode: 0o644 });
+    await fs.writeFile(path.join(second, 'git'), '#!/bin/sh\n', { mode: 0o755 });
+
+    const found = await findGitExecutable([path.join(first, 'git')], { platform: 'linux', env: { PATH: `${first}:${second}` } });
+
+    expect(found).toBe(path.join(second, 'git'));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 it('looks a bare name up on PATH on POSIX, and reports none when there is none', async () => {

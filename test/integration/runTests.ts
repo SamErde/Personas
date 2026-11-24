@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { withoutRepositoryOverrides } from '../../src/git/configService';
 
 async function main(): Promise<void> {
   const extensionDevelopmentPath = path.resolve(__dirname, '..', '..', '..');
@@ -38,6 +39,11 @@ async function main(): Promise<void> {
   // This machine sets ELECTRON_RUN_AS_NODE=1 globally, which makes runTests() spawn Code.exe as a bare Node process instead of the real GUI (docs/spikes/findings.md, Spike B).
   delete process.env.ELECTRON_RUN_AS_NODE;
 
+  // The test host must not inherit a Git repository or injected Git config from the caller.
+  for (const name of Object.keys(process.env)) {
+    if (!(name in withoutRepositoryOverrides({ [name]: '' }))) delete process.env[name];
+  }
+
   // PERSONAS_IT_VSCODE_VERSION pins the VS Code build under test (for example the 1.101.0
   // engine minimum); unset means the latest stable release.
   await runTests({
@@ -56,6 +62,7 @@ async function main(): Promise<void> {
       PERSONAS_IT_EXT_DIR: extensionsDir,
       PERSONAS_IT_VSIX_PATH: vsixPath,
       PERSONAS_IT_WORKSPACE: workspaceDir,
+      GIT_CONFIG_COUNT: '0',
     },
   });
 }

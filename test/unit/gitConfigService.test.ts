@@ -5,7 +5,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createCliRunner } from '../../src/core/cliRunner';
 import type { Platform } from '../../src/core/paths';
-import { GitConfigService, type GitConfigInclude, type GitConfigSnapshot } from '../../src/git/configService';
+import {
+  GitConfigService,
+  withoutRepositoryOverrides,
+  type GitConfigInclude,
+  type GitConfigSnapshot,
+} from '../../src/git/configService';
 import { findGitExecutable } from '../../src/git/executable';
 
 /**
@@ -225,7 +230,10 @@ it('tells a key with no value from a key set to nothing', async () => {
 // Git for Windows refuses such a path outright ("could not expand include path"), so there is nothing to show there.
 it.skipIf(platform === 'win32')('lets Git expand an include under a named user\'s home', async () => {
   const user = os.userInfo().username;
-  const { home, service, repo } = await sandbox(() => `${base}[include]\n\tpath = ~${user}/personas-test-no-such-file.inc\n`);
+  // The key the expansion asks for is set here: its value must not be taken for the expanded path.
+  const { home, service, repo } = await sandbox(
+    () => `${base}[include]\n\tpath = ~${user}/personas-test-no-such-file.inc\n[personas "unset"]\n\tpath = /somewhere/else\n`,
+  );
 
   const [include] = (await inspect(service, repo)).files[0]!.includes;
 
@@ -263,14 +271,26 @@ it('reads the repository of the folder it is given, whatever repository the envi
   const { root, repo, env } = await sandbox(() => base);
   const other = path.join(root, 'other');
   execFileSync('git', ['init', '-q', '-b', 'main', other], { env });
-  const inherited = { ...env, GIT_DIR: path.join(other, '.git'), GIT_WORK_TREE: other };
+  execFileSync('git', ['-C', other, 'config', '--local', 'user.name', 'Other'], { env });
+  // Windows reads a variable name in any case, so the names must be matched that way there.
+  const [gitDir, workTree] = platform === 'win32' ? ['Git_Dir', 'Git_Work_Tree'] : ['GIT_DIR', 'GIT_WORK_TREE'];
+  const inherited = { ...env, [gitDir!]: path.join(other, '.git'), [workTree!]: other };
   const service = new GitConfigService({
     run: createCliRunner({ platform, timeoutMs: 20_000 }),
     gitPath: () => findGitExecutable([], { platform, env: inherited }),
     env: inherited,
   });
 
-  expect((await inspect(service, repo)).repository?.root).toBe(repo);
+  const snapshot = await inspect(service, repo);
+  expect(snapshot.repository?.root).toBe(repo);
+  // The identity is the inspected repository's too, not the one the environment names.
+  expect(snapshot.identity[0]).toMatchObject({ value: 'Base', scope: 'global' });
+});
+
+it('drops repository overrides whatever their case on Windows, and only exact names elsewhere', () => {
+  const env = { Git_Dir: 'a', GIT_WORK_TREE: 'b', GIT_CONFIG_GLOBAL: 'c', HOME: 'd' };
+  expect(withoutRepositoryOverrides(env, 'win32')).toEqual({ GIT_CONFIG_GLOBAL: 'c', HOME: 'd' });
+  expect(withoutRepositoryOverrides(env, 'linux')).toEqual({ Git_Dir: 'a', GIT_CONFIG_GLOBAL: 'c', HOME: 'd' });
 });
 
 it('takes the first folder that is inside a repository as the current repository', async () => {
