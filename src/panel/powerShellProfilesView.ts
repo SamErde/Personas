@@ -3,7 +3,7 @@ import { PowerShellService } from '../powershell/service';
 import type { HostToPowerShellProfiles, PowerShellProfilesToHost } from '../protocol';
 import { PowerShellController } from './powerShellController';
 import { powerShellProfilesBody, powerShellProfilesStyles } from './powerShellProfilesMarkup';
-import { renderSidebarPage } from './sidebarPage';
+import { openSidebarPage } from './sidebarPage';
 
 /**
  * PowerShell Profiles, one of Home's views. It only wires the view to PowerShellController, which
@@ -22,27 +22,22 @@ export class PowerShellProfilesViewProvider implements vscode.WebviewViewProvide
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     this.controller.setActive(webviewView.visible);
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist')],
-    };
-    webviewView.webview.html = this.html(webviewView.webview);
-    webviewView.webview.onDidReceiveMessage((m: PowerShellProfilesToHost) => void this.onMessage(m));
-
-    // The visibility change only starts and stops file watching. VS Code discards the page when the
-    // view is hidden and loads it again when shown; its script sends `ready` each time, and that
-    // message drives the load, so profiles are discovered once per show (#150).
-    const visibilityListener = webviewView.onDidChangeVisibility(() => {
-      this.controller.setActive(webviewView.visible);
-    });
-    webviewView.onDidDispose(() => {
-      visibilityListener.dispose();
-      if (this.view === webviewView) {
+    openSidebarPage<PowerShellProfilesToHost>(this.context, webviewView, {
+      title: 'PowerShell Profiles',
+      styles: powerShellProfilesStyles,
+      body: powerShellProfilesBody,
+      script: 'powerShellProfiles.js',
+      onMessage: (message) => this.onMessage(message),
+      // Visibility only starts and stops file watching. VS Code discards the page when the view is
+      // hidden and loads it again when shown; its script sends `ready` each time, and that message
+      // drives the load, so profiles are discovered once per show (#150).
+      onVisibilityChange: (visible) => this.controller.setActive(visible),
+      onDispose: () => {
+        if (this.view !== webviewView) return;
         this.view = undefined;
         this.controller.setActive(false);
-      }
+      },
     });
-    this.context.subscriptions.push(visibilityListener);
   }
 
   /** The Refresh button in the view's title bar. */
@@ -67,15 +62,5 @@ export class PowerShellProfilesViewProvider implements vscode.WebviewViewProvide
     // The page was just rebuilt and is empty: show the last known list, then refresh.
     this.controller.paintLastKnown();
     if (this.view?.visible) await this.controller.refresh(true);
-  }
-
-  private html(webview: vscode.Webview): string {
-    const script = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'powerShellProfiles.js'));
-    return renderSidebarPage({
-      title: 'PowerShell Profiles',
-      styles: powerShellProfilesStyles,
-      body: powerShellProfilesBody,
-      scriptUri: script.toString(),
-    });
   }
 }

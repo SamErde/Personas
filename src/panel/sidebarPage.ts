@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { createNonce, homeContentSecurityPolicy, renderContentSecurityPolicyMeta } from './webviewSecurity';
 
 /** Styles every Home view's page shares: the page itself, buttons and links. */
@@ -52,4 +53,43 @@ ${page.body}
 <script nonce="${nonce}" src="${page.scriptUri}"></script>
 </body>
 </html>`;
+}
+
+/** What one Home view puts on its page, and how it reacts to the page and to being shown or hidden. */
+export interface SidebarView<ToHost> {
+  title: string;
+  styles: string;
+  body: string;
+  /** The page's script, by its file name in dist/. */
+  script: string;
+  onMessage(message: ToHost): unknown;
+  onVisibilityChange(visible: boolean): void;
+  onDispose(): void;
+}
+
+/**
+ * Sets up the page of a Home view that VS Code has just resolved: its content, its messages to the
+ * host, and the listeners that follow the view being shown, hidden and disposed.
+ */
+export function openSidebarPage<ToHost>(
+  context: vscode.ExtensionContext,
+  webviewView: vscode.WebviewView,
+  view: SidebarView<ToHost>,
+): void {
+  const dist = vscode.Uri.joinPath(context.extensionUri, 'dist');
+  const { webview } = webviewView;
+  webview.options = { enableScripts: true, localResourceRoots: [dist] };
+  webview.html = renderSidebarPage({
+    title: view.title,
+    styles: view.styles,
+    body: view.body,
+    scriptUri: webview.asWebviewUri(vscode.Uri.joinPath(dist, view.script)).toString(),
+  });
+  webview.onDidReceiveMessage((message: ToHost) => void view.onMessage(message));
+  const visibilityListener = webviewView.onDidChangeVisibility(() => view.onVisibilityChange(webviewView.visible));
+  webviewView.onDidDispose(() => {
+    visibilityListener.dispose();
+    view.onDispose();
+  });
+  context.subscriptions.push(visibilityListener);
 }

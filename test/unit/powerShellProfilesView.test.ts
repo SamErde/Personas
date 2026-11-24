@@ -3,22 +3,16 @@ import { PowerShellProfilesViewProvider } from '../../src/panel/powerShellProfil
 import { PowerShellService } from '../../src/powershell/service';
 import type { HostToPowerShellProfiles, PowerShellProfilesToHost } from '../../src/protocol';
 import type * as Doubles from './sidebarDoubles';
-import { fakeContext, fakeView, vscodeState } from './sidebarDoubles';
+import { fakeContext, fakeView, resetSidebarDoubles, vscodeState } from './sidebarDoubles';
 
 vi.mock('vscode', async () => (await vi.importActual<typeof Doubles>('./sidebarDoubles')).vscodeDouble());
 
-const cleanup: (() => void)[] = [];
-afterEach(() => {
-  cleanup.splice(0).forEach((dispose) => dispose());
-  vscodeState.reset();
-});
+afterEach(resetSidebarDoubles);
 
 /** The view shown for the first time, as VS Code does it: the view resolves, then its page's script sends `ready`. */
 function show() {
   const discover = vi.fn(async () => [{ edition: 'PowerShell 7' as const, installations: [] }]);
-  const { context, dispose } = fakeContext();
-  cleanup.push(dispose);
-  const provider = new PowerShellProfilesViewProvider(context, new PowerShellService(discover, undefined, 'linux'));
+  const provider = new PowerShellProfilesViewProvider(fakeContext(), new PowerShellService(discover, undefined, 'linux'));
   const page = fakeView<HostToPowerShellProfiles, PowerShellProfilesToHost>();
   provider.resolveWebviewView(page.view);
   page.ready();
@@ -40,12 +34,9 @@ it('discovers PowerShell profiles once per show of the view', async () => {
 
 it('paints the last known list as soon as a reshown view is ready', async () => {
   const { page } = show();
-  await settled(page.posted, 1);
-  const lastKnown = [...page.posted];
-
-  page.reshow();
-  // Synchronously: before the refresh has had a chance to finish.
-  expect(page.posted).toEqual(lastKnown);
+  const { lastKnown, repainted } = await page.repaint(() => settled(page.posted, 1));
+  expect(lastKnown).toHaveLength(1);
+  expect(repainted).toEqual(lastKnown);
 });
 
 it('refreshes from the view title button', async () => {

@@ -17,6 +17,13 @@ export const vscodeState = {
   },
 };
 
+const contexts: { dispose(): void }[] = [];
+/** Run after each test: releases what the views registered and clears what the `vscode` double recorded. */
+export function resetSidebarDoubles(): void {
+  contexts.splice(0).forEach((context) => context.dispose());
+  vscodeState.reset();
+}
+
 /** The parts of the `vscode` module that Home's views touch. Use as the factory of `vi.mock('vscode', …)`. */
 export function vscodeDouble() {
   const event = () => ({ dispose: () => undefined });
@@ -65,13 +72,11 @@ export function vscodeDouble() {
   };
 }
 
-/** The extension context a view provider is built with. `dispose` releases what the provider registered. */
+/** The extension context a view provider is built with. `resetSidebarDoubles` releases what the provider registers. */
 export function fakeContext() {
   const subscriptions: { dispose(): void }[] = [];
-  return {
-    context: { subscriptions, extensionUri: { scheme: 'file', fsPath: '/ext/samerde.personas-1.0.0' } } as never,
-    dispose: () => subscriptions.splice(0).forEach((item) => item.dispose()),
-  };
+  contexts.push({ dispose: () => subscriptions.splice(0).forEach((item) => item.dispose()) });
+  return { subscriptions, extensionUri: { scheme: 'file', fsPath: '/ext/samerde.personas-1.0.0' } } as never;
 }
 
 /**
@@ -108,6 +113,12 @@ export function fakeView<ToPage, ToHost extends { type: string }>(visible = true
     onVisibility();
   };
   const ready = () => onMessage({ type: 'ready' } as ToHost);
+  const reshow = () => {
+    setVisible(false);
+    posted.length = 0;
+    setVisible(true);
+    ready();
+  };
   return {
     view: view as never,
     posted,
@@ -115,11 +126,16 @@ export function fakeView<ToPage, ToHost extends { type: string }>(visible = true
     send: (message: ToHost) => onMessage(message),
     setVisible,
     /** Hiding the sidebar discards the page; showing it again reloads the script, which sends `ready`. */
-    reshow: () => {
-      setVisible(false);
-      posted.length = 0;
-      setVisible(true);
-      ready();
+    reshow,
+    /**
+     * Reshows the view once `settled` resolves, and returns what the page held before with what the
+     * host posted synchronously on `ready`: before any refresh has had a chance to finish.
+     */
+    repaint: async (settled: () => Promise<unknown>) => {
+      await settled();
+      const lastKnown = [...posted];
+      reshow();
+      return { lastKnown, repainted: [...posted] };
     },
   };
 }

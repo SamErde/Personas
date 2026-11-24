@@ -15,7 +15,7 @@ import {
 } from './matrixAutoOpen';
 import { shownInventory } from './profileVisibility';
 import { openReadOnly } from './readOnlyProvider';
-import { renderSidebarPage } from './sidebarPage';
+import { openSidebarPage } from './sidebarPage';
 import { vscodeProfilesBody, vscodeProfilesStyles } from './vscodeProfilesMarkup';
 
 /**
@@ -39,29 +39,27 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist')],
-    };
-    webviewView.webview.html = this.html(webviewView.webview);
-    webviewView.webview.onDidReceiveMessage((m: VsCodeProfilesToHost) => void this.onMessage(m));
-
-    // resolveWebviewView doesn't re-fire on later re-clicks (the view stays resolved once
-    // created), so also auto-open on visibility change to visible — this covers re-clicking the
-    // activity-bar icon after the matrix editor tab was closed.
-    //
-    // Neither place loads this view's content. VS Code discards this webview's page whenever the view
-    // is hidden and loads it again when shown, and the page's script sends `ready` each time it
-    // loads. That message alone drives the load, so the profiles are read once per show (#150).
+    openSidebarPage<VsCodeProfilesToHost>(this.context, webviewView, {
+      title: 'VS Code Profiles',
+      styles: vscodeProfilesStyles,
+      body: vscodeProfilesBody,
+      script: 'vscodeProfiles.js',
+      onMessage: (message) => this.onMessage(message),
+      // resolveWebviewView doesn't re-fire on later re-clicks (the view stays resolved once
+      // created), so also auto-open when the view becomes visible again — this covers re-clicking
+      // the activity-bar icon after the matrix editor tab was closed.
+      onVisibilityChange: (visible) => {
+        if (visible) this.maybeAutoOpen();
+      },
+      onDispose: () => {
+        if (this.view === webviewView) this.view = undefined;
+      },
+    });
+    // Neither this nor the visibility change loads the view's content. VS Code discards the page
+    // whenever the view is hidden and loads it again when shown, and the page's script sends `ready`
+    // each time it loads. That message alone drives the load, so the profiles are read once per
+    // show (#150).
     if (webviewView.visible) this.maybeAutoOpen();
-    const visibilityListener = webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible) this.maybeAutoOpen();
-    });
-    webviewView.onDidDispose(() => {
-      visibilityListener.dispose();
-      if (this.view === webviewView) this.view = undefined;
-    });
-    this.context.subscriptions.push(visibilityListener);
   }
 
   /**
@@ -156,40 +154,42 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async onMessage(m: VsCodeProfilesToHost): Promise<void> {
-    if (m.type === 'openWorkspaceReadOnly' || m.type === 'editWorkspaceFile') {
-      const action = resolveWorkspaceManifestAction(m, this.workspaceManifestPath);
-      if (!action) return;
-      if (action.mode === 'readOnly') {
-        await openReadOnly(
-          `${vscode.workspace.name ?? 'Workspace'} — .code-workspace (read-only)`,
-          action.filePath,
-          'jsonc',
-        );
-      } else {
-        await this.openEditableFile(action.filePath);
-      }
-      return;
-    }
     switch (m.type) {
       case 'ready':
-        // The page was just rebuilt and is empty: show what it last held, then refresh.
-        if (this.lastState) this.post(this.lastState);
-        if (this.lastOrphanSize) this.post(this.lastOrphanSize);
-        await this.render();
-        return;
+        return this.onReady();
       case 'openMatrix':
-        await vscode.commands.executeCommand('personas.showMatrix');
-        return;
-      case 'editProfileFile': {
-        const profile = this.profiles.find((p) => p.id === m.profileId);
-        if (!profile?.filePath) return;
-        await this.openEditableFile(profile.filePath);
-        return;
-      }
+        return vscode.commands.executeCommand('personas.showMatrix');
       case 'reviewOrphans':
-        await vscode.commands.executeCommand('personas.reviewOrphans');
-        return;
+        return vscode.commands.executeCommand('personas.reviewOrphans');
+      case 'editProfileFile':
+        return this.editProfileFile(m.profileId);
+      case 'openWorkspaceReadOnly':
+      case 'editWorkspaceFile':
+        return this.openWorkspaceManifest(m);
     }
+  }
+
+  /** The page was just rebuilt and is empty: show what it last held, then refresh. */
+  private async onReady(): Promise<void> {
+    if (this.lastState) this.post(this.lastState);
+    if (this.lastOrphanSize) this.post(this.lastOrphanSize);
+    await this.render();
+  }
+
+  private async editProfileFile(profileId: string): Promise<void> {
+    const filePath = this.profiles.find((p) => p.id === profileId)?.filePath;
+    if (filePath) await this.openEditableFile(filePath);
+  }
+
+  private async openWorkspaceManifest(m: VsCodeProfilesToHost): Promise<void> {
+    const action = resolveWorkspaceManifestAction(m, this.workspaceManifestPath);
+    if (!action) return;
+    if (action.mode !== 'readOnly') return this.openEditableFile(action.filePath);
+    await openReadOnly(
+      `${vscode.workspace.name ?? 'Workspace'} — .code-workspace (read-only)`,
+      action.filePath,
+      'jsonc',
+    );
   }
 
   private async openEditableFile(filePath: string): Promise<void> {
@@ -201,15 +201,5 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
         `Personas: couldn't open ${filePath} — ${asError(e).message}`,
       );
     }
-  }
-
-  private html(webview: vscode.Webview): string {
-    const script = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'vscodeProfiles.js'));
-    return renderSidebarPage({
-      title: 'VS Code Profiles',
-      styles: vscodeProfilesStyles,
-      body: vscodeProfilesBody,
-      scriptUri: script.toString(),
-    });
   }
 }

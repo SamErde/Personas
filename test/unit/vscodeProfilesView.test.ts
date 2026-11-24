@@ -4,7 +4,7 @@ import { resolvePaths } from '../../src/core/paths';
 import { VsCodeProfilesViewProvider } from '../../src/panel/vscodeProfilesView';
 import type { HostToVsCodeProfiles, VsCodeProfilesToHost } from '../../src/protocol';
 import type * as Doubles from './sidebarDoubles';
-import { fakeContext, fakeView, vscodeState } from './sidebarDoubles';
+import { fakeContext, fakeView, resetSidebarDoubles, vscodeState } from './sidebarDoubles';
 
 const mock = vi.hoisted(() => ({ services: undefined as unknown }));
 vi.mock('vscode', async () => (await vi.importActual<typeof Doubles>('./sidebarDoubles')).vscodeDouble());
@@ -12,11 +12,7 @@ vi.mock('../../src/servicesFactory', () => ({ getOrBuildServices: async () => mo
 // Every extension folder weighs the same, so a size identifies how many folders were measured.
 vi.mock('../../src/panel/fsStat', () => ({ statFolder: async () => ({ sizeBytes: 10, lastModifiedMs: 0 }) }));
 
-const cleanup: (() => void)[] = [];
-afterEach(() => {
-  cleanup.splice(0).forEach((dispose) => dispose());
-  vscodeState.reset();
-});
+afterEach(resetSidebarDoubles);
 
 /** The view shown for the first time, as VS Code does it: the view resolves, then its page's script sends `ready`. */
 function show(extensionFolders: string[] = [], visible = true) {
@@ -34,10 +30,8 @@ function show(extensionFolders: string[] = [], visible = true) {
   const inventory = new InventoryService(paths, io);
   const getInventory = vi.spyOn(inventory, 'getInventory');
   mock.services = { inventory, paths, workspace: { getWorkspaceInventory: async () => undefined } };
-  const { context, dispose } = fakeContext();
-  cleanup.push(dispose);
   const page = fakeView<HostToVsCodeProfiles, VsCodeProfilesToHost>(visible);
-  new VsCodeProfilesViewProvider(context).resolveWebviewView(page.view);
+  new VsCodeProfilesViewProvider(fakeContext()).resolveWebviewView(page.view);
   page.ready();
   return { getInventory, page };
 }
@@ -60,12 +54,9 @@ it('reads the profiles once per show of the view', async () => {
 
 it('paints the last known state as soon as a reshown view is ready', async () => {
   const { page } = show();
-  await settled(page.posted, 1);
-  const lastKnown = [...page.posted];
-
-  page.reshow();
-  // Synchronously: before the refresh has had a chance to finish.
-  expect(page.posted).toEqual(lastKnown);
+  const { lastKnown, repainted } = await page.repaint(() => settled(page.posted, 1));
+  expect(states(lastKnown)).toHaveLength(1);
+  expect(repainted).toEqual(lastKnown);
 });
 
 it('paints nothing from memory the first time the view is shown', () => {

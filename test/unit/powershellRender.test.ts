@@ -6,7 +6,7 @@ import type { PowerShellAction } from '../../src/protocol';
 import { renderPowerShell } from '../../src/webview/powershell';
 
 /** The view's real markup, so that this test cannot drift from it. */
-const markup = `${powerShellProfilesBody}<button id="outside">Outside</button>`;
+const markup = powerShellProfilesBody + '<button id="outside">Outside</button>';
 
 const user = '/home/me/.config/powershell';
 const home = '/opt/microsoft/powershell/7';
