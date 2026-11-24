@@ -12,7 +12,7 @@ const mock = vi.hoisted(() => ({
   tree: { visible: true, message: undefined as string | undefined, description: undefined as string | undefined },
   visibility: (() => undefined) as () => void,
   editorChanged: (() => undefined) as () => void,
-  watchers: [] as { base: string; pattern: string; disposed: boolean; fire(): void }[],
+  watchers: [] as { base: string; pattern: string; disposed: boolean; fire(file: string): void }[],
 }));
 vi.mock('vscode', () => {
   const uri = (fsPath: string, scheme = 'file') => ({ scheme, fsPath });
@@ -57,8 +57,8 @@ vi.mock('vscode', () => {
       get workspaceFolders() { return mock.workspaceFolders.map((folder) => ({ uri: uri(folder) })); },
       onDidChangeWorkspaceFolders: () => ({ dispose: () => undefined }),
       createFileSystemWatcher: (pattern: { baseUri: { fsPath: string }; pattern: string }) => {
-        let changed: () => void = () => undefined;
-        const on = (callback: () => void) => {
+        let changed: (changedUri: unknown) => void = () => undefined;
+        const on = (callback: (changedUri: unknown) => void) => {
           changed = callback;
           return { dispose: () => undefined };
         };
@@ -66,7 +66,7 @@ vi.mock('vscode', () => {
           base: pattern.baseUri.fsPath,
           pattern: pattern.pattern,
           disposed: false,
-          fire: () => changed(),
+          fire: (file: string) => changed(uri(file)),
           onDidCreate: on,
           onDidChange: on,
           onDidDelete: on,
@@ -118,6 +118,13 @@ function snapshot(repository: GitRepository | null = work): GitConfigSnapshot {
     ],
     entries: [{ key: 'user.name', value: 'Base', scope: 'global', origin: `file:${globalFile}`, file: globalFile }],
   };
+}
+
+/** A change to `file` as VS Code reports it: to every live watcher of the folder it is in. */
+function change(file: string): void {
+  for (const watcher of mock.watchers) {
+    if (!watcher.disposed && watcher.base === path.dirname(file)) watcher.fire(file);
+  }
 }
 
 function setup(result: GitConfigResult = snapshot()) {
@@ -204,21 +211,26 @@ it('refreshes when a listed config file or the repository\'s HEAD changes, but o
   const { service, view } = setup();
   await view.refresh();
   vi.useFakeTimers();
-  const watched = mock.watchers.map((watcher) => path.join(watcher.base, watcher.pattern));
-  expect(watched).toEqual(expect.arrayContaining([
-    globalFile, at('home', 'work.inc'), at('home', 'gone.inc'), path.join(work.gitDir, 'config'), path.join(work.gitDir, 'HEAD'),
-  ]));
+  // Folders are watched whole and changes matched by path, so a file name is never read as a glob.
+  const live = mock.watchers.filter((watcher) => !watcher.disposed);
+  expect(live.map((watcher) => [watcher.base, watcher.pattern])).toEqual([[at('home'), '*'], [work.gitDir, '*']]);
 
-  for (const file of [at('home', 'work.inc'), path.join(work.gitDir, 'HEAD')]) {
+  for (const file of [at('home', 'work.inc'), at('home', 'gone.inc'), path.join(work.gitDir, 'HEAD')]) {
     service.inspect.mockClear();
-    mock.watchers.find((watcher) => path.join(watcher.base, watcher.pattern) === file)!.fire();
+    change(file);
     await vi.advanceTimersByTimeAsync(350);
     expect(service.inspect).toHaveBeenCalledTimes(1);
   }
 
+  // A file in a watched folder that the view does not list changes nothing.
+  service.inspect.mockClear();
+  change(at('home', 'notes.txt'));
+  await vi.advanceTimersByTimeAsync(350);
+  expect(service.inspect).not.toHaveBeenCalled();
+
   // An editor move right after a file change does not swallow the read the change asked for.
   service.inspect.mockClear();
-  mock.watchers.find((watcher) => !watcher.disposed)!.fire();
+  change(globalFile);
   mock.editorChanged();
   await vi.advanceTimersByTimeAsync(350);
   expect(service.inspect).toHaveBeenCalledTimes(1);
@@ -229,7 +241,7 @@ it('refreshes when a listed config file or the repository\'s HEAD changes, but o
   mock.tree.visible = false;
   mock.visibility();
   expect(armed.every((watcher) => watcher.disposed)).toBe(true);
-  armed[0]!.fire();
+  armed[0]!.fire(globalFile);
   mock.editorChanged();
   await vi.advanceTimersByTimeAsync(350);
   expect(service.inspect).not.toHaveBeenCalled();
@@ -239,6 +251,38 @@ it('refreshes when a listed config file or the repository\'s HEAD changes, but o
   mock.visibility();
   await vi.advanceTimersByTimeAsync(0);
   expect(service.inspect).toHaveBeenCalledTimes(1);
+});
+
+it('matches a config file whose name has glob characters', async () => {
+  const bracketed = snapshot();
+  bracketed.files[0]!.includes = [{ writtenPath: 'active[1].inc', path: at('home', 'active[1].inc'), status: 'applied', includes: [] }];
+  const { service, view } = setup(bracketed);
+  await view.refresh();
+  vi.useFakeTimers();
+  service.inspect.mockClear();
+
+  change(at('home', 'active[1].inc'));
+  await vi.advanceTimersByTimeAsync(350);
+  expect(service.inspect).toHaveBeenCalledTimes(1);
+});
+
+it('keeps a change that arrives while a read is under way', async () => {
+  const { service, view } = setup();
+  await view.refresh();
+  vi.useFakeTimers();
+  service.inspect.mockClear();
+  let finish: (result: GitConfigResult) => void = () => undefined;
+  service.inspect.mockImplementationOnce(() => new Promise<GitConfigResult>((resolve) => { finish = resolve; }));
+
+  const reading = view.refresh();
+  await vi.advanceTimersByTimeAsync(0);
+  change(globalFile);
+  finish(snapshot());
+  await reading;
+  await vi.advanceTimersByTimeAsync(350);
+
+  // The read under way, then one more for the change it could not have seen.
+  expect(service.inspect).toHaveBeenCalledTimes(2);
 });
 
 it('refreshes when the active editor moves to another repository, not when it moves within one', async () => {

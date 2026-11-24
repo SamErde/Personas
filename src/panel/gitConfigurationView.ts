@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { asError } from '../core/errors';
+import { fsPathKey, type Platform } from '../core/paths';
 import type {
+  GitConfigSnapshot,
   GitConfigFile,
   GitConfigInclude,
   GitConfigResult,
@@ -210,27 +212,24 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
     ];
   }
 
-  /** Watches every listed file, and the repository's HEAD because `onbranch:` conditions depend on it. */
+  /**
+   * Watches every listed file, and the repository's HEAD because `onbranch:` conditions depend on
+   * it. Each folder is watched as a whole and changes are matched by path: a file name is not a
+   * safe glob pattern (`active[1].inc`). A read already scheduled survives the watchers' renewal.
+   */
   private watch(): void {
-    this.stopWatching();
+    this.releaseWatchers();
     if (!this.tree.visible || this.result?.kind !== 'ok') return;
-    const files = new Set<string>();
-    const add = (includes: readonly GitConfigInclude[]): void => {
-      for (const include of includes) {
-        files.add(include.path);
-        add(include.includes);
-      }
-    };
-    for (const file of this.result.files) {
-      files.add(file.path);
-      add(file.includes);
+    const byFolder = new Map<string, Set<string>>();
+    for (const file of watchedFiles(this.result)) {
+      const folder = path.dirname(file);
+      byFolder.set(folder, (byFolder.get(folder) ?? new Set()).add(fileKey(file)));
     }
-    if (this.result.repository) files.add(path.join(this.result.repository.gitDir, 'HEAD'));
-    for (const file of files) {
-      const watcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file)),
-      );
-      const changed = () => this.schedule(true);
+    for (const [folder, files] of byFolder) {
+      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(folder), '*'));
+      const changed = (uri: vscode.Uri) => {
+        if (files.has(fileKey(uri.fsPath))) this.schedule(true);
+      };
       watcher.onDidCreate(changed);
       watcher.onDidChange(changed);
       watcher.onDidDelete(changed);
@@ -238,10 +237,15 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
     }
   }
 
+  private releaseWatchers(): void {
+    for (const watcher of this.watchers.splice(0)) watcher.dispose();
+  }
+
+  /** The view is hidden or gone: nothing is watched and nothing is owed. */
   private stopWatching(): void {
     clearTimeout(this.timer);
     this.readPending = false;
-    for (const watcher of this.watchers.splice(0)) watcher.dispose();
+    this.releaseWatchers();
   }
 
   dispose(): void {
@@ -249,6 +253,25 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
     this.stopWatching();
     for (const item of this.subscriptions) item.dispose();
   }
+}
+
+const fileKey = (file: string) => fsPathKey(file, process.platform as Platform);
+
+/** Every file whose change can alter what the view shows. */
+function watchedFiles(snapshot: GitConfigSnapshot): string[] {
+  const files: string[] = [];
+  const add = (includes: readonly GitConfigInclude[]): void => {
+    for (const include of includes) {
+      files.push(include.path);
+      add(include.includes);
+    }
+  };
+  for (const file of snapshot.files) {
+    files.push(file.path);
+    add(file.includes);
+  }
+  if (snapshot.repository) files.push(path.join(snapshot.repository.gitDir, 'HEAD'));
+  return files;
 }
 
 function expandedIf(includes: readonly unknown[]): vscode.TreeItemCollapsibleState {

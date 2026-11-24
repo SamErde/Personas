@@ -2,6 +2,7 @@ import { PowerShellController } from '../../../src/panel/powerShellController';
 import { PowerShellService } from '../../../src/powershell/service';
 import { deleteProfile } from '../../../src/powershell/files';
 import * as assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -224,13 +225,27 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.ok(after.includes('personas.powerShellProfiles.refresh'));
       assert.ok(after.includes('personas.powerShellProfiles.help'));
       await vscode.commands.executeCommand('personas.powerShellProfiles.refresh');
-      // Git Configuration: its title-bar buttons run, and the effective configuration opens read-only.
+    }));
+
+    it('shows the effective Git configuration of the repository the active file is in', guard(async () => {
+      const repository = path.join(workspaceDir, 'git-fixture');
+      execFileSync('git', ['init', '-q', repository]);
+      execFileSync('git', ['-C', repository, 'config', '--local', 'user.name', 'Personas Fixture']);
+      const file = path.join(repository, 'note.txt');
+      fs.writeFileSync(file, 'fixture');
+      await vscode.window.showTextDocument(vscode.Uri.file(file));
+
       await vscode.commands.executeCommand('personas.gitConfiguration.focus');
       await vscode.commands.executeCommand('personas.gitConfiguration.refresh');
       await vscode.commands.executeCommand('personas.gitConfiguration.showEffective');
+
       const effective = vscode.window.activeTextEditor!.document;
       assert.strictEqual(effective.uri.scheme, 'personas-readonly');
-      assert.ok(effective.getText().startsWith('# '));
+      const text = effective.getText();
+      // The fixture repository, its identity value, and the file that value comes from. An error
+      // document also starts with "# ", so the header alone would prove nothing.
+      assert.match(text, /^# Effective Git configuration\n# Repository: .*git-fixture\n/);
+      assert.match(text, /\n {4}Personas Fixture\n {8}local {2}.*git-fixture[\\/]\.git[\\/]config\n/);
     }));
 
     it('opens a disposable PowerShell profile and blocks deletion of unsaved editor contents', guard(async () => {

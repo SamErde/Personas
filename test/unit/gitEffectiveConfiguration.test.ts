@@ -12,6 +12,8 @@ const snapshot: GitConfigSnapshot = {
     { key: 'remote.origin.fetch', value: '+refs/heads/*:refs/remotes/origin/*', scope: 'local', origin: 'file:.git/config', file: '/code/repo/.git/config' },
     { key: 'user.name', value: 'Local', scope: 'local', origin: 'file:.git/config', file: '/code/repo/.git/config' },
     { key: 'alias.note', value: 'first\nsecond', scope: 'command', origin: 'command line:' },
+    { key: 'core.implicit', value: undefined, scope: 'local', origin: 'file:.git/config', file: '/code/repo/.git/config' },
+    { key: 'core.explicit', value: '', scope: 'local', origin: 'file:.git/config', file: '/code/repo/.git/config' },
   ],
 };
 
@@ -36,6 +38,15 @@ it('groups every value by key in Git\'s own order, each with its scope and sourc
       '    first',
       '    second',
       '        command  command line:',
+      '',
+      // Git reads the first as true and the second as false, so they must not look alike.
+      'core.implicit',
+      '    (no value: Git reads this as true)',
+      '        local  /code/repo/.git/config',
+      '',
+      'core.explicit',
+      '    (empty)',
+      '        local  /code/repo/.git/config',
       '',
     ].join('\n'),
   );

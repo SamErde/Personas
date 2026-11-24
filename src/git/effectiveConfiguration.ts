@@ -1,5 +1,11 @@
 import type { GitConfigEntry, GitConfigSnapshot } from './configService';
 
+/** A key with no value and a key set to nothing mean different things to Git, so neither is shown as a blank. */
+function shownValue(value: string | undefined): string {
+  if (value === undefined) return '(no value: Git reads this as true)';
+  return value === '' ? '(empty)' : value;
+}
+
 /**
  * The text of the Effective Git Configuration document: every value Git lists, grouped by key.
  * Nothing is marked as overridden, because Git's output does not say which keys hold one value
@@ -23,7 +29,7 @@ export function renderEffectiveConfiguration(snapshot: GitConfigSnapshot): strin
   for (const [key, entries] of groups) {
     lines.push(key);
     for (const entry of entries) {
-      for (const line of entry.value.split('\n')) lines.push(`    ${line}`);
+      for (const line of shownValue(entry.value).split('\n')) lines.push(`    ${line}`);
       lines.push(`        ${entry.scope}  ${entry.file ?? entry.origin}`);
     }
     lines.push('');

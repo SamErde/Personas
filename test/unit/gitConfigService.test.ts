@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { createCliRunner } from '../../src/core/cliRunner';
 import type { Platform } from '../../src/core/paths';
 import { GitConfigService, type GitConfigInclude, type GitConfigSnapshot } from '../../src/git/configService';
+import { findGitExecutable } from '../../src/git/executable';
 
 /**
  * Runs real Git against a throwaway repository whose system and global config are isolated, so
@@ -18,7 +19,9 @@ afterEach(async () => {
 
 const slash = (file: string) => file.split('\\').join('/');
 
-async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => string) {
+const platform = process.platform as Platform;
+
+async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => string, extraEnv: NodeJS.ProcessEnv = {}) {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-git-'));
   roots.push(temporary);
   const root = await fs.realpath(temporary);
@@ -26,12 +29,20 @@ async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => s
   const repo = path.join(root, 'repo');
   await fs.mkdir(home);
   await fs.mkdir(path.join(repo, 'src'), { recursive: true });
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'), HOME: home };
+  const env = {
+    ...process.env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
+    HOME: home,
+    // Config the developer's own environment injects must not reach these tests.
+    GIT_CONFIG_COUNT: '0',
+    ...extraEnv,
+  };
   execFileSync('git', ['init', '-q', '-b', 'main', repo], { env });
   await fs.writeFile(path.join(home, '.gitconfig'), globalConfig({ home, repo }));
   const service = new GitConfigService({
-    run: createCliRunner({ platform: process.platform as Platform, timeoutMs: 20_000 }),
-    gitPath: () => 'git',
+    run: createCliRunner({ platform, timeoutMs: 20_000 }),
+    gitPath: () => findGitExecutable([], { platform, env }),
     env,
   });
   return { root, home, repo, service, env };
@@ -170,6 +181,67 @@ it('with no current repository, ignores a repository the home folder happens to 
   expect(snapshot.files[0]!.includes.map((include) => [include.writtenPath, include.status])).toEqual([['branch.inc', undefined]]);
 });
 
+it('with no current repository, leaves out values the environment or command line injects', async () => {
+  const { service } = await sandbox(() => base, {
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'user.name',
+    GIT_CONFIG_VALUE_0: 'Injected',
+  });
+
+  const snapshot = await inspect(service);
+
+  expect(snapshot.identity[0]).toMatchObject({ value: 'Base', scope: 'global' });
+  expect(snapshot.entries.map((entry) => entry.scope)).toEqual(['global', 'global']);
+});
+
+it('reports a repository Git cannot read as an error, not as no repository', async () => {
+  const { repo, service } = await sandbox(() => base);
+  await fs.appendFile(path.join(repo, '.git', 'config'), '[broken\n');
+
+  const result = await service.inspect([repo]);
+
+  expect(result.kind).toBe('error');
+  expect(result).toMatchObject({ message: expect.stringContaining('bad config') });
+});
+
+it('does not take the .git folder itself for a work tree', async () => {
+  const { repo, service } = await sandbox(() => base);
+  expect((await inspect(service, path.join(repo, '.git'))).repository).toBeUndefined();
+});
+
+it('tells a key with no value from a key set to nothing', async () => {
+  const { repo, service } = await sandbox(() => `${base}[core]\n\timplicit\n\texplicit =\n`);
+
+  const snapshot = await inspect(service, repo);
+
+  const value = (key: string) => snapshot.entries.find((entry) => entry.key === key)!.value;
+  expect(value('core.implicit')).toBeUndefined();
+  expect(value('core.explicit')).toBe('');
+});
+
+it('judges each include line on its own when several name the same file', async () => {
+  const { home, repo, service } = await sandbox(({ repo }) =>
+    [
+      base,
+      '[include]\n\tpath = shared.inc\n',
+      '[includeIf "gitdir:/nowhere/"]\n\tpath = shared.inc\n',
+      `[includeIf "gitdir:${slash(repo)}/"]\n\tpath = shared.inc\n`,
+    ].join(''),
+  );
+  await fs.writeFile(path.join(home, 'shared.inc'), '[core]\n\teditor = code\n[include]\n\tpath = nested.inc\n');
+  await fs.writeFile(path.join(home, 'nested.inc'), '[core]\n\tpager = less\n');
+
+  const snapshot = await inspect(service, repo);
+
+  const nested = [['nested.inc', 'applied', []]];
+  const shape = (include: GitConfigInclude): unknown => [include.writtenPath, include.status, include.includes.map(shape)];
+  expect(snapshot.files[0]!.includes.map(shape)).toEqual([
+    ['shared.inc', 'applied', nested],
+    ['shared.inc', 'notApplied', []],
+    ['shared.inc', 'applied', nested],
+  ]);
+});
+
 it('takes the first folder that is inside a repository as the current repository', async () => {
   const { root, repo, service } = await sandbox(() => base);
   expect((await inspect(service, root, path.join(repo, 'src'))).repository?.root).toBe(repo);
@@ -180,8 +252,8 @@ it('takes the first folder that is inside a repository as the current repository
 it('says so when Git cannot be found', async () => {
   const { repo } = await sandbox(() => base);
   const service = new GitConfigService({
-    run: createCliRunner({ platform: process.platform as Platform, timeoutMs: 20_000 }),
-    gitPath: () => path.join(repo, 'no-such-git'),
+    run: createCliRunner({ platform, timeoutMs: 20_000 }),
+    gitPath: () => findGitExecutable([path.join(repo, 'no-such-git')], { platform, env: { PATH: '' } }),
   });
   expect(await service.inspect([repo])).toEqual({ kind: 'gitMissing' });
 });

@@ -78,9 +78,10 @@ names it, with the condition as written and a status:
 - **Missing**: the file does not exist.
 
 Personas reads the status from Git's own output and does not evaluate
-conditions itself. Because of that, a file that two rules include shows the
-same status under both. With no repository open, the view shows system and
-global configuration only and gives no status for `includeIf` rules.
+conditions itself. Each rule is judged on its own, so a file that two rules
+name can be Applied under one and Not applied here under the other. With no
+repository open, the view shows system and global configuration only and gives
+no status for `includeIf` rules.
 
 Each file has an open button that opens it in the editor, where you edit and
 save it yourself. Personas never writes a Git config file, and does not create
@@ -90,8 +91,9 @@ key, each with its scope and source file. It has the same content as
 `git config --list`, so treat it with the same care if your config holds
 credentials.
 
-The view uses the `git` command: the one VS Code's `git.path` setting names, or
-else the one on your `PATH`. It works in local desktop windows only.
+The view uses the `git` command: the first one VS Code's `git.path` setting
+names that exists, or else the one on your `PATH`. It is never taken from the
+folder being inspected. It works in local desktop windows only.
 
 ## PowerShell profiles
 

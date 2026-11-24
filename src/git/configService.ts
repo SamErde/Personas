@@ -1,13 +1,14 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { CliRunner } from '../core/cliRunner';
+import type { CliResult, CliRunner } from '../core/cliRunner';
 import { fsPathKey, type Platform } from '../core/paths';
 
 /** One value as Git lists it: `git config --list --show-origin --show-scope`. */
 export type GitConfigEntry = {
   key: string;
-  value: string;
+  /** Undefined when the key is written with no value at all (`[section] key`), which Git reads as true. */
+  value: string | undefined;
   /** Git's own scope name: system, global, local, worktree or command. */
   scope: string;
   /** The origin as Git prints it, for example `file:.git/config` or `command line:`. */
@@ -55,8 +56,8 @@ export type GitConfigResult = GitConfigSnapshot | { kind: 'gitMissing' } | { kin
 
 export type GitConfigServiceOptions = {
   run: CliRunner;
-  /** The Git executable: VS Code's `git.path` setting when set, otherwise `git` on `PATH`. */
-  gitPath: () => string;
+  /** The absolute path of the Git executable, or undefined when there is none. See `findGitExecutable`. */
+  gitPath: () => Promise<string | undefined>;
   /** Environment for Git; the host's own when omitted. */
   env?: NodeJS.ProcessEnv;
 };
@@ -68,6 +69,14 @@ export function gitHome(env: NodeJS.ProcessEnv = process.env): string {
 
 const includeKey = /^(?:include|includeif\.(.*))\.path$/s;
 const pathKey = (file: string) => fsPathKey(file, process.platform as Platform);
+const exists = (file: string) => fs.access(file).then(() => true, () => false);
+/** How many `git config --file` reads run at once. */
+const statusReadsAtOnce = 8;
+
+class GitMissingError extends Error {}
+
+/** Runs Git in `cwd`. With `discover` off, Git does not look for a repository around `cwd`. */
+type GitRun = (args: string[], cwd: string, discover?: boolean) => Promise<CliResult>;
 
 /** Splits `git config --list --show-origin --show-scope -z` output: scope, origin, then key and value. */
 function parseEntries(stdout: string, cwd: string): GitConfigEntry[] {
@@ -77,29 +86,83 @@ function parseEntries(stdout: string, cwd: string): GitConfigEntry[] {
     const scope = fields[i]!;
     const origin = fields[i + 1]!;
     const keyValue = fields[i + 2]!;
-    // A key with no value at all (`[section] key`) has no separator.
+    // Git separates key and value with a newline, and leaves it out for a key with no value at all.
     const split = keyValue.indexOf('\n');
     const key = split < 0 ? keyValue : keyValue.slice(0, split);
-    const value = split < 0 ? '' : keyValue.slice(split + 1);
+    const value = split < 0 ? undefined : keyValue.slice(split + 1);
     const file = origin.startsWith('file:') ? path.resolve(cwd, origin.slice('file:'.length)) : undefined;
     entries.push({ key, value, scope, origin, ...(file === undefined ? {} : { file }) });
   }
   return entries;
 }
 
-/** One reading of Git's list, as the file tree is built from it. */
-type Listing = {
-  entries: readonly GitConfigEntry[];
-  /** Keys of the files Git took values from. */
-  read: ReadonlySet<string>;
-  /** Keys of the files reached through an include, filled in as the tree is built. */
-  included: Set<string>;
-  inRepository: boolean;
-  cwd: string;
-};
+/** One `include` or `includeIf` line as Git came to it. A file included twice has two. */
+type Occurrence = { include: GitConfigInclude; key: string; applied: boolean };
 
-function isMissingExecutable(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
+/** A config file Git is in the middle of reading. */
+type Frame = { key: string; includes: GitConfigInclude[]; pending?: Occurrence };
+
+/** The frame `entry` belongs to, given the files Git has open: the same file, a file just included, or one further up. */
+function enter(stack: Frame[], roots: GitConfigFile[], entry: GitConfigEntry & { file: string }): Frame {
+  const key = pathKey(entry.file);
+  const top = stack.at(-1);
+  if (top?.key === key) return top;
+  if (top?.pending?.key === key) {
+    // Git reads an included file straight after the line that names it.
+    top.pending.applied = true;
+    const frame: Frame = { key, includes: top.pending.include.includes };
+    stack.push(frame);
+    return frame;
+  }
+  while (stack.length > 0 && stack.at(-1)!.key !== key) stack.pop();
+  const open = stack.at(-1);
+  if (open) return open;
+  const root: GitConfigFile = { scope: entry.scope, path: entry.file, includes: [] };
+  roots.push(root);
+  const frame: Frame = { key, includes: root.includes };
+  stack.push(frame);
+  return frame;
+}
+
+/**
+ * Rebuilds the files Git read and the includes each names, from the order of its list: Git lists
+ * a file's values up to an include line, then the included file's values if it read that file,
+ * then the rest. So each include line is judged on its own, even when two name the same file.
+ */
+function buildFileTree(
+  entries: readonly GitConfigEntry[],
+  resolveInclude: (written: string, includingFile: string) => string,
+): { files: GitConfigFile[]; occurrences: Occurrence[] } {
+  const files: GitConfigFile[] = [];
+  const occurrences: Occurrence[] = [];
+  const stack: Frame[] = [];
+  for (const entry of entries) {
+    if (entry.file === undefined) continue;
+    const frame = enter(stack, files, { ...entry, file: entry.file });
+    delete frame.pending;
+    const rule = includeKey.exec(entry.key);
+    if (!rule || entry.value === undefined) continue;
+    const condition = rule[1];
+    const target = resolveInclude(entry.value, entry.file);
+    const include: GitConfigInclude = {
+      ...(condition === undefined ? {} : { condition }),
+      writtenPath: entry.value,
+      path: target,
+      includes: [],
+    };
+    frame.includes.push(include);
+    frame.pending = { include, key: pathKey(target), applied: false };
+    occurrences.push(frame.pending);
+  }
+  return { files, occurrences };
+}
+
+/** Whether `folder` or a folder above it holds a `.git` entry, so Git should have found a repository there. */
+async function hasGitEntryAbove(folder: string): Promise<boolean> {
+  for (let current = path.resolve(folder); ; current = path.dirname(current)) {
+    if (await exists(path.join(current, '.git'))) return true;
+    if (path.dirname(current) === current) return false;
+  }
 }
 
 /**
@@ -113,34 +176,50 @@ export class GitConfigService {
     this.home = gitHome(options.env);
   }
 
-  /**
-   * Runs Git in `cwd`. With `discover` off, Git is pointed at a repository that does not exist, so
-   * it reads system and global configuration without finding a repository around `cwd`. A home
-   * folder that is itself a repository would otherwise decide which `includeIf` rules apply.
-   */
-  private git(args: string[], cwd: string, discover = true) {
+  /** Resolves the Git executable once, for all the commands of one read. */
+  private async session(): Promise<GitRun> {
+    const executable = await this.options.gitPath();
+    if (executable === undefined) throw new GitMissingError();
     const base = this.options.env;
-    const env = discover ? base : { ...(base ?? process.env), GIT_DIR: path.join(this.home, '.personas-no-repository') };
-    return this.options.run(this.options.gitPath(), args, { cwd, ...(env === undefined ? {} : { env }) });
+    // Pointed at a repository that does not exist, Git reads system and global configuration
+    // without finding one around `cwd`. A home folder that is itself a repository would
+    // otherwise decide which `includeIf` rules apply.
+    const outside = { ...(base ?? process.env), GIT_DIR: path.join(this.home, '.personas-no-repository') };
+    return (args, cwd, discover = true) => {
+      const env = discover ? base : outside;
+      return this.options.run(executable, args, { cwd, ...(env === undefined ? {} : { env }) });
+    };
   }
 
-  /** The repository containing `folder`, or undefined when there is none. Throws when Git cannot run. */
-  private async findRepository(folder: string): Promise<GitRepository | undefined> {
+  /**
+   * The repository whose work tree contains `folder`, or undefined when there is none. Throws
+   * when a repository is there and Git cannot read it, so a broken one is not passed off as absent.
+   */
+  private async findRepository(git: GitRun, folder: string): Promise<GitRepository | undefined> {
     // Starting Git in a folder that is gone fails the same way as Git itself being absent.
-    if (!(await fs.access(folder).then(() => true, () => false))) return undefined;
-    const result = await this.git(['rev-parse', '--show-toplevel', '--absolute-git-dir'], folder);
-    const [root, gitDir] = result.stdout.split(/\r?\n/);
-    if (result.code !== 0 || !root || !gitDir) return undefined;
-    return { name: path.basename(root), root: path.resolve(root), gitDir: path.resolve(gitDir) };
+    if (!(await exists(folder))) return undefined;
+    const result = await git(['rev-parse', '--absolute-git-dir', '--show-toplevel'], folder);
+    const [gitDir, root] = result.stdout.split(/\r?\n/);
+    if (result.code === 0 && gitDir && root) {
+      return { name: path.basename(root), root: path.resolve(root), gitDir: path.resolve(gitDir) };
+    }
+    // Git found a repository but no work tree: the folder is inside the `.git` folder itself.
+    if (gitDir) return undefined;
+    if (await hasGitEntryAbove(folder)) throw new Error(result.stderr.trim() || 'Git could not read this repository.');
+    return undefined;
   }
 
-  /** The repository of the first of `folders` that is inside one. Throws when Git cannot run. */
-  async resolveRepository(folders: readonly string[]): Promise<GitRepository | undefined> {
+  private async firstRepository(git: GitRun, folders: readonly string[]): Promise<GitRepository | undefined> {
     for (const folder of folders) {
-      const repository = await this.findRepository(folder);
+      const repository = await this.findRepository(git, folder);
       if (repository) return repository;
     }
     return undefined;
+  }
+
+  /** The repository of the first of `folders` that is inside one. Throws when Git cannot run or cannot read it. */
+  async resolveRepository(folders: readonly string[]): Promise<GitRepository | undefined> {
+    return this.firstRepository(await this.session(), folders);
   }
 
   /**
@@ -149,86 +228,57 @@ export class GitConfigService {
    */
   async inspect(folders: readonly string[] = []): Promise<GitConfigResult> {
     try {
-      return await this.read(await this.resolveRepository(folders));
+      const git = await this.session();
+      return await this.read(git, await this.firstRepository(git, folders));
     } catch (error) {
-      if (isMissingExecutable(error)) return { kind: 'gitMissing' };
+      if (error instanceof GitMissingError || (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+        return { kind: 'gitMissing' };
+      }
       return { kind: 'error', message: error instanceof Error ? error.message : String(error) };
     }
   }
 
-  private async read(repository: GitRepository | undefined): Promise<GitConfigResult> {
+  private async read(git: GitRun, repository: GitRepository | undefined): Promise<GitConfigResult> {
     // Run from the repository root: Git reports the local file relative to where it runs.
     const cwd = repository?.root ?? this.home;
-    const listed = await this.git(['config', '--list', '--show-origin', '--show-scope', '-z'], cwd, repository !== undefined);
+    const listed = await git(['config', '--list', '--show-origin', '--show-scope', '-z'], cwd, repository !== undefined);
     if (listed.code !== 0) return { kind: 'error', message: listed.stderr.trim() || `git exited with code ${listed.code}` };
-    const entries = parseEntries(listed.stdout, cwd);
+    const all = parseEntries(listed.stdout, cwd);
+    // With no repository only system and global configuration is shown: not what the command line
+    // or the environment (`GIT_CONFIG_COUNT`) adds, which Git reports under the command scope.
+    const entries = repository ? all : all.filter((entry) => entry.scope === 'system' || entry.scope === 'global');
+    const tree = buildFileTree(entries, (written, includingFile) => this.resolveInclude(written, includingFile));
+    await this.setStatuses(git, tree.occurrences, repository !== undefined, cwd);
     return {
       kind: 'ok',
       ...(repository ? { repository } : {}),
       identity: [identityValue(entries, 'user.name'), identityValue(entries, 'user.email')],
-      files: await this.files({
-        entries,
-        read: new Set(entries.flatMap((entry) => (entry.file ? [pathKey(entry.file)] : []))),
-        included: new Set(),
-        inRepository: repository !== undefined,
-        cwd,
-      }),
+      files: tree.files,
       entries,
     };
   }
 
-  private async files(listing: Listing): Promise<GitConfigFile[]> {
-    const candidates: GitConfigFile[] = [];
-    const seen = new Set<string>();
-    for (const entry of listing.entries) {
-      if (!entry.file || seen.has(pathKey(entry.file))) continue;
-      const key = pathKey(entry.file);
-      seen.add(key);
-      candidates.push({ scope: entry.scope, path: entry.file, includes: await this.includesOf(entry.file, new Set([key]), listing) });
-    }
-    // A file reached through an include is shown under its parent, not as a file of its own.
-    return candidates.filter((file) => !listing.included.has(pathKey(file.path)));
-  }
-
-  /** The includes `file` names, in Git's order. `ancestors` are the files above it, so a cycle ends at its repeat. */
-  private async includesOf(file: string, ancestors: ReadonlySet<string>, listing: Listing): Promise<GitConfigInclude[]> {
-    const fileKey = pathKey(file);
-    const includes: GitConfigInclude[] = [];
-    for (const entry of listing.entries) {
-      if (!entry.file || pathKey(entry.file) !== fileKey) continue;
-      const rule = includeKey.exec(entry.key);
-      if (!rule) continue;
-      const condition = rule[1];
-      const target = this.resolveInclude(entry.value, file);
-      const key = pathKey(target);
-      listing.included.add(key);
-      const status = await this.includeStatus(target, condition, listing);
-      // Git lists a file's own includes only when it read the file.
-      const nested = listing.read.has(key) && !ancestors.has(key);
-      includes.push({
-        ...(condition === undefined ? {} : { condition }),
-        writtenPath: entry.value,
-        path: target,
-        ...(status === undefined ? {} : { status }),
-        includes: nested ? await this.includesOf(target, new Set([...ancestors, key]), listing) : [],
-      });
-    }
-    return includes;
-  }
-
   /** A conditional rule is only judged against a repository; a plain include always applies. */
-  private async includeStatus(target: string, condition: string | undefined, listing: Listing): Promise<GitIncludeStatus | undefined> {
-    if (condition !== undefined && !listing.inRepository) return undefined;
-    if (listing.read.has(pathKey(target))) return 'applied';
-    return this.unreadStatus(target, listing.cwd);
+  private async setStatuses(git: GitRun, occurrences: readonly Occurrence[], inRepository: boolean, cwd: string): Promise<void> {
+    const judged = occurrences.filter((occurrence) => inRepository || occurrence.include.condition === undefined);
+    // Each file Git did not read is asked about once, however many lines name it.
+    const unread = [...new Map(judged.filter((o) => !o.applied).map((o) => [o.key, o.include.path])).entries()];
+    const statuses = new Map<string, GitIncludeStatus>();
+    for (let i = 0; i < unread.length; i += statusReadsAtOnce) {
+      const batch = unread.slice(i, i + statusReadsAtOnce);
+      await Promise.all(batch.map(async ([key, target]) => statuses.set(key, await this.unreadStatus(git, target, cwd))));
+    }
+    for (const occurrence of judged) {
+      const status = occurrence.applied ? 'applied' : statuses.get(occurrence.key);
+      if (status !== undefined) occurrence.include.status = status;
+    }
   }
 
   /** Tells apart the files Git did not take values from: no values in effect, no values at all, or no file. */
-  private async unreadStatus(target: string, cwd: string): Promise<GitIncludeStatus> {
-    const result = await this.git(['config', '--file', target, '--list'], cwd);
+  private async unreadStatus(git: GitRun, target: string, cwd: string): Promise<GitIncludeStatus> {
+    const result = await git(['config', '--file', target, '--list'], cwd);
     if (result.code === 0) return result.stdout.trim() === '' ? 'empty' : 'notApplied';
-    const exists = await fs.access(target).then(() => true, () => false);
-    return exists ? 'notApplied' : 'missing';
+    return (await exists(target)) ? 'notApplied' : 'missing';
   }
 
   private resolveInclude(written: string, includingFile: string): string {
@@ -241,5 +291,10 @@ function identityValue(entries: readonly GitConfigEntry[], key: GitIdentityValue
   // The last value Git reads is the one in effect.
   const entry = entries.filter((candidate) => candidate.key === key).at(-1);
   if (!entry) return { key };
-  return { key, value: entry.value, scope: entry.scope, ...(entry.file === undefined ? {} : { file: entry.file }) };
+  return {
+    key,
+    ...(entry.value === undefined ? {} : { value: entry.value }),
+    scope: entry.scope,
+    ...(entry.file === undefined ? {} : { file: entry.file }),
+  };
 }
