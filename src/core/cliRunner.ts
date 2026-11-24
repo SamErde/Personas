@@ -90,12 +90,11 @@ export function createCliRunner(opts: {
     new Promise((resolve, reject) => {
       const cmd = buildSpawnCommand(opts.platform, cliPath, args);
       // detached on POSIX makes the child a process-group leader, so the group can be killed.
-      const child = spawn(cmd.command, cmd.args, {
-        shell: cmd.shell,
-        ...(isWin ? {} : { detached: true }),
+      const where: CliRunOptions = {
         ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
         ...(options.env === undefined ? {} : { env: options.env }),
-      });
+      };
+      const child = spawn(cmd.command, cmd.args, isWin ? { shell: cmd.shell, ...where } : { shell: cmd.shell, detached: true, ...where });
       let stdout = '';
       let stderr = '';
       let settled = false;

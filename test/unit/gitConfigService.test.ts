@@ -16,7 +16,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true });
 });
 
-const slash = (file: string) => file.replaceAll('\\', '/');
+const slash = (file: string) => file.split('\\').join('/');
 
 async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => string) {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-git-'));
@@ -34,7 +34,7 @@ async function sandbox(globalConfig: (dirs: { home: string; repo: string }) => s
     gitPath: () => 'git',
     env,
   });
-  return { root, home, repo, service };
+  return { root, home, repo, service, env };
 }
 
 async function inspect(service: GitConfigService, ...folders: string[]): Promise<GitConfigSnapshot> {
@@ -156,6 +156,18 @@ it('outside a repository, shows system and global config only and makes no claim
       ['elsewhere.inc', undefined],
     ]);
   }
+});
+
+it('with no current repository, ignores a repository the home folder happens to be', async () => {
+  const { home, service, env } = await sandbox(() => `${base}[includeIf "onbranch:main"]\n\tpath = branch.inc\n`);
+  await fs.writeFile(path.join(home, 'branch.inc'), '[user]\n\tname = Branch\n');
+  execFileSync('git', ['init', '-q', '-b', 'main', home], { env });
+
+  const snapshot = await inspect(service);
+
+  expect(snapshot.identity[0]).toMatchObject({ value: 'Base', file: path.join(home, '.gitconfig') });
+  expect(snapshot.entries.every((entry) => entry.scope === 'global')).toBe(true);
+  expect(snapshot.files[0]!.includes.map((include) => [include.writtenPath, include.status])).toEqual([['branch.inc', undefined]]);
 });
 
 it('takes the first folder that is inside a repository as the current repository', async () => {

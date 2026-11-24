@@ -87,6 +87,17 @@ function parseEntries(stdout: string, cwd: string): GitConfigEntry[] {
   return entries;
 }
 
+/** One reading of Git's list, as the file tree is built from it. */
+type Listing = {
+  entries: readonly GitConfigEntry[];
+  /** Keys of the files Git took values from. */
+  read: ReadonlySet<string>;
+  /** Keys of the files reached through an include, filled in as the tree is built. */
+  included: Set<string>;
+  inRepository: boolean;
+  cwd: string;
+};
+
 function isMissingExecutable(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 }
@@ -102,8 +113,14 @@ export class GitConfigService {
     this.home = gitHome(options.env);
   }
 
-  private git(args: string[], cwd: string) {
-    const { env } = this.options;
+  /**
+   * Runs Git in `cwd`. With `discover` off, Git is pointed at a repository that does not exist, so
+   * it reads system and global configuration without finding a repository around `cwd`. A home
+   * folder that is itself a repository would otherwise decide which `includeIf` rules apply.
+   */
+  private git(args: string[], cwd: string, discover = true) {
+    const base = this.options.env;
+    const env = discover ? base : { ...(base ?? process.env), GIT_DIR: path.join(this.home, '.personas-no-repository') };
     return this.options.run(this.options.gitPath(), args, { cwd, ...(env === undefined ? {} : { env }) });
   }
 
@@ -132,64 +149,78 @@ export class GitConfigService {
    */
   async inspect(folders: readonly string[] = []): Promise<GitConfigResult> {
     try {
-      const repository = await this.resolveRepository(folders);
-      // Run from the repository root: Git reports the local file relative to where it runs.
-      const cwd = repository?.root ?? this.home;
-      const listed = await this.git(['config', '--list', '--show-origin', '--show-scope', '-z'], cwd);
-      if (listed.code !== 0) return { kind: 'error', message: listed.stderr.trim() || `git exited with code ${listed.code}` };
-      const all = parseEntries(listed.stdout, cwd);
-      // Without a repository the starting folder decides nothing, so its local values are not shown.
-      const entries = repository ? all : all.filter((entry) => entry.scope !== 'local' && entry.scope !== 'worktree');
-      return {
-        kind: 'ok',
-        ...(repository ? { repository } : {}),
-        identity: [identityValue(entries, 'user.name'), identityValue(entries, 'user.email')],
-        files: await this.files(entries, repository !== undefined, cwd),
-        entries,
-      };
+      return await this.read(await this.resolveRepository(folders));
     } catch (error) {
       if (isMissingExecutable(error)) return { kind: 'gitMissing' };
       return { kind: 'error', message: error instanceof Error ? error.message : String(error) };
     }
   }
 
-  private async files(entries: GitConfigEntry[], inRepository: boolean, cwd: string): Promise<GitConfigFile[]> {
-    const read = new Set(entries.flatMap((entry) => (entry.file ? [pathKey(entry.file)] : [])));
-    const included = new Set<string>();
-    const includesOf = async (file: string, ancestors: ReadonlySet<string>): Promise<GitConfigInclude[]> => {
-      const includes: GitConfigInclude[] = [];
-      for (const entry of entries) {
-        const match = entry.file && pathKey(entry.file) === pathKey(file) ? includeKey.exec(entry.key) : null;
-        if (!match) continue;
-        const condition = match[1];
-        const target = this.resolveInclude(entry.value, file);
-        const key = pathKey(target);
-        included.add(key);
-        const applied = read.has(key);
-        // A conditional rule is only judged against a repository; a plain include always applies.
-        const status = condition !== undefined && !inRepository ? undefined : applied ? 'applied' : await this.unreadStatus(target, cwd);
-        includes.push({
-          ...(condition === undefined ? {} : { condition }),
-          writtenPath: entry.value,
-          path: target,
-          ...(status === undefined ? {} : { status }),
-          // Git lists a file's own includes only when it read the file. A cycle ends at its repeat.
-          includes: applied && !ancestors.has(key) ? await includesOf(target, new Set([...ancestors, key])) : [],
-        });
-      }
-      return includes;
+  private async read(repository: GitRepository | undefined): Promise<GitConfigResult> {
+    // Run from the repository root: Git reports the local file relative to where it runs.
+    const cwd = repository?.root ?? this.home;
+    const listed = await this.git(['config', '--list', '--show-origin', '--show-scope', '-z'], cwd, repository !== undefined);
+    if (listed.code !== 0) return { kind: 'error', message: listed.stderr.trim() || `git exited with code ${listed.code}` };
+    const entries = parseEntries(listed.stdout, cwd);
+    return {
+      kind: 'ok',
+      ...(repository ? { repository } : {}),
+      identity: [identityValue(entries, 'user.name'), identityValue(entries, 'user.email')],
+      files: await this.files({
+        entries,
+        read: new Set(entries.flatMap((entry) => (entry.file ? [pathKey(entry.file)] : []))),
+        included: new Set(),
+        inRepository: repository !== undefined,
+        cwd,
+      }),
+      entries,
     };
+  }
 
+  private async files(listing: Listing): Promise<GitConfigFile[]> {
     const candidates: GitConfigFile[] = [];
     const seen = new Set<string>();
-    for (const entry of entries) {
+    for (const entry of listing.entries) {
       if (!entry.file || seen.has(pathKey(entry.file))) continue;
-      seen.add(pathKey(entry.file));
       const key = pathKey(entry.file);
-      candidates.push({ scope: entry.scope, path: entry.file, includes: await includesOf(entry.file, new Set([key])) });
+      seen.add(key);
+      candidates.push({ scope: entry.scope, path: entry.file, includes: await this.includesOf(entry.file, new Set([key]), listing) });
     }
     // A file reached through an include is shown under its parent, not as a file of its own.
-    return candidates.filter((file) => !included.has(pathKey(file.path)));
+    return candidates.filter((file) => !listing.included.has(pathKey(file.path)));
+  }
+
+  /** The includes `file` names, in Git's order. `ancestors` are the files above it, so a cycle ends at its repeat. */
+  private async includesOf(file: string, ancestors: ReadonlySet<string>, listing: Listing): Promise<GitConfigInclude[]> {
+    const fileKey = pathKey(file);
+    const includes: GitConfigInclude[] = [];
+    for (const entry of listing.entries) {
+      if (!entry.file || pathKey(entry.file) !== fileKey) continue;
+      const rule = includeKey.exec(entry.key);
+      if (!rule) continue;
+      const condition = rule[1];
+      const target = this.resolveInclude(entry.value, file);
+      const key = pathKey(target);
+      listing.included.add(key);
+      const status = await this.includeStatus(target, condition, listing);
+      // Git lists a file's own includes only when it read the file.
+      const nested = listing.read.has(key) && !ancestors.has(key);
+      includes.push({
+        ...(condition === undefined ? {} : { condition }),
+        writtenPath: entry.value,
+        path: target,
+        ...(status === undefined ? {} : { status }),
+        includes: nested ? await this.includesOf(target, new Set([...ancestors, key]), listing) : [],
+      });
+    }
+    return includes;
+  }
+
+  /** A conditional rule is only judged against a repository; a plain include always applies. */
+  private async includeStatus(target: string, condition: string | undefined, listing: Listing): Promise<GitIncludeStatus | undefined> {
+    if (condition !== undefined && !listing.inRepository) return undefined;
+    if (listing.read.has(pathKey(target))) return 'applied';
+    return this.unreadStatus(target, listing.cwd);
   }
 
   /** Tells apart the files Git did not take values from: no values in effect, no values at all, or no file. */
