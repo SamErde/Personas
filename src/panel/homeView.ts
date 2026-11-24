@@ -141,10 +141,10 @@ export class HomeViewProvider implements vscode.WebviewViewProvider {
       orphanCount: orphanedCount,
       warnings: inventory.warnings,
     };
-    // The size belongs to the orphans just counted; an unchanged set is sized again below.
-    if (orphanedCount === 0) this.lastOrphanSize = undefined;
+    // The remembered size was measured for the previous orphans, so it must not sit beside this
+    // count. The scan below measures these ones.
+    this.lastOrphanSize = undefined;
     this.post(this.lastState);
-    if (this.lastOrphanSize) this.post(this.lastOrphanSize);
 
     if (orphanedCount > 0) {
       // Sent as a follow-up patch, not blocking the state push above: the size walk is a real

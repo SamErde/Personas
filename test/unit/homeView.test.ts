@@ -43,6 +43,8 @@ vi.mock('vscode', () => {
   };
 });
 vi.mock('../../src/servicesFactory', () => ({ getOrBuildServices: async () => mock.services }));
+// Every extension folder weighs the same, so a size identifies how many folders were measured.
+vi.mock('../../src/panel/fsStat', () => ({ statFolder: async () => ({ sizeBytes: 10, lastModifiedMs: 0 }) }));
 
 const providers: { dispose(): void }[] = [];
 afterEach(() => {
@@ -88,7 +90,7 @@ function fakeView() {
   };
 }
 
-function setup() {
+function setup(extensionFolders: string[] = []) {
   const paths = resolvePaths({
     globalStorageFsPath: '/data/User/globalStorage/samerde.personas',
     extensionFsPath: '/ext/samerde.personas-1.0.0',
@@ -97,7 +99,7 @@ function setup() {
   const io: InventoryIo = {
     readFile: async (file) =>
       file === paths.storageJson ? JSON.stringify({ userDataProfiles: [{ location: 'aaa', name: 'Work' }] }) : undefined,
-    listDirs: async () => [],
+    listDirs: async () => [...extensionFolders],
     readPackageMeta: async () => undefined,
   };
   const inventory = new InventoryService(paths, io);
@@ -119,8 +121,8 @@ const settled = (posted: HostToHome[], count: number) =>
   });
 
 /** Home shown for the first time, as VS Code does it: the view resolves, then its page's script sends `ready`. */
-function show() {
-  const context = setup();
+function show(extensionFolders: string[] = []) {
+  const context = setup(extensionFolders);
   const home = fakeView();
   context.provider.resolveWebviewView(home.view as never);
   home.ready();
@@ -161,4 +163,19 @@ it('paints both sections from their last known state as soon as a reshown Home i
 
 it('paints nothing from memory the first time Home is shown', () => {
   expect(show().home.posted).toEqual([]);
+});
+
+it('never pairs a new orphan count with the size measured for a different set of orphans', async () => {
+  // No profile lists these folders, so both are orphaned.
+  const folders = ['pub.one-1.0.0', 'pub.two-1.0.0'];
+  const { home } = show(folders);
+  const sizes = () => home.posted.flatMap((message) => (message.type === 'orphanSize' ? [message.totalSizeBytes] : []));
+  await vi.waitFor(() => expect(sizes()).toEqual([20]));
+
+  folders.pop();
+  reshow(home);
+  await vi.waitFor(() => expect(sizes().at(-1)).toBe(10));
+  // The repaint shows the old count with its own size; the fresh count is followed only by the fresh size.
+  const fresh = home.posted.slice(home.posted.map((message) => message.type).lastIndexOf('state'));
+  expect(fresh).toMatchObject([{ type: 'state', orphanCount: 1 }, { type: 'orphanSize', totalSizeBytes: 10 }]);
 });
