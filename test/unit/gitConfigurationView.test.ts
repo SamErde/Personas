@@ -8,6 +8,8 @@ const mock = vi.hoisted(() => ({
   remoteName: undefined as string | undefined,
   activeFile: undefined as string | undefined,
   activeScheme: 'file',
+  /** Whether the editor area has a tab open, with or without a text editor in it. */
+  tabOpen: false,
   workspaceFolders: [] as string[],
   tree: { visible: true, message: undefined as string | undefined, description: undefined as string | undefined },
   visibility: (() => undefined) as () => void,
@@ -38,6 +40,7 @@ vi.mock('vscode', () => {
       get activeTextEditor() {
         return mock.activeFile === undefined ? undefined : { document: { uri: uri(mock.activeFile, mock.activeScheme) } };
       },
+      tabGroups: { get activeTabGroup() { return { activeTab: mock.tabOpen ? {} : undefined }; } },
       onDidChangeActiveTextEditor: (callback: () => void) => {
         mock.editorChanged = callback;
         return { dispose: () => undefined };
@@ -85,6 +88,8 @@ afterEach(() => {
   mock.remoteName = undefined;
   mock.activeFile = undefined;
   mock.activeScheme = 'file';
+  mock.tabOpen = false;
+  vi.unstubAllEnvs();
   mock.workspaceFolders = [];
   mock.tree = { visible: true, message: undefined, description: undefined };
   mock.watchers.length = 0;
@@ -128,6 +133,9 @@ function change(file: string): void {
 }
 
 function setup(result: GitConfigResult = snapshot()) {
+  // The developer's own Git locations must not decide which folders are watched.
+  vi.stubEnv('GIT_CONFIG_GLOBAL', '');
+  vi.stubEnv('XDG_CONFIG_HOME', '');
   const service = {
     result,
     current: (result.kind === 'ok' ? result.repository : undefined) as GitRepository | undefined,
@@ -180,6 +188,17 @@ it('takes the repository of the active editor\'s file, else of the first workspa
   mock.activeScheme = 'personas-readonly';
   await view.refresh();
   expect(service.inspect).toHaveBeenLastCalledWith([at('code', 'work', 'src'), at('code', 'other')]);
+
+  // Nor does the moment between two documents, when a tab is open and no text editor is active.
+  mock.activeFile = undefined;
+  mock.tabOpen = true;
+  await view.refresh();
+  expect(service.inspect).toHaveBeenLastCalledWith([at('code', 'work', 'src'), at('code', 'other')]);
+
+  // An empty editor area does: the first workspace folder is all that is left.
+  mock.tabOpen = false;
+  await view.refresh();
+  expect(service.inspect).toHaveBeenLastCalledWith([at('code', 'other')]);
 });
 
 it('with no repository, says only system and global configuration is shown and states no include status', async () => {
@@ -213,7 +232,12 @@ it('refreshes when a listed config file or the repository\'s HEAD changes, but o
   vi.useFakeTimers();
   // Folders are watched whole and changes matched by path, so a file name is never read as a glob.
   const live = mock.watchers.filter((watcher) => !watcher.disposed);
-  expect(live.map((watcher) => [watcher.base, watcher.pattern])).toEqual([[at('home'), '*'], [work.gitDir, '*']]);
+  // The standard global locations are watched too, so a config file created later is seen.
+  expect(live.map((watcher) => [watcher.base, watcher.pattern])).toEqual([
+    [at('home'), '*'],
+    [work.gitDir, '*'],
+    [at('home', '.config', 'git'), '*'],
+  ]);
 
   for (const file of [at('home', 'work.inc'), at('home', 'gone.inc'), path.join(work.gitDir, 'HEAD')]) {
     service.inspect.mockClear();
@@ -221,6 +245,12 @@ it('refreshes when a listed config file or the repository\'s HEAD changes, but o
     await vi.advanceTimersByTimeAsync(350);
     expect(service.inspect).toHaveBeenCalledTimes(1);
   }
+
+  // A global config file that did not exist when the view last read.
+  service.inspect.mockClear();
+  change(at('home', '.config', 'git', 'config'));
+  await vi.advanceTimersByTimeAsync(350);
+  expect(service.inspect).toHaveBeenCalledTimes(1);
 
   // A file in a watched folder that the view does not list changes nothing.
   service.inspect.mockClear();

@@ -68,6 +68,8 @@ export function gitHome(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 const includeKey = /^(?:include|includeif\.(.*))\.path$/s;
+/** A path that starts with another user's home, `~alice/…`, which only Git can expand. */
+const namedUserPath = /^~[^/]/;
 const pathKey = (file: string) => fsPathKey(file, process.platform as Platform);
 const exists = (file: string) => fs.access(file).then(() => true, () => false);
 /** How many `git config --file` reads run at once. */
@@ -160,6 +162,18 @@ function buildFileTree(
   return { files, occurrences };
 }
 
+/**
+ * Where Git looks for global and local configuration, whether or not a file is there yet. The
+ * view watches these so that creating one, or giving an empty one its first value, is seen.
+ */
+export function standardConfigFiles(home: string, repository: GitRepository | undefined, env: NodeJS.ProcessEnv = process.env): string[] {
+  const global = env['GIT_CONFIG_GLOBAL']
+    ? [env['GIT_CONFIG_GLOBAL']]
+    : [path.join(home, '.gitconfig'), path.join(env['XDG_CONFIG_HOME'] || path.join(home, '.config'), 'git', 'config')];
+  const local = repository ? [path.join(repository.gitDir, 'config'), path.join(repository.gitDir, 'config.worktree')] : [];
+  return [...global, ...local];
+}
+
 /** Whether `folder` or a folder above it holds a `.git` entry, so Git should have found a repository there. */
 async function hasGitEntryAbove(folder: string): Promise<boolean> {
   for (let current = path.resolve(folder); ; current = path.dirname(current)) {
@@ -249,7 +263,8 @@ export class GitConfigService {
     // With no repository only system and global configuration is shown: not what the command line
     // or the environment (`GIT_CONFIG_COUNT`) adds, which Git reports under the command scope.
     const entries = repository ? all : all.filter((entry) => entry.scope === 'system' || entry.scope === 'global');
-    const tree = buildFileTree(entries, (written, includingFile) => this.resolveInclude(written, includingFile));
+    const named = await this.expandNamedUsers(git, entries, cwd);
+    const tree = buildFileTree(entries, (written, includingFile) => named.get(written) ?? this.resolveInclude(written, includingFile));
     await this.setStatuses(git, tree.occurrences, repository !== undefined, cwd);
     return {
       kind: 'ok',
@@ -258,6 +273,22 @@ export class GitConfigService {
       files: tree.files,
       entries,
     };
+  }
+
+  /**
+   * Include paths under a named user's home (`~alice/shared.inc`), expanded by Git itself: asked
+   * for a key that is not set, with the path as the default, Git answers with the path expanded.
+   */
+  private async expandNamedUsers(git: GitRun, entries: readonly GitConfigEntry[], cwd: string): Promise<Map<string, string>> {
+    const expanded = new Map<string, string>();
+    for (const entry of entries) {
+      const written = entry.value;
+      if (written === undefined || expanded.has(written) || !namedUserPath.test(written) || !includeKey.test(entry.key)) continue;
+      const result = await git(['config', '--type=path', '--default', written, '--get', 'personas.unset.path'], cwd);
+      const answer = result.stdout.replace(/\r?\n$/, '');
+      if (result.code === 0 && answer !== '') expanded.set(written, path.resolve(answer));
+    }
+    return expanded;
   }
 
   /** A conditional rule is only judged against a repository; a plain include always applies. */

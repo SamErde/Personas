@@ -222,6 +222,20 @@ it('tells a key with no value from a key set to nothing', async () => {
   expect(value('core.explicit')).toBe('');
 });
 
+// Git for Windows refuses such a path outright ("could not expand include path"), so there is nothing to show there.
+it.skipIf(platform === 'win32')('lets Git expand an include under a named user\'s home', async () => {
+  const user = os.userInfo().username;
+  const { home, service, repo } = await sandbox(() => `${base}[include]\n\tpath = ~${user}/personas-test-no-such-file.inc\n`);
+
+  const [include] = (await inspect(service, repo)).files[0]!.includes;
+
+  // Not a file called "~user" beside the including file, which is what a plain join would give.
+  expect(path.basename(include!.path)).toBe('personas-test-no-such-file.inc');
+  expect(include!.path.startsWith(home)).toBe(false);
+  expect(include!.path).not.toContain('~');
+  expect(include!.status).toBe('missing');
+});
+
 it('judges each include line on its own when several name the same file', async () => {
   const { home, repo, service } = await sandbox(({ repo }) =>
     [

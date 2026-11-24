@@ -11,7 +11,7 @@ import type {
   GitIdentityValue,
   GitIncludeStatus,
 } from '../git/configService';
-import { gitHome } from '../git/configService';
+import { gitHome, standardConfigFiles } from '../git/configService';
 import { renderEffectiveConfiguration } from '../git/effectiveConfiguration';
 
 export type GitNode =
@@ -206,8 +206,10 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
    */
   private candidateFolders(): string[] {
     const editor = vscode.window.activeTextEditor?.document.uri;
-    if (!editor) this.editorFolder = undefined;
-    else if (editor.scheme === 'file') this.editorFolder = path.dirname(editor.fsPath);
+    // With a tab open and no text editor, the editor is between two documents or shows something
+    // that is not text; only an empty editor area gives the current repository up.
+    if (!editor && !vscode.window.tabGroups.activeTabGroup.activeTab) this.editorFolder = undefined;
+    else if (editor?.scheme === 'file') this.editorFolder = path.dirname(editor.fsPath);
     const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
     return [
       ...(this.editorFolder === undefined ? [] : [this.editorFolder]),
@@ -226,7 +228,7 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
     this.releaseWatchers();
     if (!this.tree.visible || this.result?.kind !== 'ok') return;
     const byFolder = new Map<string, Set<string>>();
-    for (const file of watchedFiles(this.result)) {
+    for (const file of [...watchedFiles(this.result), ...standardConfigFiles(this.home, this.result.repository)]) {
       const folder = path.dirname(file);
       byFolder.set(folder, (byFolder.get(folder) ?? new Set()).add(fileKey(file)));
     }
@@ -262,7 +264,7 @@ export class GitConfigurationView implements vscode.TreeDataProvider<GitNode>, v
 
 const fileKey = (file: string) => fsPathKey(file, process.platform as Platform);
 
-/** Every file whose change can alter what the view shows. */
+/** Every listed file, and the repository's HEAD. */
 function watchedFiles(snapshot: GitConfigSnapshot): string[] {
   const files: string[] = [];
   const add = (includes: readonly GitConfigInclude[]): void => {
