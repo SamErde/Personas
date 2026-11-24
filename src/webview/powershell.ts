@@ -9,7 +9,7 @@ type Action = PowerShellAction['action'];
  * The PowerShell Profiles view of Home, drawn as a compact list in the manner of VS Code's own
  * views. PowerShell profiles that exist are rows; locations with no script yet sit behind one
  * collapsed line per edition. A row's single primary action opens the script, and everything else
- * lives in a menu that overlays the list. The section redraws whenever files change on disk, so
+ * lives in a menu that overlays the list. The view redraws whenever files change on disk, so
  * focus, open menus, and expanded lists are carried across each redraw.
  */
 
@@ -18,7 +18,7 @@ function dispatch(action: Action, id?: string): void {
   post?.({ type: 'powerShellAction', action, id });
 }
 
-/** Outlines drawn for this section on a 16-pixel grid. Strokes take the current text color. */
+/** Outlines drawn for this view on a 16-pixel grid. Strokes take the current text color. */
 const iconPaths = {
   script: 'M3.25 2.75h9.5a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5h-9.5a1.5 1.5 0 0 1-1.5-1.5v-7.5a1.5 1.5 0 0 1 1.5-1.5ZM4.5 6 7 8l-2.5 2M8.5 10.25h3',
   add: 'M8 3.5v9M3.5 8h9',
@@ -373,7 +373,7 @@ function controls(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>('button:not(:disabled)')).filter(control => !control.closest('[hidden]'));
 }
 
-/** Carry focus, open menus, and expanded lists across a redraw; never take focus from outside the section. */
+/** Carry focus, open menus, and expanded lists across a redraw; never take focus from outside the view. */
 function captureInteraction(root: HTMLElement): () => void {
   const rowOf = (element: Element): string => element.closest<HTMLElement>('[data-ps-row]')?.dataset.psRow ?? '';
   const editionOf = (element: Element): string => element.closest<HTMLElement>('[data-ps-edition]')?.dataset.psEdition ?? '';

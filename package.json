@@ -41,7 +41,7 @@
       },
       {
         "command": "personas.powerShellProfiles.help",
-        "title": "About PowerShell Profiles and Their Load Order",
+        "title": "About PowerShell Profiles and Their Load Order (Opens Microsoft Learn)",
         "category": "Personas",
         "icon": "$(question)"
       }

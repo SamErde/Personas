@@ -4,7 +4,7 @@ export type InspectedSetting =
   | undefined;
 
 export const OPEN_WITH_SIDEBAR_SETTING = 'extensionMatrix.openWithSidebar';
-/** The setting's name before 1.5. Still read, so a user who turned it off keeps that choice. */
+/** The setting's name before it was renamed. Still read, so a user who turned it off keeps that choice. */
 export const LEGACY_OPEN_WITH_SIDEBAR_SETTING = 'openMatrixOnActivityBarClick';
 
 function userValue(setting: InspectedSetting): boolean | undefined {

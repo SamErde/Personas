@@ -50,10 +50,10 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
     // created), so also auto-open on visibility change to visible — this covers re-clicking the
     // activity-bar icon after the matrix editor tab was closed.
     //
-    // Neither place loads Home's content. VS Code discards this webview's page whenever the view
+    // Neither place loads this view's content. VS Code discards this webview's page whenever the view
     // is hidden and loads it again when shown, and the page's script sends `ready` each time it
-    // loads. That message alone drives the load, so each section is read once per show (#150).
-    this.maybeAutoOpen();
+    // loads. That message alone drives the load, so the profiles are read once per show (#150).
+    if (webviewView.visible) this.maybeAutoOpen();
     const visibilityListener = webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) this.maybeAutoOpen();
     });

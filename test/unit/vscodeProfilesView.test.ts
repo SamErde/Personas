@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 /** The view shown for the first time, as VS Code does it: the view resolves, then its page's script sends `ready`. */
-function show(extensionFolders: string[] = []) {
+function show(extensionFolders: string[] = [], visible = true) {
   const paths = resolvePaths({
     globalStorageFsPath: '/data/User/globalStorage/samerde.personas',
     extensionFsPath: '/ext/samerde.personas-1.0.0',
@@ -36,7 +36,7 @@ function show(extensionFolders: string[] = []) {
   mock.services = { inventory, paths, workspace: { getWorkspaceInventory: async () => undefined } };
   const { context, dispose } = fakeContext();
   cleanup.push(dispose);
-  const page = fakeView<HostToVsCodeProfiles, VsCodeProfilesToHost>();
+  const page = fakeView<HostToVsCodeProfiles, VsCodeProfilesToHost>(visible);
   new VsCodeProfilesViewProvider(context).resolveWebviewView(page.view);
   page.ready();
   return { getInventory, page };
@@ -95,6 +95,13 @@ it('opens the Extension Matrix each time the view becomes visible', () => {
   expect(matrixOpened()).toBe(1);
   page.setVisible(true);
   expect(matrixOpened()).toBe(2);
+});
+
+it('leaves the Extension Matrix closed while the view is not visible', () => {
+  const { page } = show([], false);
+  expect(matrixOpened()).toBe(0);
+  page.setVisible(true);
+  expect(matrixOpened()).toBe(1);
 });
 
 it('leaves the Extension Matrix closed when the user turned opening with the sidebar off', () => {

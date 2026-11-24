@@ -78,12 +78,12 @@ export function fakeContext() {
  * A stand-in for one of VS Code's sidebar views. The page's script is not run: a test sends `ready`
  * as the script would, and reads what the host posted to the page.
  */
-export function fakeView<ToPage, ToHost extends { type: string }>() {
+export function fakeView<ToPage, ToHost extends { type: string }>(visible = true) {
   const posted: ToPage[] = [];
   let onMessage: (message: ToHost) => void = () => undefined;
   let onVisibility: () => void = () => undefined;
   const view = {
-    visible: true,
+    visible,
     webview: {
       options: {},
       html: '',
