@@ -111,7 +111,6 @@ function setup() {
   return { provider, discover, getInventory };
 }
 
-const types = (posted: HostToHome[]) => posted.map((message) => message.type);
 /** Both sections have posted fresh state `count` times. */
 const settled = (posted: HostToHome[], count: number) =>
   vi.waitFor(() => {
@@ -119,28 +118,30 @@ const settled = (posted: HostToHome[], count: number) =>
     expect(posted.filter((message) => message.type === 'powerShellState')).toHaveLength(count);
   });
 
-it('reads each section once when Home is first shown', async () => {
-  const { provider, discover, getInventory } = setup();
+/** Home shown for the first time, as VS Code does it: the view resolves, then its page's script sends `ready`. */
+function show() {
+  const context = setup();
   const home = fakeView();
-  provider.resolveWebviewView(home.view as never);
+  context.provider.resolveWebviewView(home.view as never);
   home.ready();
-  await settled(home.posted, 1);
-  expect(discover).toHaveBeenCalledTimes(1);
-  expect(getInventory).toHaveBeenCalledTimes(1);
-});
+  return { ...context, home };
+}
 
-it('reads each section once more when Home is shown again', async () => {
-  const { provider, discover, getInventory } = setup();
-  const home = fakeView();
-  provider.resolveWebviewView(home.view as never);
-  home.ready();
-  await settled(home.posted, 1);
-
-  // Hiding the sidebar discards the webview; showing it again reloads the script, which sends `ready`.
+/** Hiding the sidebar discards the page; showing it again reloads the script, which sends `ready`. */
+function reshow(home: ReturnType<typeof fakeView>): void {
   home.setVisible(false);
   home.posted.length = 0;
   home.setVisible(true);
   home.ready();
+}
+
+it('reads each section once per show of Home', async () => {
+  const { home, discover, getInventory } = show();
+  await settled(home.posted, 1);
+  expect(discover).toHaveBeenCalledTimes(1);
+  expect(getInventory).toHaveBeenCalledTimes(1);
+
+  reshow(home);
   // The last known state of both sections, then their fresh state.
   await settled(home.posted, 2);
   expect(discover).toHaveBeenCalledTimes(2);
@@ -148,28 +149,16 @@ it('reads each section once more when Home is shown again', async () => {
 });
 
 it('paints both sections from their last known state as soon as a reshown Home is ready', async () => {
-  const { provider } = setup();
-  const home = fakeView();
-  provider.resolveWebviewView(home.view as never);
-  home.ready();
+  const { home } = show();
   await settled(home.posted, 1);
-  const [state, powerShellState] = ['state', 'powerShellState'].map((type) =>
-    home.posted.find((message) => message.type === type),
-  );
+  // The two sections finish their first load in either order; the repaint is always in this one.
+  const lastKnown = ['state', 'powerShellState'].map((type) => home.posted.find((message) => message.type === type));
 
-  home.setVisible(false);
-  home.posted.length = 0;
-  home.setVisible(true);
-  home.ready();
+  reshow(home);
   // Synchronously: before either section's refresh has had a chance to finish.
-  expect(types(home.posted)).toEqual(['state', 'powerShellState']);
-  expect(home.posted).toEqual([state, powerShellState]);
+  expect(home.posted).toEqual(lastKnown);
 });
 
 it('paints nothing from memory the first time Home is shown', () => {
-  const { provider } = setup();
-  const home = fakeView();
-  provider.resolveWebviewView(home.view as never);
-  home.ready();
-  expect(home.posted).toEqual([]);
+  expect(show().home.posted).toEqual([]);
 });
