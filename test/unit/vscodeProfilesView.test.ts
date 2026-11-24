@@ -6,16 +6,24 @@ import type { HostToVsCodeProfiles, VsCodeProfilesToHost } from '../../src/proto
 import type * as Doubles from './sidebarDoubles';
 import { fakeContext, fakeView, resetSidebarDoubles, vscodeState } from './sidebarDoubles';
 
-const mock = vi.hoisted(() => ({ services: undefined as unknown }));
+const mock = vi.hoisted(() => ({ services: undefined as unknown, building: undefined as Promise<void> | undefined }));
 vi.mock('vscode', async () => (await vi.importActual<typeof Doubles>('./sidebarDoubles')).vscodeDouble());
-vi.mock('../../src/servicesFactory', () => ({ getOrBuildServices: async () => mock.services }));
+vi.mock('../../src/servicesFactory', () => ({
+  getOrBuildServices: async () => {
+    await mock.building;
+    return mock.services;
+  },
+}));
 // Every extension folder weighs the same, so a size identifies how many folders were measured.
 vi.mock('../../src/panel/fsStat', () => ({ statFolder: async () => ({ sizeBytes: 10, lastModifiedMs: 0 }) }));
 
-afterEach(resetSidebarDoubles);
+afterEach(() => {
+  mock.building = undefined;
+  resetSidebarDoubles();
+});
 
-/** The view shown for the first time, as VS Code does it: the view resolves, then its page's script sends `ready`. */
-function show(extensionFolders: string[] = [], visible = true) {
+/** The view as VS Code resolves it, before its page has loaded. */
+function resolve(extensionFolders: string[] = [], visible = true) {
   const paths = resolvePaths({
     globalStorageFsPath: '/data/User/globalStorage/samerde.personas',
     extensionFsPath: '/ext/samerde.personas-1.0.0',
@@ -32,8 +40,14 @@ function show(extensionFolders: string[] = [], visible = true) {
   mock.services = { inventory, paths, workspace: { getWorkspaceInventory: async () => undefined } };
   const page = fakeView<HostToVsCodeProfiles, VsCodeProfilesToHost>(visible);
   new VsCodeProfilesViewProvider(fakeContext()).resolveWebviewView(page.view);
-  page.ready();
   return { getInventory, page };
+}
+
+/** The view shown for the first time: it resolves, then its page's script sends `ready`. */
+function show(extensionFolders: string[] = [], visible = true) {
+  const shown = resolve(extensionFolders, visible);
+  shown.page.ready();
+  return shown;
 }
 
 const states = (posted: HostToVsCodeProfiles[]) => posted.filter((message) => message.type === 'state');
@@ -78,31 +92,54 @@ it('never pairs a new orphan count with the size measured for a different set of
   expect(fresh).toMatchObject([{ type: 'state', orphanCount: 1 }, { type: 'orphanSize', totalSizeBytes: 10 }]);
 });
 
-it('opens the Extension Matrix each time the view becomes visible', () => {
+it('opens the Extension Matrix each time the view is shown', async () => {
   const { page } = show();
+  await settled(page.posted, 1);
   expect(matrixOpened()).toBe(1);
 
-  page.setVisible(false);
-  expect(matrixOpened()).toBe(1);
-  page.setVisible(true);
+  page.reshow();
+  await settled(page.posted, 2);
   expect(matrixOpened()).toBe(2);
 });
 
-it('leaves the Extension Matrix closed while the view is not visible', () => {
-  const { page } = show([], false);
+it('waits for the page to load before opening the Extension Matrix', async () => {
+  // VS Code reports a newly resolved view as visible even when the sidebar was closed while the
+  // extension was starting. The page loading is what shows the view really is on screen.
+  const { page } = resolve();
+  await Promise.resolve();
   expect(matrixOpened()).toBe(0);
-  page.setVisible(true);
+
+  page.ready();
+  await settled(page.posted, 1);
   expect(matrixOpened()).toBe(1);
 });
 
-it('leaves the Extension Matrix closed when the user turned opening with the sidebar off', () => {
-  vscodeState.settings = { 'extensionMatrix.openWithSidebar': { globalValue: false } };
-  expect(show().page.posted).toEqual([]);
+it('leaves the Extension Matrix closed when the view is hidden while Personas is still setting up', async () => {
+  let finishBuilding = () => undefined as void;
+  mock.building = new Promise<void>((done) => (finishBuilding = done));
+  const { page } = show();
+  page.setVisible(false);
+  finishBuilding();
+  await settled(page.posted, 1);
   expect(matrixOpened()).toBe(0);
 });
 
-it('still honors the setting under the name it had before the rename', () => {
+it('leaves the Extension Matrix closed while the view is not visible', async () => {
+  const { page } = show([], false);
+  await settled(page.posted, 1);
+  expect(matrixOpened()).toBe(0);
+});
+
+it('leaves the Extension Matrix closed when the user turned opening with the sidebar off', async () => {
+  vscodeState.settings = { 'extensionMatrix.openWithSidebar': { globalValue: false } };
+  const { page } = show();
+  await settled(page.posted, 1);
+  expect(matrixOpened()).toBe(0);
+});
+
+it('still honors the setting under the name it had before the rename', async () => {
   vscodeState.settings = { openMatrixOnActivityBarClick: { globalValue: false } };
-  show();
+  const { page } = show();
+  await settled(page.posted, 1);
   expect(matrixOpened()).toBe(0);
 });

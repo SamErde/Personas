@@ -63,7 +63,7 @@ export interface SidebarView<ToHost> {
   /** The page's script, by its file name in dist/. */
   script: string;
   onMessage(message: ToHost): unknown;
-  onVisibilityChange(visible: boolean): void;
+  onVisibilityChange?(visible: boolean): void;
   onDispose(): void;
 }
 
@@ -86,7 +86,7 @@ export function openSidebarPage<ToHost>(
     scriptUri: webview.asWebviewUri(vscode.Uri.joinPath(dist, view.script)).toString(),
   });
   webview.onDidReceiveMessage((message: ToHost) => void view.onMessage(message));
-  const visibilityListener = webviewView.onDidChangeVisibility(() => view.onVisibilityChange(webviewView.visible));
+  const visibilityListener = webviewView.onDidChangeVisibility(() => view.onVisibilityChange?.(webviewView.visible));
   webviewView.onDidDispose(() => {
     visibilityListener.dispose();
     view.onDispose();

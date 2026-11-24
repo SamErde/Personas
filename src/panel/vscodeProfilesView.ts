@@ -45,21 +45,15 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
       body: vscodeProfilesBody,
       script: 'vscodeProfiles.js',
       onMessage: (message) => this.onMessage(message),
-      // resolveWebviewView doesn't re-fire on later re-clicks (the view stays resolved once
-      // created), so also auto-open when the view becomes visible again — this covers re-clicking
-      // the activity-bar icon after the matrix editor tab was closed.
-      onVisibilityChange: (visible) => {
-        if (visible) this.maybeAutoOpen();
-      },
       onDispose: () => {
         if (this.view === webviewView) this.view = undefined;
       },
     });
-    // Neither this nor the visibility change loads the view's content. VS Code discards the page
+    // Nothing here loads the view's content or opens the Extension Matrix. VS Code discards the page
     // whenever the view is hidden and loads it again when shown, and the page's script sends `ready`
-    // each time it loads. That message alone drives the load, so the profiles are read once per
-    // show (#150).
-    if (webviewView.visible) this.maybeAutoOpen();
+    // each time it loads. That message alone drives both, so the profiles are read once per show
+    // (#150). `webviewView.visible` cannot stand in for it: VS Code reports a newly resolved view as
+    // visible even when the sidebar was closed while the extension was starting.
   }
 
   /**
@@ -73,13 +67,17 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
   }
 
   /** Showing this view opens the Extension Matrix too, unless the user turned that off. */
-  private maybeAutoOpen(): void {
+  private async maybeAutoOpen(): Promise<void> {
     const settings = vscode.workspace.getConfiguration('personas');
     const enabled = opensMatrixWithSidebar(
       settings.inspect<boolean>(OPEN_WITH_SIDEBAR_SETTING),
       settings.inspect<boolean>(LEGACY_OPEN_WITH_SIDEBAR_SETTING),
     );
-    if (enabled) void vscode.commands.executeCommand('personas.showMatrix');
+    if (!enabled) return;
+    // Opening the Extension Matrix waits on this same set-up, which is slow the first time. Wait for
+    // it here so a view the user hid in the meantime does not open the Extension Matrix.
+    await getOrBuildServices(this.context);
+    if (this.view?.visible) void vscode.commands.executeCommand('personas.showMatrix');
   }
 
   private post(message: HostToVsCodeProfiles): void {
@@ -173,7 +171,7 @@ export class VsCodeProfilesViewProvider implements vscode.WebviewViewProvider {
   private async onReady(): Promise<void> {
     if (this.lastState) this.post(this.lastState);
     if (this.lastOrphanSize) this.post(this.lastOrphanSize);
-    await this.render();
+    await Promise.all([this.maybeAutoOpen(), this.render()]);
   }
 
   private async editProfileFile(profileId: string): Promise<void> {

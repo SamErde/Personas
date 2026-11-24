@@ -93,7 +93,7 @@
         "personas.extensionMatrix.openWithSidebar": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "When enabled, showing the VS Code Profiles view in the Personas sidebar also opens the Extension Matrix — including on window restore if the view was left showing. Disable to require clicking the \"Open Extension Matrix\" button instead. Collapsing or hiding the VS Code Profiles view has the same effect."
+          "markdownDescription": "When enabled, showing the VS Code Profiles view in the Personas sidebar also opens the Extension Matrix — including on window restore if the view was left showing. Disable to require clicking the \"Open Extension Matrix\" button instead. Collapsing the VS Code Profiles view also stops it, but only while the PowerShell Profiles view is shown too: VS Code expands a view that is the only one left in the sidebar. Use this setting for an opt-out that lasts."
         },
         "personas.openMatrixOnActivityBarClick": {
           "type": "boolean",
