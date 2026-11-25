@@ -144,6 +144,15 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 /** Resolves once every test in the suite has run, with `true` if any of them failed. */
 export const done: Promise<boolean> = new Promise((resolveDone) => {
   describe('Personas end-to-end against a sandboxed VS Code', { timeout: SUITE_TIMEOUT_MS }, () => {
+    it('starts with AI features disabled when supported by this VS Code version', guard(async () => {
+      const [major, minor] = vscode.version.split('.').map(Number);
+      assert.ok(major !== undefined && minor !== undefined, `Unexpected VS Code version: ${vscode.version}`);
+      const supportsAIFeatureSetting = major > 1 || (major === 1 && minor >= 104);
+      if (supportsAIFeatureSetting) {
+        assert.strictEqual(vscode.workspace.getConfiguration('chat').get('disableAIFeatures'), true);
+      }
+    }));
+
     it('reads an inventory with the default profile from a fresh sandbox', {skip:!!process.env.PERSONAS_IT_POWERSHELL_ONLY}, guard(async () => {
       const inventory = await new InventoryService(testPaths(), io).getInventory();
       assert.ok(inventory.profiles.some((p) => p.isDefault));

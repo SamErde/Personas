@@ -1,6 +1,6 @@
 import { runTests } from '@vscode/test-electron';
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { withoutRepositoryOverrides } from '../../src/git/configService';
@@ -15,6 +15,12 @@ async function main(): Promise<void> {
   const userDataDir = mkdtempSync(path.join(tmpdir(), 'personas-it-data-'));
   const extensionsDir = mkdtempSync(path.join(tmpdir(), 'personas-it-ext-'));
   const workspaceDir = mkdtempSync(path.join(tmpdir(), 'personas-it-workspace-'));
+  const userDir = path.join(userDataDir, 'User');
+  mkdirSync(userDir, { recursive: true });
+  writeFileSync(
+    path.join(userDir, 'settings.json'),
+    JSON.stringify({ 'chat.disableAIFeatures': true }, null, 2),
+  );
   cpSync(path.resolve(extensionDevelopmentPath, 'test', 'fixtures', 'integration-workspace'), workspaceDir, {
     recursive: true,
   });
