@@ -19,21 +19,17 @@ async function main(): Promise<void> {
     recursive: true,
   });
 
-  // Package the fixture here, in the plain launcher process: invoking vsce (which needs a
-  // shell on Windows) from inside the sandboxed Extension Development Host fails with
-  // "spawnSync .../cmd.exe ENOENT" (verified locally) — that process restricts child-process
-  // creation. Packaging is a build-time concern anyway, not something the suite should redo.
+  // Package the fixture here, in the plain launcher process: invoking vsce from inside the
+  // sandboxed Extension Development Host fails with "spawnSync .../cmd.exe ENOENT" (verified
+  // locally) — that process restricts child-process creation. Packaging is a build-time concern
+  // anyway, not something the suite should redo.
   const fixtureDir = path.resolve(extensionDevelopmentPath, 'test', 'fixtures', 'hello-ext');
-  const vsce = path.resolve(
-    extensionDevelopmentPath,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'vsce.cmd' : 'vsce',
-  );
+  // Run vsce's JS entry point with this Node binary rather than the .bin/vsce.cmd shim, so no
+  // shell is needed on Windows (shell: true with args is deprecated, DEP0190).
+  const vsce = path.resolve(extensionDevelopmentPath, 'node_modules', '@vscode', 'vsce', 'vsce');
   const vsixPath = path.join(fixtureDir, 'fixture.vsix');
-  execFileSync(vsce, ['package', '--allow-missing-repository', '--out', vsixPath], {
+  execFileSync(process.execPath, [vsce, 'package', '--allow-missing-repository', '--out', vsixPath], {
     cwd: fixtureDir,
-    shell: process.platform === 'win32',
   });
 
   // This machine sets ELECTRON_RUN_AS_NODE=1 globally, which makes runTests() spawn Code.exe as a bare Node process instead of the real GUI (docs/spikes/findings.md, Spike B).
