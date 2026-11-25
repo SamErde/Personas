@@ -1,4 +1,4 @@
-// Removes the dist/ build output and cached VS Code test installs the integration tests no longer
+// Removes generated build output and cached VS Code test installs the integration tests no longer
 // use. Lists what it would remove by default; pass --force to delete.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -68,7 +68,9 @@ const reasons = new Map([[minimum, 'minimum engine version']]);
 if (stable) reasons.set(stable, reasons.has(stable) ? 'minimum engine version and current stable' : 'current stable');
 
 const targets = [];
-if (fs.existsSync(path.join(root, 'dist'))) targets.push('dist');
+for (const generated of ['dist', 'out-test']) {
+  if (fs.existsSync(path.join(root, generated))) targets.push(generated);
+}
 for (const install of installs) {
   const relative = path.join('.vscode-test', install.name);
   if (reasons.has(install.version)) console.log(`Keeping   ${relative} (${reasons.get(install.version)})`);

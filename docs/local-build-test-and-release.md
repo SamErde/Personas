@@ -275,10 +275,11 @@ entire sandbox is under the unique path stored in `$TestRoot`; inspect that valu
 the directory. The packaged VSIX files under `releases` are gitignored and may be retained for
 additional local testing.
 
-Over time `dist/` collects output from removed entry points, and `.vscode-test/` keeps a full
-copy of every VS Code version an integration run has downloaded. `npm run clean` lists what it
-would remove: all of `dist/`, and every cached VS Code except the `engines.vscode` minimum and the
-current stable release. Add `--force` to delete them; close any VS Code test windows first.
+Over time `dist/` and `out-test/` collect output from removed source files, and `.vscode-test/`
+keeps a full copy of every VS Code version an integration run has downloaded. `npm run clean`
+lists what it would remove: all of `dist/` and `out-test/`, and every cached VS Code except the
+`engines.vscode` minimum and the current stable release. Add `--force` to delete them; close any
+VS Code test windows first.
 
 ```powershell
 npm run clean
