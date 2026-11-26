@@ -28,6 +28,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "personas.openSettings",
+        "title": "Open Personas Settings",
+        "category": "Personas"
+      },
+      {
         "command": "personas.showMatrix",
         "title": "Open Extension Matrix",
         "category": "Personas",
@@ -41,7 +46,7 @@
       },
       {
         "command": "personas.powerShellProfiles.help",
-        "title": "About PowerShell Profiles and Their Load Order (Opens Microsoft Learn)",
+        "title": "PowerShell Profiles Help",
         "category": "Personas",
         "icon": "$(question)"
       },
@@ -66,6 +71,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "personas.openSettings",
+          "when": "view == personas.vscodeProfiles || view == personas.powerShellProfiles || view == personas.gitConfiguration",
+          "group": "settings"
+        },
         {
           "command": "personas.powerShellProfiles.refresh",
           "when": "view == personas.powerShellProfiles",
@@ -137,6 +147,18 @@
     "configuration": {
       "title": "Personas",
       "properties": {
+        "personas.powerShellProfiles.allowRuntimeDiscovery": {
+          "type": "boolean",
+          "scope": "machine",
+          "default": false,
+          "description": "Allow an explicit action to start a detected PowerShell executable to resolve an unknown profile location. Refresh always uses passive discovery."
+        },
+        "personas.powerShellProfiles.includeWindowsPowerShell": {
+          "type": "boolean",
+          "scope": "window",
+          "default": true,
+          "description": "Include Windows PowerShell 5.1 installations and their profiles, including ISE profiles, in discovery and editing on Windows."
+        },
         "personas.extensionMatrix.openWithSidebar": {
           "type": "boolean",
           "default": true,

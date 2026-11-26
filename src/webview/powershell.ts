@@ -55,7 +55,7 @@ function describe(control: HTMLElement, name: string, tooltip = name): void {
   control.title = tooltip;
 }
 
-export function renderPowerShell(inventory: PowerShellInventory, send: Send): void {
+export function renderPowerShell(inventory: PowerShellInventory, send: Send, allowRuntimeDiscovery: boolean): void {
   const root = document.getElementById('powershell');
   if (!root) return;
   post = send;
@@ -66,13 +66,14 @@ export function renderPowerShell(inventory: PowerShellInventory, send: Send): vo
     root.append(el('p', 'ps-message', inventory.error));
   } else {
     for (const edition of inventory.editions) {
-      root.append(renderEdition(edition, inventory.rows.filter(row => row.edition === edition.edition)));
+      root.append(renderEdition(edition, inventory.rows.filter(row => row.edition === edition.edition), allowRuntimeDiscovery));
     }
+    if (!allowRuntimeDiscovery) root.querySelector('.ps-unresolved')?.after(runtimeDiscoveryNotice());
   }
   restoreInteraction();
 }
 
-function renderEdition(edition: EditionInfo, rows: ProfileRow[]): HTMLElement {
+function renderEdition(edition: EditionInfo, rows: ProfileRow[], allowRuntimeDiscovery: boolean): HTMLElement {
   const group = el('div', 'ps-edition');
   group.dataset.psEdition = edition.edition;
   group.setAttribute('role', 'group');
@@ -92,7 +93,7 @@ function renderEdition(edition: EditionInfo, rows: ProfileRow[]): HTMLElement {
     list.append(...shown.map(render));
     group.append(list);
   }
-  group.append(...renderNotices(edition, names));
+  group.append(...renderNotices(edition, names, allowRuntimeDiscovery));
   if (folded.length) {
     const missing = folded.filter(row => row.state === 'missing').length;
     const unresolved = folded.length - missing;
@@ -117,12 +118,25 @@ function setFold(fold: HTMLElement, expanded: boolean): void {
   if (list instanceof HTMLElement) list.hidden = !expanded;
 }
 
+function runtimeDiscoveryNotice(): HTMLElement {
+  const line = el('p', 'ps-message', 'Runtime discovery is off. ');
+  const settings = button('ps-settings', 'openSettings', () => dispatch('openSettings'));
+  settings.textContent = 'Open Personas Settings';
+  settings.dataset.psNav = '';
+  line.append(settings);
+  return line;
+}
+
+function unresolvedInstallations(edition: EditionInfo): Installation[] {
+  return edition.installations.filter(installation => !edition.userDirectory || !installation.home);
+}
+
 /**
  * Explains what could not be found for an edition. Where an installed executable can supply the
  * answer, each offer names the program it starts before the user chooses it.
  */
-function renderNotices(edition: EditionInfo, names: Map<string, string>): HTMLElement[] {
-  const pending = edition.installations.filter(installation => !edition.userDirectory || !installation.home);
+function renderNotices(edition: EditionInfo, names: Map<string, string>, allowRuntimeDiscovery: boolean): HTMLElement[] {
+  const pending = unresolvedInstallations(edition);
   if (!pending.length) {
     return edition.reason ? [note(edition.reason, edition.reason, edition.installations.length > 0)] : [];
   }
@@ -135,7 +149,10 @@ function renderNotices(edition: EditionInfo, names: Map<string, string>): HTMLEl
     `Personas could not find the ${scopes} for ${edition.edition} without starting PowerShell.`,
     edition.reason ?? '',
   ].filter(Boolean).join('\n');
-  return [note(summary, explanation, true), ...pending.map(installation => renderResolve(installation, names.get(installation.id)))];
+  const actions = allowRuntimeDiscovery ? pending.map(i => renderResolve(i, names.get(i.id))) : [];
+  const notice = note(summary, explanation, true);
+  notice.classList.add('ps-unresolved');
+  return [notice, ...actions];
 }
 
 function note(text: string, tooltip: string, warning: boolean): HTMLElement {
@@ -381,7 +398,7 @@ function captureInteraction(root: HTMLElement): () => void {
     JSON.stringify([editionOf(element), rowOf(element), element.dataset.psId ?? '', element.dataset.psAction]);
   const active = document.activeElement;
   const focused = active instanceof HTMLElement && root.contains(active) ? active : undefined;
-  const focusedKey = focused ? key(focused) : undefined;
+  const focusedKey = focused && focused !== root ? key(focused) : undefined;
   const focusedRow = focused ? rowOf(focused) : '';
   const focusedEdition = focused ? editionOf(focused) : '';
   const openMenus = new Set(Array.from(root.querySelectorAll('.ps-menu-open')).map(rowOf));

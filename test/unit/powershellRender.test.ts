@@ -26,7 +26,7 @@ function inventory(states: Record<string, Partial<ProfileRow>> = {}, editions: E
 const console7 = { 'Current User/Console': { state: 'existing' } } as const;
 
 let sent: PowerShellAction[];
-const render = (data: PowerShellInventory) => renderPowerShell(data, message => sent.push(message));
+const render = (data: PowerShellInventory) => renderPowerShell(data, message => sent.push(message), true);
 const one = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const found = document.querySelector<T>(selector);
   if (!found) throw new Error(`No element matches ${selector}`);
@@ -51,6 +51,22 @@ beforeEach(() => {
   sent = [];
 });
 
+it('explains disabled runtime discovery only for an installed edition with unresolved paths', () => {
+  const data = inventory(console7, [{ ...edition, userDirectory: undefined }]);
+  renderPowerShell(data, message => sent.push(message), false);
+  expect(all('.ps-resolve')).toHaveLength(0);
+  const notice = one('.ps-note').nextElementSibling!;
+  expect(notice.textContent).toContain('Runtime discovery is off');
+  const settings = notice.querySelector('button')!;
+  expect(settings.textContent).toBe('Open Personas Settings');
+  settings.click();
+  expect(sent).toEqual([{type:'powerShellAction', action:'openSettings'}]);
+  for (const known of [inventory(console7), inventory({}, [{edition:'PowerShell 7', installations:[], reason:'Installation not found'}])]) {
+    renderPowerShell(known, message => sent.push(message), false);
+    expect(one('#powershell').textContent).not.toContain('Runtime discovery is off');
+  }
+});
+
 describe('automatic refresh', () => {
   it('keeps an open row menu and its focused action', () => {
     render(inventory(console7));
@@ -71,6 +87,10 @@ describe('automatic refresh', () => {
 
     render(inventory(console7));
     expect(document.activeElement).toBe(rowFor('Current User/Console').querySelector('.ps-open'));
+
+    one('#powershell').focus();
+    render(inventory(console7));
+    expect(document.activeElement?.id).toBe('powershell');
 
     one('#outside').focus();
     render(inventory(console7));

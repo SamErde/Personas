@@ -1,5 +1,10 @@
 import * as path from 'node:path';
 
+export interface PowerShellPreferences {
+  allowRuntimeDiscovery: boolean;
+  includeWindowsPowerShell: boolean;
+}
+
 export type Edition = 'PowerShell 7' | 'Windows PowerShell';
 export interface Installation { id: string; executable: string; home?: string; readOnly?: boolean }
 export interface EditionInfo {

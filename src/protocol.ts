@@ -131,12 +131,14 @@ export type VsCodeProfilesToHost =
   | { type: 'editWorkspaceFile' }
   | { type: 'reviewOrphans' };
 
-export type HostToPowerShellProfiles = { type: 'powerShellState'; inventory: PowerShellInventory };
+export type HostToPowerShellProfiles =
+  | { type: 'powerShellState'; inventory: PowerShellInventory; allowRuntimeDiscovery: boolean }
+  | { type: 'showPowerShellHelp' };
 
 /** Refresh and Help are buttons in the view's title bar, so the host starts them; the page sends the rest. */
 export type PowerShellAction = {
   type: 'powerShellAction';
-  action: 'refresh' | 'help' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal';
+  action: 'refresh' | 'openSettings' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal';
   id?: string;
 };
 export type PowerShellProfilesToHost = { type: 'ready' } | PowerShellAction;

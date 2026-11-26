@@ -4,9 +4,16 @@ import { affectsProfile, changedIdentities, pathIdentities, profileWatchPlan } f
 import * as path from 'node:path';
 import { PowerShellService } from '../powershell/service';
 import { createProfile, deleteProfile, inspectProfile, nearestExistingDirectory } from '../powershell/files';
+import type { PowerShellInventory, PowerShellPreferences } from '../powershell/profiles';
 import type { HostToPowerShellProfiles, PowerShellAction } from '../protocol';
 
-const helpUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
+function readPreferences(): PowerShellPreferences {
+  const config = vscode.workspace.getConfiguration('personas.powerShellProfiles');
+  return {
+    allowRuntimeDiscovery: config.get<unknown>('allowRuntimeDiscovery') === true,
+    includeWindowsPowerShell: config.get('includeWindowsPowerShell', true),
+  };
+}
 /** Watcher events are best effort; a dropped one must not leave the view stale (#136). */
 const defaultReconcileMs = 5000;
 export class PowerShellController implements vscode.Disposable {
@@ -24,17 +31,15 @@ export class PowerShellController implements vscode.Disposable {
   private identities?: Map<string, string>;
   private readonly armedIdentities = new Map<string, string>();
   private readonly reconcileMs: number;
-  private readonly post: (message: HostToPowerShellProfiles) => void;
-  private lastPosted?: HostToPowerShellProfiles;
+  private lastInventory?: PowerShellInventory;
   constructor(
-    post: (message: HostToPowerShellProfiles) => void,
+    private readonly post: (message: HostToPowerShellProfiles) => void,
     private readonly service = new PowerShellService(),
     private readonly confirmCreate: (file: string) => Promise<boolean> = async file =>
       await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
     options: {reconcileMs?: number} = {},
   ) {
     this.reconcileMs = options.reconcileMs ?? defaultReconcileMs;
-    this.post = message => { this.lastPosted = message; post(message); };
     this.events = [
       vscode.workspace.onDidSaveTextDocument(document => this.changed([document.uri])),
       vscode.workspace.onDidCreateFiles(event => this.changed(event.files, true)),
@@ -44,23 +49,39 @@ export class PowerShellController implements vscode.Disposable {
   }
   /** Show the last known state again, for a view that was rebuilt and would otherwise sit empty until the next refresh (#150). */
   paintLastKnown(): void {
-    if (this.lastPosted && !this.disposed) this.post(this.lastPosted);
+    if (!this.lastInventory || this.disposed) return;
+    const preferences = readPreferences();
+    this.post({
+      type: 'powerShellState',
+      inventory: this.included(this.lastInventory, preferences),
+      allowRuntimeDiscovery: preferences.allowRuntimeDiscovery,
+    });
+  }
+  private included(inventory: PowerShellInventory, preferences = readPreferences()): PowerShellInventory {
+    if (preferences.includeWindowsPowerShell) return inventory;
+    return {
+      ...inventory,
+      editions: inventory.editions.filter(item => item.edition !== 'Windows PowerShell'),
+      rows: inventory.rows.filter(item => item.edition !== 'Windows PowerShell'),
+    };
   }
   refresh(background = false): Promise<void> {
     this.queue = this.queue.then(async () => {
       if (this.disposed || background && !this.active) return;
       if (vscode.env.remoteName) {
-        this.post({type:'powerShellState', inventory:{editions:[], rows:[], error:'PowerShell profiles support local desktop windows. WSL support is planned next.'}});
+        this.lastInventory = {editions:[], rows:[], error:'PowerShell profiles support local desktop windows. WSL support is planned next.'};
+        this.paintLastKnown();
         return;
       }
       try {
-        const inventory = await this.service.refresh();
+        const inventory = await this.service.refresh(readPreferences().includeWindowsPowerShell);
         if (this.disposed) return;
         await this.watch();
-        if (!this.disposed) this.post({type:'powerShellState', inventory});
+        this.lastInventory = inventory;
       } catch (error) {
-        this.post({type:'powerShellState', inventory:{editions:[],rows:[],error:String(error)}});
+        this.lastInventory = {editions:[],rows:[],error:String(error)};
       }
+      this.paintLastKnown();
     });
     return this.queue;
   }
@@ -141,13 +162,13 @@ export class PowerShellController implements vscode.Disposable {
   }
   /** Whether any shown row's state or link target differs from a fresh inspection, the same check the inventory itself uses. */
   private async inventoryIsStale(): Promise<boolean> {
-    const rows = this.service.snapshot.rows;
+    const rows = this.included(this.service.snapshot).rows;
     const current = await Promise.all(rows.map(row => inspectProfile(row)));
     return current.some((row, index) => row.state !== rows[index]?.state || row.target !== rows[index]?.target);
   }
   private async watch(): Promise<void> {
     if (!this.active || this.disposed) return;
-    const files = this.service.snapshot.rows.flatMap(row => row.path ? [row.path] : []);
+    const files = this.included(this.service.snapshot).rows.flatMap(row => row.path ? [row.path] : []);
     const plan = await profileWatchPlan(files);
     // Taken before attaching, so a replacement racing the attach reads as changed rather than adopted.
     const armed = await pathIdentities(plan.directories);
@@ -175,21 +196,29 @@ export class PowerShellController implements vscode.Disposable {
   async handle(message: PowerShellAction): Promise<void> {
     if (vscode.env.remoteName) return;
     try {
-      if (message.action === 'help') { await vscode.env.openExternal(vscode.Uri.parse(helpUrl)); return; }
+      if (message.action === 'openSettings') { await vscode.commands.executeCommand('personas.openSettings'); return; }
       if (message.action === 'refresh') { await this.refresh(); return; }
       if (message.action === 'resolve') {
-        await this.service.resolve(message.id ?? '');
+        await this.service.resolve(message.id ?? '', readPreferences());
         await this.refresh(); return;
       }
       // Resolve the opaque identifier against host-owned inventory, then re-inspect the file.
       const location = this.service.row(message.id ?? '');
       if (!location) throw new Error('Profile is no longer available; refresh first');
+      const checkEdition = () => {
+        if (location.edition === 'Windows PowerShell' && !readPreferences().includeWindowsPowerShell) {
+          throw new Error('Windows PowerShell is excluded in Personas Settings');
+        }
+      };
+      checkEdition();
       let row = await inspectProfile(location);
+      checkEdition();
       if (!row.path) throw new Error('Profile path is unresolved');
       if (message.action === 'copy') { await vscode.env.clipboard.writeText(row.path); return; }
       if (message.action === 'reveal') {
         // A missing profile's own folder may not exist yet, for example before the first one is created.
         const target = row.state === 'missing' ? await nearestExistingDirectory(path.dirname(row.path)) : row.path;
+        checkEdition();
         await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(target)); return;
       }
       if (message.action === 'delete') {
@@ -214,15 +243,20 @@ export class PowerShellController implements vscode.Disposable {
             'Delete PowerShell Profile?', {modal:true, detail:current.path + (current.target ? '\nLink target: ' + current.target : '') + '\nMove to Trash/Recycle Bin.'},
             'Move to Trash',
           ) === 'Move to Trash',
-          trash: async file => vscode.workspace.fs.delete(vscode.Uri.file(file), {useTrash:true, recursive:false}),
+          trash: async file => {
+            checkEdition();
+            await vscode.workspace.fs.delete(vscode.Uri.file(file), {useTrash:true, recursive:false});
+          },
         });
       } else if (message.action === 'open') {
         if (row.state === 'missing' && !row.readOnly) {
           if (!await this.confirmCreate(row.path)) return;
+          checkEdition();
           row = await createProfile(location);
         }
         if (row.state !== 'existing') throw new Error(row.detail ?? 'Profile cannot be opened');
         const document = await vscode.workspace.openTextDocument(vscode.Uri.file(row.target ?? row.path!));
+        checkEdition();
         await vscode.window.showTextDocument(document, {preview:false});
       }
       await this.refresh();

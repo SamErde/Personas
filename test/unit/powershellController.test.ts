@@ -29,6 +29,7 @@ vi.mock('vscode', () => {
       showWarningMessage: async () => 'Move to Trash',
     },
     workspace: {
+      getConfiguration: () => ({get: (_key:string, fallback:boolean) => fallback}),
       textDocuments: mock.documents,
       fs: {delete: async (file:any) => {mock.trashed.push(file.fsPath);}},
       onDidSaveTextDocument: register('save'), onDidCreateFiles: register('create'),

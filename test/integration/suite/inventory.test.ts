@@ -232,6 +232,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       // registers the commands behind the PowerShell Profiles title-bar buttons.
       await vscode.extensions.getExtension('SamErde.personas')!.activate();
       const after = await vscode.commands.getCommands(true);
+      assert.ok(after.includes('personas.openSettings'));
       assert.ok(after.includes('personas.powerShellProfiles.refresh'));
       assert.ok(after.includes('personas.powerShellProfiles.help'));
       await vscode.commands.executeCommand('personas.powerShellProfiles.refresh');

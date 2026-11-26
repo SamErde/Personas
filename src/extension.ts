@@ -66,12 +66,17 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGitConfiguration(context, readOnlyProvider);
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('personas.powerShellProfiles')) {
+        powerShellProfiles.settingsChanged(e.affectsConfiguration('personas.powerShellProfiles.includeWindowsPowerShell'));
+      }
       if (e.affectsConfiguration('personas.showAgentsWindowProfile')) scheduleRefresh();
     }),
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VsCodeProfilesViewProvider.viewId, vscodeProfiles),
     vscode.window.registerWebviewViewProvider(PowerShellProfilesViewProvider.viewId, powerShellProfiles),
+    vscode.commands.registerCommand('personas.openSettings', () =>
+      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:SamErde.personas')),
     // The buttons in the PowerShell Profiles view's title bar.
     vscode.commands.registerCommand('personas.powerShellProfiles.refresh', () => powerShellProfiles.refresh()),
     vscode.commands.registerCommand('personas.powerShellProfiles.help', () => powerShellProfiles.help()),

@@ -1,18 +1,26 @@
 /** Stand-ins for VS Code, shared by the tests of Home's views. */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const manifest = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8'));
+const declaredSettings = new Set(Object.keys(manifest.contributes.configuration.properties));
+
 type Inspected = { globalValue?: boolean; workspaceValue?: boolean; workspaceFolderValue?: boolean };
 
 /** What the tests control and observe in the `vscode` double. Reset it between tests. */
 export const vscodeState = {
   /** Commands run through `commands.executeCommand`, in order. */
   commands: [] as string[],
-  /** Values the user set, by setting name within `personas`. */
+  /** Values the user set, by fully qualified setting name. */
   settings: {} as Record<string, Inspected>,
   /** URLs opened in the browser. */
   opened: [] as string[],
+  errors: [] as string[],
   reset(): void {
     this.commands.length = 0;
     this.opened.length = 0;
+    this.errors.length = 0;
     this.settings = {};
   },
 };
@@ -51,13 +59,23 @@ export function vscodeDouble() {
         vscodeState.commands.push(command);
       },
     },
-    window: { showErrorMessage: () => undefined },
+    window: { showErrorMessage: (message: string) => vscodeState.errors.push(message) },
     workspace: {
       textDocuments: [],
-      getConfiguration: () => ({
-        get: <T>(_key: string, fallback: T) => fallback,
-        inspect: (key: string) => vscodeState.settings[key],
-      }),
+      getConfiguration: (section: string) => {
+        const inspect = (key: string) => {
+          const id = section + '.' + key;
+          if (!declaredSettings.has(id)) throw new Error('Undeclared Personas setting: ' + id);
+          return vscodeState.settings[id];
+        };
+        return {
+          inspect,
+          get: <T>(key: string, fallback: T) => {
+            const value = inspect(key);
+            return value?.workspaceValue ?? value?.globalValue ?? fallback;
+          },
+        };
+      },
       onDidSaveTextDocument: event,
       onDidCreateFiles: event,
       onDidDeleteFiles: event,
