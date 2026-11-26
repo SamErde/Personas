@@ -1,0 +1,189 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const mib = 1024 * 1024;
+const cli = path.resolve('scripts/clean.mjs');
+const preload = path.resolve('test/fixtures/cleanup/preload.cjs');
+let sandbox: string;
+let checkout: string;
+let cache: string;
+
+beforeEach(() => {
+  sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'personas-clean-'));
+  checkout = path.join(sandbox, 'checkout');
+  cache = path.join(checkout, '.vscode-test');
+  fs.mkdirSync(path.join(checkout, 'scripts'), { recursive: true });
+  fs.copyFileSync(cli, path.join(checkout, 'scripts', 'clean.mjs'));
+  fs.writeFileSync(path.join(checkout, 'package.json'), JSON.stringify({ engines: { vscode: '^1.101.0' } }));
+});
+afterEach(() => fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 3 }));
+
+function run(force = false, options: { response?: unknown; fault?: string; faultPath?: string } = {}) {
+  const args = ['--require', preload, path.join(checkout, 'scripts', 'clean.mjs')];
+  if (force) args.push('--force');
+  const child = spawnSync(process.execPath, args, {
+    cwd: sandbox,
+    encoding: 'utf8',
+    env: { ...process.env, CLEAN_TEST_OPTIONS: JSON.stringify(options) },
+    timeout: 10_000,
+  });
+  if (child.error) throw child.error;
+  return child;
+}
+
+function install(platform: string, version: string, complete = true) {
+  const name = `vscode-${platform}-${version}`;
+  const dir = path.join(cache, name);
+  fs.mkdirSync(dir, { recursive: true });
+  if (complete) fs.writeFileSync(path.join(dir, 'is-complete'), '');
+  return name;
+}
+
+function linkDir(destination: string, at: string) {
+  fs.symlinkSync(destination, at, process.platform === 'win32' ? 'junction' : 'dir');
+}
+
+describe('cleanup CLI', () => {
+  it('previews and removes just recognized stale installs and generated output, then becomes a no-op', () => {
+    const keep = [
+      install('linux-arm64', '1.101.0'), install('darwin', '1.110.0'),
+      install('win32-x64-archive', '1.110.0'), install('unknown', '1.1.0'),
+      install('linux-x64', '1..2'), install('linux-armhf', 'insiders-backup'),
+      install('darwin', 'a'.repeat(39)),
+    ];
+    const stale = [
+      install('linux-x64', '1.99.0'), install('darwin-arm64', 'insiders'),
+      install('win32-arm64-archive', '1.110.0-insider'), install('linux-armhf', 'a'.repeat(40)),
+    ];
+    const generated = ['dist', 'out-test'];
+    for (const name of generated) fs.mkdirSync(path.join(checkout, name));
+    const preview = run();
+    expect(preview.status).toBe(0);
+    for (const name of stale) expect(preview.stdout).toContain(`Would remove ${path.join('.vscode-test', name)}`);
+    expect(fs.readdirSync(cache).sort()).toEqual([...keep, ...stale].sort());
+    for (const name of generated) expect(fs.existsSync(path.join(checkout, name))).toBe(true);
+
+    const forced = run(true);
+    expect(forced.status).toBe(0);
+    expect(fs.readdirSync(cache).sort()).toEqual(keep.sort());
+    for (const name of generated) expect(fs.existsSync(path.join(checkout, name))).toBe(false);
+    const repeat = run(true);
+    expect(repeat.status).toBe(0);
+    expect(repeat.stdout).toContain('Nothing to clean');
+  });
+
+  it.each(['timeout', 'http-error', 'invalid-string', 'invalid-first'])('keeps complete fallbacks by platform on %s', (scenario) => {
+    const keep = [
+      install('linux-x64', '1.100.0'), install('linux-x64', '1.101.0', false),
+      install('darwin', '1.109.0'), install('linux-armhf', '1.20.0', false), install('linux-armhf', 'insiders'),
+    ];
+    for (const version of ['1.99.0', '1.111.0', 'insiders']) install('linux-x64', version, version !== '1.111.0');
+    install('darwin', '1.108.0');
+    const response = scenario === 'invalid-string' ? '1.110.0' : ['invalid'];
+    const result = run(true, { fault: scenario, response });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`${keep[0]} (offline fallback)`);
+    expect(result.stdout).toContain(`${keep[1]} (minimum engine version)`);
+    expect(result.stdout).toContain(`${keep[2]} (offline fallback)`);
+    expect(result.stdout).toContain('Keeping linux-armhf installs');
+    expect(fs.readdirSync(cache).sort()).toEqual(keep.sort());
+  });
+
+  it('protects a coincident minimum and stable, leaving linked cache entries alone', () => {
+    const minimum = install('darwin', '1.101.0');
+    const shared = path.join(sandbox, 'shared');
+    fs.mkdirSync(shared);
+    const link = path.join(cache, 'vscode-darwin-1.99.0');
+    linkDir(shared, link);
+    expect(run(true, { response: ['1.101.0'] }).status).toBe(0);
+    expect(fs.readdirSync(cache).sort()).toEqual([minimum, path.basename(link)].sort());
+  });
+
+  it('rejects linked roots and non-directory roots but continues with ordinary targets', () => {
+    const external = path.join(sandbox, 'shared-cache');
+    const sentinel = path.join(external, 'vscode-linux-x64-1.99.0', 'keep');
+    fs.mkdirSync(path.dirname(sentinel), { recursive: true });
+    fs.writeFileSync(sentinel, 'untouched');
+    linkDir(external, cache);
+    const dist = path.join(checkout, 'dist');
+    linkDir(external, dist);
+    fs.mkdirSync(path.join(checkout, 'out-test'));
+    for (const force of [false, true]) {
+      const result = run(force);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Skipping .vscode-test');
+      expect(result.stderr).toContain('Skipping dist');
+      expect(fs.readFileSync(sentinel, 'utf8')).toBe('untouched');
+      expect(fs.existsSync(path.join(checkout, 'out-test'))).toBe(!force);
+    }
+
+    fs.unlinkSync(cache);
+    fs.writeFileSync(cache, 'ordinary file');
+    const brokenTarget = path.join(sandbox, 'missing');
+    fs.mkdirSync(brokenTarget);
+    fs.unlinkSync(dist);
+    linkDir(brokenTarget, dist);
+    fs.rmdirSync(brokenTarget);
+    const result = run(true);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Skipping dist');
+    expect(result.stderr).toContain('Skipping .vscode-test');
+    expect(result.stdout).not.toContain('Nothing to clean');
+    expect(fs.lstatSync(dist).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(cache, 'utf8')).toBe('ordinary file');
+  });
+
+  it('does not count or remove the contents of a nested directory link', () => {
+    const external = path.join(sandbox, 'shared');
+    const dist = path.join(checkout, 'dist');
+    fs.mkdirSync(dist);
+    fs.mkdirSync(external);
+    fs.writeFileSync(path.join(external, 'sentinel'), Buffer.alloc(2 * mib));
+    fs.writeFileSync(path.join(dist, 'generated'), Buffer.alloc(mib));
+    linkDir(external, path.join(dist, 'linked'));
+    for (const force of [false, true]) {
+      const result = run(force);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('dist (1.0 MiB)');
+      expect(fs.statSync(path.join(external, 'sentinel')).size).toBe(2 * mib);
+    }
+    expect(fs.existsSync(dist)).toBe(false);
+  });
+
+  it.each(['marker-error', 'linked-marker'])('preserves the affected platform on %s', (fault) => {
+    const uncertain = install('linux-x64', '1.115.0', false);
+    const marker = path.join(cache, uncertain, 'is-complete');
+    if (fault === 'linked-marker') {
+      const external = path.join(sandbox, 'marker-destination');
+      fs.mkdirSync(external);
+      linkDir(external, marker);
+    }
+    const kept = [uncertain, install('linux-x64', '1.105.0'), install('linux-x64', 'insiders'), install('darwin', '1.120.0')];
+    install('darwin', '1.110.0');
+    const result = run(true, { response: [], fault, faultPath: marker });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('keeping linux-x64 installs');
+    expect(fs.readdirSync(cache).sort()).toEqual(kept.sort());
+  });
+
+  it.each(['scan-error', 'remove-error'])('reports %s, continues, and completes on retry', (fault) => {
+    const dist = path.join(checkout, 'dist');
+    const out = path.join(checkout, 'out-test');
+    for (const dir of [dist, out]) {
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'file'), Buffer.alloc(mib));
+    }
+    const result = run(true, { fault, faultPath: dist });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Skipping dist');
+    expect(result.stderr).toContain('Cleanup incomplete');
+    expect(result.stdout).toContain('Removed 1 target(s), estimated 1.0 MiB');
+    expect(fs.existsSync(dist)).toBe(true);
+    expect(fs.existsSync(out)).toBe(false);
+    expect(run(true).status).toBe(0);
+    expect(fs.existsSync(dist)).toBe(false);
+  });
+});

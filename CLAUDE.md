@@ -37,7 +37,9 @@ earliest working name "Visex".)
 ## Build & test
 
 - `npm run lint` (tsc --noEmit) · `npm test` (vitest unit) · `npm run build` (esbuild)
-- `npm run clean` lists stale `dist/`, `out-test/`, and `.vscode-test/` content; `-- --force` deletes it.
+- Preview generated output and stale VS Code installs with `npm run clean`.
+- After closing test windows, remove eligible directories with `npm run clean -- --force`.
+  See [Cleanup](docs/local-build-test-and-release.md#cleanup) for offline retention and skipped paths.
 - `npm run test:integration` — runs against a sandboxed VS Code (node:test). It builds first;
   `test:integration:prebuilt` skips the build and reuses `dist/` (CI builds once, via `vsce package`).
 
