@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -20,7 +19,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
@@ -63,6 +62,7 @@ const evidence = {
   ci: githubMetadata(),
   phases: [],
   commands: [],
+  workbenchFailures: [],
   defaultPaths: {},
   liveProfiles: {},
   nestedProfile: {},
@@ -106,17 +106,14 @@ try {
 
 async function runProbe() {
   setPhase('resolve-owned-distribution');
-  const sharedExecutable = await downloadAndUnzipVSCode({ version: 'stable', platform: target });
-  const sourceRoot = distributionRoot(sharedExecutable);
-  const ownedDistribution = path.join(probeRoot, 'distribution');
-  cpSync(sourceRoot, ownedDistribution, {
-    recursive: true,
-    preserveTimestamps: true,
-    verbatimSymlinks: true,
+  const ownedExecutable = await downloadAndUnzipVSCode({
+    version: 'stable',
+    platform: target,
+    cachePath: path.join(probeRoot, 'vscode-cache'),
   });
-  const ownedExecutable = path.join(ownedDistribution, path.relative(sourceRoot, sharedExecutable));
-  assert.ok(existsSync(ownedExecutable), 'owned VS Code executable copy is missing');
-  assert.ok((statSync(ownedExecutable).mode & 0o111) !== 0, 'owned VS Code executable lost execute permission');
+  const ownedDistribution = distributionRoot(ownedExecutable);
+  assert.ok(existsSync(ownedExecutable), 'owned VS Code executable is missing');
+  assert.ok((statSync(ownedExecutable).mode & 0o111) !== 0, 'owned VS Code executable is not executable');
   const cliPath = resolveCliPathFromVSCodeExecutablePath(ownedExecutable, target);
   assert.ok(existsSync(cliPath), 'owned VS Code CLI launcher is missing');
 
@@ -141,14 +138,50 @@ async function runProbe() {
   assert.ok(existsSync(vsixPath), 'target-specific fixture VSIX was not created');
 
   const defaultLayout = layoutForHome(defaultHome);
-  const workspace = path.join(probeRoot, 'workspace');
-  mkdirSync(workspace);
+  const defaultWorkspace = path.join(probeRoot, 'workspace-default');
+  mkdirSync(defaultWorkspace);
 
-  setPhase('default-user-data-and-live-profile-creation');
-  await createLiveProfile(ownedExecutable, defaultEnv, workspace, defaultLayout.storageJson, profileNames.control);
-  await createLiveProfile(ownedExecutable, defaultEnv, workspace, defaultLayout.storageJson, profileNames.target);
-  const storage = readJson(defaultLayout.storageJson);
-  const profiles = profileRegistry(storage);
+  setPhase('default-user-data-and-profile-resolution');
+  await launchWorkbenchUntil(
+    'materialize-default-user-data',
+    ownedExecutable,
+    workbenchArgs(defaultWorkspace),
+    defaultEnv,
+    () => existsAndParses(defaultLayout.storageJson),
+  );
+  const storageBeforeSeed = readJson(defaultLayout.storageJson);
+  const profilesBeforeSeed = profileRegistry(storageBeforeSeed);
+  assert.ok(!profilesBeforeSeed.some((profile) => Object.values(profileNames).includes(profile.name)), 'probe profile already exists');
+  const seededProfiles = [
+    ...profilesBeforeSeed,
+    { location: 'profile-control', name: profileNames.control },
+    { location: 'profile-target', name: profileNames.target },
+  ];
+  storageBeforeSeed.userDataProfiles = seededProfiles;
+  writeFileSync(defaultLayout.storageJson, `${JSON.stringify(storageBeforeSeed, null, 2)}\n`);
+  const controlWorkspace = path.join(probeRoot, 'workspace-control');
+  const targetWorkspace = path.join(probeRoot, 'workspace-target');
+  mkdirSync(controlWorkspace);
+  mkdirSync(targetWorkspace);
+  const controlAssociation = await validateProfileInWorkbench(
+    ownedExecutable,
+    defaultEnv,
+    controlWorkspace,
+    defaultLayout.storageJson,
+    profileNames.control,
+    'profile-control',
+    seededProfiles,
+  );
+  const targetAssociation = await validateProfileInWorkbench(
+    ownedExecutable,
+    defaultEnv,
+    targetWorkspace,
+    defaultLayout.storageJson,
+    profileNames.target,
+    'profile-target',
+    seededProfiles,
+  );
+  const profiles = profileRegistry(readJson(defaultLayout.storageJson));
   const control = exactlyOneProfile(profiles, profileNames.control);
   const liveTarget = exactlyOneProfile(profiles, profileNames.target);
   assert.notEqual(control.location, liveTarget.location, 'VS Code generated duplicate profile locations');
@@ -161,10 +194,18 @@ async function runProbe() {
     noUserDataOverride: true,
     noExtensionsOverride: true,
   };
-  evidence.liveProfiles.createdByWorkbench = [
+  evidence.liveProfiles = {
+    profileProvisioning: 'fixture-seeded in disposable storage.json',
+    automaticProfileCreationClaimed: false,
+    workbenchResolutionVerified: true,
+    registryBeforeSeed: profilesBeforeSeed,
+    registryAfterWorkbenchResolution: profiles,
+    associations: [controlAssociation, targetAssociation],
+    profiles: [
     { name: control.name, location: control.location },
     { name: liveTarget.name, location: liveTarget.location },
-  ];
+    ],
+  };
 
   setPhase('live-named-profile-isolation');
   const liveManifestPaths = {
@@ -368,17 +409,36 @@ function workbenchArgs(workspace, profileName) {
   ];
 }
 
-async function createLiveProfile(executable, env, workspace, storageJson, profileName) {
+async function validateProfileInWorkbench(
+  executable,
+  env,
+  workspace,
+  storageJson,
+  profileName,
+  expectedLocation,
+  expectedProfiles,
+) {
+  assert.equal(associationForWorkspace(readJson(storageJson), workspace), undefined, `${profileName} association existed before launch`);
   await launchWorkbenchUntil(
-    `create-profile-${profileName}`,
+    `resolve-profile-${profileName}`,
     executable,
     workbenchArgs(workspace, profileName),
     env,
     () => {
       if (!existsAndParses(storageJson)) return false;
-      return profileRegistry(readJson(storageJson)).some((profile) => profile.name === profileName);
+      return associationForWorkspace(readJson(storageJson), workspace)?.location === expectedLocation;
     },
   );
+  const storage = readJson(storageJson);
+  assert.deepEqual(profileRegistry(storage), expectedProfiles, `${profileName} launch changed the seeded profile registry`);
+  const association = associationForWorkspace(storage, workspace);
+  assert.equal(association?.location, expectedLocation, `${profileName} did not resolve to its seeded location`);
+  return {
+    name: profileName,
+    location: expectedLocation,
+    observedWorkspaceUri: sanitize(association.observedUri),
+    normalizedWorkspaceUri: sanitize(association.normalizedUri),
+  };
 }
 
 async function launchWorkbenchUntil(label, executable, args, env, predicate) {
@@ -408,9 +468,13 @@ async function launchWorkbenchUntil(label, executable, args, env, predicate) {
   } catch (error) {
     pendingError = error;
   } finally {
-    if (child?.pid && processGroupMembers(child.pid).length > 0) {
+    if (child?.pid) {
       try {
-        await terminateOwnedProcessGroup(child, child.pid, `${label}-finally`);
+        if (processGroupMembers(child.pid).length > 0) {
+          await terminateOwnedProcessGroup(child, child.pid, `${label}-finally`);
+        } else {
+          activeProcessGroups.delete(child.pid);
+        }
       } catch (cleanupError) {
         evidence.cleanup.processGroupError = sanitize(String(cleanupError));
         pendingError = pendingError
@@ -420,6 +484,13 @@ async function launchWorkbenchUntil(label, executable, args, env, predicate) {
     }
     closeSync(stdoutFd);
     closeSync(stderrFd);
+  }
+  if (pendingError) {
+    evidence.workbenchFailures.push({
+      label,
+      stdoutTail: readLogTail(stdoutPath),
+      stderrTail: readLogTail(stderrPath),
+    });
   }
   if (pendingError) throw pendingError;
 }
@@ -434,7 +505,8 @@ function processGroupId(pid) {
 
 function processGroupMembers(pgid) {
   const result = spawnSync('ps', ['-eo', 'pid=,pgid='], { encoding: 'utf8' });
-  if (result.status !== 0) return [];
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, `cannot inspect members of process group ${pgid}: ${result.stderr.trim()}`);
   return result.stdout.split(/\r?\n/).flatMap((line) => {
     const [pidText, groupText] = line.trim().split(/\s+/);
     return Number(groupText) === pgid ? [Number(pidText)] : [];
@@ -597,6 +669,23 @@ function profileRegistry(storage) {
   return Array.isArray(storage.userDataProfiles) ? storage.userDataProfiles : [];
 }
 
+function associationForWorkspace(storage, workspace) {
+  const associations = storage?.profileAssociations?.workspaces;
+  if (!associations || typeof associations !== 'object' || Array.isArray(associations)) return undefined;
+  const expectedPath = path.resolve(workspace);
+  for (const [uri, location] of Object.entries(associations)) {
+    if (typeof location !== 'string') continue;
+    try {
+      if (path.resolve(fileURLToPath(uri)) === expectedPath) {
+        return { observedUri: uri, normalizedUri: pathToFileURL(expectedPath).toString(), location };
+      }
+    } catch {
+      // Ignore non-file or malformed association keys; this probe opens only file workspaces.
+    }
+  }
+  return undefined;
+}
+
 function exactlyOneProfile(profiles, name) {
   const found = profiles.filter((profile) => profile?.name === name && typeof profile?.location === 'string');
   assert.equal(found.length, 1, `expected exactly one generated profile named ${name}`);
@@ -725,6 +814,11 @@ function sanitize(value) {
 
 function safeName(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function readLogTail(file) {
+  if (!existsSync(file)) return '';
+  return sanitize(readFileSync(file, 'utf8').slice(-8_000));
 }
 
 function gitHead() {
