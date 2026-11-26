@@ -23,3 +23,5 @@ vitest.config.*
 # installed extension uses them, so they only add VSIX size.
 dist/**/*.map
 .claude/
+GLOSSARY.md
+CONTRIBUTING.md

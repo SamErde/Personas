@@ -1,8 +1,8 @@
 # Personas — Brand Reference (v3)
 
 Extension: **Personas** (`samerde.personas`)
-Tagline: **Easily manage your dev personas:** the different Git identities,
-VS Code profiles, and extensions that you need in different contexts.
+Tagline: **See and manage your developer personas in one sidebar:** VS Code
+profiles and their extensions, PowerShell profiles, and the Git identity in effect.
 
 ## Mark
 
@@ -33,19 +33,24 @@ Inter (700 wordmark, 400 taglines). Fallback: Segoe UI, sans-serif.
 ```json
 "name": "personas",
 "displayName": "Personas",
-"description": "Easily manage your dev personas: the different Git identities, VS Code profiles, and extensions that you need in different contexts.",
+"description": "See and manage your developer personas in one sidebar: VS Code profiles and their extensions, PowerShell profiles, and the Git identity in effect.",
 "icon": "media/icon-256.png",
 "galleryBanner": { "color": "#16213E", "theme": "dark" }
 ```
 
 ## Files
 
-- `icon.svg`, `icon-256.png` (marketplace icon), `icon-128.png`
-- `logo.svg`/`logo.png` (dark) and `logo-light.svg`/`logo-light.png` (light)
-- `banner.svg`, `banner.png` (1280×320) — README hero
-- `social-preview.svg`, `social-preview.png` (1280×640) — GitHub social preview
-- `blog-hero.svg/png` (1600×840) — personas blog series hero
-- `marketplace-mockup`, `matrix-ui-mockup` — design previews (staged data)
+- `assets/brand/`: `icon.svg`, `icon-256.png`, `icon-128.png`; `logo.svg`/`logo.png` (dark) and
+  `logo-light.svg`/`logo-light.png` (light); `banner.svg`, `banner.png` (1280×320, the README
+  hero). The Marketplace icon is `media/icon-256.png`.
+- `assets/content/`: `social-preview.svg`/`.png` (1280×640, GitHub social preview) and
+  `blog-hero.svg`/`.png` (1600×840, the blog series hero).
+- `assets/mockup/`: `marketplace-mockup` and `matrix-ui-mockup`, early design concepts with staged
+  data that predate the three-view sidebar. Don't use them as product screenshots.
+- `docs/images/`: real product screenshots, captured with demo data, for the README and user guide.
+- The banner and social preview carry the tagline. Re-render the PNGs from the SVGs (Inter,
+  falling back to Segoe UI) whenever the tagline changes. The README loads the banner from the
+  default branch, so keep its path.
 
 ## Usage rules
 

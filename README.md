@@ -1,142 +1,97 @@
 # Personas
 
-<img src="assets/brand/banner.png" alt="Personas banner" width="100%" />
+<img src="assets/brand/banner.png" alt="Personas: see and manage your developer personas in one sidebar" width="100%" />
 
-Easily manage your dev personas: the different Git identities, VS Code profiles, and extensions that you need in different contexts.
+**See and manage your developer personas in one sidebar:** VS Code profiles and their extensions, PowerShell profiles, and the Git identity in effect.
+
+If you keep separate setups for work, clients, open source, or teaching, each one is a persona: a VS Code profile with its own extensions, a PowerShell profile, and a Git identity. Personas puts them together in the Activity Bar. You can see what each setup contains and change it in one place, without switching profiles or opening config files to find out what's set where.
+
+![The Personas sidebar beside the Extension Matrix, comparing four VS Code profiles](docs/images/overview.png)
 
 ## Features
 
-Personas brings your VS Code profiles and their extensions together in one view. The Extension Matrix shows every profile side by side, so you can compare, install, and remove extensions without switching between them, and search, filter, or group the list to find what you need. Distinct cell symbols, controls that match VS Code in every theme (including high contrast), and full keyboard and screen reader support make it comfortable to use, and it holds your place and your view as you work. The Personas Home sidebar opens the matrix and also lists your PowerShell profile scripts, so you can open, create, or remove them in one place.
+### Extension Matrix: every profile side by side
 
-- **Every profile in one place**: Each profile is a column and each extension is a row. Check or clear a cell to install or uninstall that extension in that profile. Profiles appear in the same order on Home and in the matrix: Default first, then the Agents window profile if you have one, then the rest in natural order.
-- **Find extensions fast**: Search by name, ID, or publisher, or show only the extensions applied to all profiles. **Filters** narrow the list by category, publisher, and install source (Marketplace, VSIX, Other, or Unknown). Each choice shows how many extensions it would match, and active filters appear as chips you can remove one at a time.
-- **Group by name or publisher**: Arrange rows under A–Z or publisher headings, each with its count.
-- **Readable at a glance**: Every cell state has its own symbol as well as its color (◆ applied to all profiles, ⤷ installed through Default, ✓ installed but locked, — not installed, ? unknown), and the **Legend** button explains them.
-- **Keyboard and screen reader friendly**:
-  - The row and column under the pointer or keyboard focus are highlighted, and extension names stay in view when the matrix scrolls sideways.
-  - Focus stays where you left it when the matrix updates.
-  - Screen readers announce each cell's extension, profile, and state, and the number of results as you filter.
-  - Your view, filters, and grouping last for the rest of the VS Code session.
-- **Current workspace status**: When a folder or workspace is open, a separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Select an `Enabled`, `Not enabled`, or `Workspace-local` cell to open the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
-- **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including ones that exist only in the workspace. Personas calls one installed only when VS Code reports that exact local path as effective.
-- **Orphan cleanup**: Extension versions on disk that no profile references appear struck through under **All**. **Review N orphaned…** lists them with their size and last-modified date, and moves the ones you choose to the Trash or Recycle Bin.
-- **A sidebar you can arrange**: Home, the Personas sidebar, has one view per area: **VS Code Profiles**, **PowerShell Profiles**, and **Git Configuration**. Collapse, reorder, or hide them as you would any VS Code view. Showing VS Code Profiles also opens the Extension Matrix; turn that off with the `personas.extensionMatrix.openWithSidebar` setting. Collapsing the view stops it too, but only while another view is shown too: when you hide the others, VS Code expands the one view that is left and removes its header, so it can no longer be collapsed. The first time a workspace shows Home, VS Code Profiles gets the most height and Git Configuration the least; after that VS Code keeps whatever sizes you drag the dividers to. VS Code shows Git Configuration's title bar buttons only while you hover over or focus that view; set `workbench.view.alwaysShowHeaderActions` to show them all the time.
-- **PowerShell profiles**: Your profile scripts are grouped by PowerShell edition and listed in the order PowerShell loads them. [More about PowerShell profiles](#powershell-profiles).
-- **Git configuration**: See the Git identity in effect for the current repository, and which config file each value comes from. [More about Git configuration](#git-configuration).
-- **Privacy**: Personas never collects or transmits any data.
+- Each profile is a column and each extension is a row. Check or clear a cell to install or uninstall that extension in that profile, through VS Code's own `code` command line.
+- Hover over an extension's name for its details and quick actions: **Install in every profile**, **Remove from every profile**, and **Apply to all profiles…**.
+- Search, filter by category, publisher, or install source, and group by name or publisher. Each filter choice shows how many extensions it matches.
+- A **Current workspace** column shows whether each extension is enabled in the open folder or workspace.
+- Find extension versions that no profile uses any more, and move them to the Trash.
 
-## Home settings
+![Extension Matrix filters with counts for category, publisher, and install source](docs/images/matrix-filters.png)
 
-Select the gear (**Open Personas Settings**) in any Home view’s title bar,
-or run **Personas: Open Personas Settings** from the Command Palette. Both open
-VS Code's User Settings filtered to Personas. The `…` on the Personas container itself
-lets you show and hide views.
+### VS Code Profiles
 
-## Requirements & Limitations
+- Every profile, with how many extensions are installed in it directly and how many are applied to all profiles. A ✎ button opens a profile's raw extension list.
+- A **Current workspace** card summarizes the extension status of the open folder or workspace.
+- Profiles appear in the same order everywhere: Default, then VS Code's Agents window profile, then the rest by name.
+
+### PowerShell Profiles
+
+- Your PowerShell profile scripts, grouped by edition and listed in the order PowerShell loads them. Windows PowerShell appears on Windows.
+- Open, create, copy the path of, reveal, or move a profile script to the Trash.
+- Finds profile locations without starting PowerShell. If a location can't be found that way, you can choose to let PowerShell report it.
+
+### Git Configuration
+
+- The `user.name` and `user.email` in effect for the current repository, and the file each one comes from.
+- The system, global, local, and worktree config files, with every `include` and `includeIf` file and whether it applies here.
+- **Show Effective Git Configuration** lists every value in the order Git reads it.
+- This view is read-only, and it is the first stage of Git personas. Saving and applying named Git identities is planned; see the [roadmap](docs/roadmap.md).
+
+<img src="docs/images/sidebar.png" alt="The Personas sidebar with the VS Code Profiles, PowerShell Profiles, and Git Configuration views" width="360" />
+
+### Built for everyone
+
+Controls follow your VS Code theme, including high contrast. Every cell state has its own symbol as well as its color. The matrix works fully from the keyboard and with screen readers, and keeps your place when it updates.
+
+## Getting started
+
+1. Install **Personas** from the Marketplace.
+2. Select the Personas icon in the Activity Bar. The sidebar opens, and so does the Extension Matrix.
+3. Check or clear a cell in the matrix to install or uninstall an extension in that profile.
+4. Look at the PowerShell Profiles and Git Configuration views to see the rest of your setup.
+
+The [user guide](docs/user-guide.md) covers every feature in detail.
+
+## Requirements and limitations
 
 - VS Code Stable or Insiders 1.101 or newer, on Windows, macOS, or Linux.
-- Portable installations and custom `--user-data-dir`/`--extensions-dir` are supported.
-- Remote workspaces (SSH, WSL, containers, github.dev) are not managed. Personas manages the local desktop install it runs in.
+- Personas manages the local desktop VS Code install it runs in, including custom `--user-data-dir` and `--extensions-dir` locations. Remote windows (SSH, WSL, dev containers) and VS Code for the Web are not supported.
+- The Git Configuration view needs Git, found through VS Code's `git.path` setting or your `PATH`.
 
-## Profiles, workspaces, and recommendations
+## Settings
 
-Ordinary Marketplace and VSIX extensions are installed per VS Code profile. VS Code can then
-enable or disable an installed extension globally or for the current workspace. Personas keeps
-those concepts separate: profile columns remain editable installation manifests, while the
-**Current workspace** card and matrix column report effective status without changing enablement.
-To change it, the matrix hands off to VS Code's own "Enable (Workspace)" / "Disable (Workspace)"
-actions, because no official CLI saves workspace enablement.
+Select the gear in any Personas view's title bar, or run **Personas: Open Personas Settings**, to open Settings filtered to Personas.
 
-A saved `.code-workspace` file is shareable JSON configuration. Its Current workspace card can
-open a read-only preview or edit that manifest directly. VS Code's internal extension-enablement
-state is not stored in that file, so those manifest actions do not enable, disable, install, or
-remove extensions.
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `personas.extensionMatrix.openWithSidebar` | `true` | Open the Extension Matrix whenever the VS Code Profiles view is shown. |
+| `personas.showAgentsWindowProfile` | `true` | Show VS Code's Agents window profile, which uses the Default profile's extensions. |
+| `personas.powerShellProfiles.includeWindowsPowerShell` | `true` | On Windows, include Windows PowerShell 5.1 and ISE profiles. |
+| `personas.powerShellProfiles.allowRuntimeDiscovery` | `false` | Let you start PowerShell to find a profile location that can't be found otherwise. This is a machine setting, so set it in User settings. |
 
-VS Code also supports local workspace extensions under `.vscode/extensions`. Merely placing an
-unpacked manifest there creates a candidate, not proof of installation. Personas reports
-`Workspace-local` only when the stable VS Code API exposes the same extension ID from inside that
-candidate directory. A candidate without that evidence remains `Unknown`.
+Note: the older setting name `personas.openMatrixOnActivityBarClick` is still honored when `personas.extensionMatrix.openWithSidebar` isn't set.
 
-Extension recommendations in `.vscode/extensions.json` or a `.code-workspace` file are suggestions
-only. Personas never treats a recommendation as installed or enabled. `Unknown` likewise means the
-stable APIs or readable profile data cannot support a stronger claim; it is not a guessed disable
-or install state.
+## Commands
 
-## How It Works
+| Command | What it does |
+| --- | --- |
+| Personas: Open Extension Matrix | Open the matrix of every extension across every profile. |
+| Personas: Open Personas Settings | Open User Settings filtered to Personas. |
+| Personas: Refresh PowerShell Profiles | Look for PowerShell profiles again. |
+| Personas: PowerShell Profiles Help | Explain how profiles are found, with links to the settings and Microsoft Learn. |
+| Personas: Refresh Git Configuration | Read the Git configuration again. |
+| Personas: Show Effective Git Configuration | Open every Git config value in effect, in the order Git reads it. |
 
-Personas reads the same files VS Code itself maintains: the profile registry and each profile's extension list. All installs and uninstalls run through the official `code` command-line interface, scoped to the right profile (and, when applicable, the right `--user-data-dir`/`--extensions-dir`). Workspace status additionally uses the stable `vscode.extensions` API and a bounded read-only scan of immediate child directories under each local workspace root's `.vscode/extensions` folder. Personas does not read or write VS Code's SQLite state.
+## Privacy
 
-## Git configuration
+Personas has no telemetry. It reads local files and runs VS Code's `code` command line and `git`. On Windows it also runs `reg.exe` to find your Documents folder, and `taskkill` to stop a command that takes too long. It starts PowerShell only when you choose to. Network access happens only through those tools, for example when the `code` command line downloads an extension you install, or when you open a link.
 
-Home, the Personas sidebar, includes a Git Configuration view. It answers one
-question: which Git configuration is in effect here, and where does it come
-from? The current repository is the one that contains the file in the active
-editor, or else the first workspace folder; its name appears in the view's
-title.
+## Learn more
 
-The view lists the effective `user.name` and `user.email` with the file each
-comes from, then the system, global, local, and worktree config files that hold
-values. Every `include` and `includeIf` target is nested under the file that
-names it, with the condition as written and a status:
-
-- **Applied**: Git takes values from the file for the current repository.
-- **Not applied here**: the file has values, but none are in effect.
-- **Empty**: the file exists and holds no values.
-- **Missing**: the file does not exist.
-
-Personas reads the status from Git's own output and does not evaluate
-conditions itself. Each rule is judged on its own, so a file that two rules
-name can be Applied under one and Not applied here under the other. With no
-repository open, the view shows system and global configuration only and gives
-no status for `includeIf` rules.
-
-Each file has an open button that opens it in the editor, where you edit and
-save it yourself. Personas never writes a Git config file, and does not create
-or delete one. **Show Effective Git Configuration** in the view's title bar
-opens a read-only document of every value in the order Git reads it, grouped by
-key, each with its scope and source file. It has the same content as
-`git config --list`, so treat it with the same care if your config holds
-credentials.
-
-The view uses the `git` command: the first one VS Code's `git.path` setting
-names that exists, or else the one on your `PATH`. It is never taken from the
-folder being inspected. It works in local desktop windows only.
-
-## PowerShell profiles
-
-Home, the Personas sidebar, includes a PowerShell Profiles view. It lists the
-PowerShell profiles that exist, grouped by edition and labeled by host and
-scope, in the order PowerShell loads them. Locations that have no script yet
-fold into one collapsed line per edition. PowerShell 7 is supported on Windows,
-macOS, and Linux; Windows PowerShell and ISE rows appear only on Windows.
-Current-user files are listed once per edition, while distinct installations
-have separate all-users paths.
-
-Select a row to open its script in the editor, or to confirm Create and Open
-for a missing file. Each row's menu offers Copy Path, Reveal in File Manager,
-and confirmed deletion to Trash/Recycle Bin. Deletion stops for unsaved edits
-or unavailable Trash. Linked profiles can be edited, but use the file manager
-to remove a link: the extension cannot guarantee link-only Trash behavior on
-every platform.
-
-Passive discovery respects redirected Documents information. Opening or refreshing
-the view finds profile paths without starting PowerShell. When an installed
-edition has an unresolved location and runtime discovery is off, the view says
-**Runtime discovery is off** beside the first unresolved location. Choose
-**Open Personas Settings** there to enable
-`personas.powerShellProfiles.allowRuntimeDiscovery` in this machine's user settings.
-Then choose the named executable, for example **Run pwsh.exe to resolve**. Each
-click launches it once with profiles disabled and a five-second timeout. Successful
-results stay available for the session, including after you turn runtime discovery off.
-
-On Windows, turn off `personas.powerShellProfiles.includeWindowsPowerShell` to
-exclude Windows PowerShell 5.1 and ISE from discovery, listing, and editing.
-PowerShell 7 remains available. The edition preference supports workspace overrides.
-
-The **?** in the PowerShell Profiles title bar opens a help dialog. From there,
-**Open PowerShell Settings** shows the PowerShell Profiles settings and
-**Profiles on Microsoft Learn** explains profiles and their load order.
-
-This feature currently supports local desktop windows. WSL is the next planned
-scope; SSH and container windows may follow. Preview and custom installations,
-profile execution/reload, templates, and content synchronization are deferred.
+- [User guide](docs/user-guide.md)
+- [Roadmap](docs/roadmap.md)
+- [Changelog](CHANGELOG.md)
+- [Report an issue or suggest a feature](https://github.com/SamErde/Personas/issues)
+- [Contributing](CONTRIBUTING.md)
