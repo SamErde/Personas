@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const rootPath = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
+const rootPath = fs.realpathSync.native(fileURLToPath(new URL('../', import.meta.url)));
 const force = process.argv.includes('--force');
 const stableReleasesApi = 'https://update.code.visualstudio.com/api/releases/stable?released=true';
 // Desktop platforms and version IDs emitted by @vscode/test-electron 3.1.0.

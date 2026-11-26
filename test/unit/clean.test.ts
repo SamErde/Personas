@@ -12,7 +12,7 @@ let checkout: string;
 let cache: string;
 
 beforeEach(() => {
-  sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'personas-clean-')));
+  sandbox = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'personas-clean-')));
   checkout = path.join(sandbox, 'checkout');
   cache = path.join(checkout, '.vscode-test');
   fs.mkdirSync(path.join(checkout, 'scripts'), { recursive: true });
