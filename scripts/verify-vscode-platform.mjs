@@ -943,6 +943,10 @@ function obsoleteState(file, extensionsDir, observedFixtureFolder) {
   const raw = readFileSync(file, 'utf8');
   const parsed = JSON.parse(raw);
   assert.ok(parsed && typeof parsed === 'object' && !Array.isArray(parsed), '.obsolete is not a flat object');
+  assert.ok(
+    Object.values(parsed).every((value) => value === true),
+    '.obsolete contains a value other than true',
+  );
   const fixtureEntryPresent = Object.hasOwn(parsed, observedFixtureFolder);
   return {
     exists: true,
