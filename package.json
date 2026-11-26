@@ -208,6 +208,7 @@
     "test": "vitest run",
     "test:integration": "npm run build && npm run test:integration:prebuilt",
     "test:integration:prebuilt": "tsc -p tsconfig.integration.json && node out-test/test/integration/runTests.js",
+    "test:runtime-paths": "node scripts/verify-vscode-platform.mjs",
     "package": "node -e \"require('fs').mkdirSync('releases',{recursive:true})\" && vsce package --out releases/"
   },
   "devDependencies": {

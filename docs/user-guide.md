@@ -193,7 +193,7 @@ Open them with the gear in any Personas view's title bar, or with **Personas: Op
 ## How Personas works
 
 - **Reading.** Personas reads the same files VS Code maintains: the profile registry and each profile's extension list. It doesn't read or write VS Code's internal SQLite state.
-- **Installing and uninstalling.** All installs and uninstalls go through VS Code's official `code` command line, scoped to the right profile and to custom `--user-data-dir` or `--extensions-dir` locations when you use them.
+- **Installing and uninstalling.** All installs and uninstalls go through VS Code's official `code` command line, scoped to the right profile. Personas derives the active user-data and extensions roots from the running VS Code instance, including true Portable Mode, and passes those exact roots to the CLI.
 - **Workspace status.** This also uses VS Code's stable extension API and a limited, read-only scan of each local workspace folder's `.vscode/extensions`.
 - **PowerShell and Git.** PowerShell profiles are ordinary files that Personas creates, opens, and moves to the Trash at your request. Git configuration is read with `git` and never written.
 

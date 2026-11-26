@@ -188,11 +188,27 @@ None of facts 1-7 were contradicted. Two refinements to record for later tasks:
 
 No task adjustments are required as a result; both are refinements within the existing model, not breaking changes.
 
-## To re-verify on macOS/Linux
+## macOS/Linux re-verification (issue #168, 2026-11-26)
 
-The schema is platform-independent (confirmed above). Only paths, CLI scoping, and folder-name
-suffixes need checking on macOS and Linux. That checklist, with portable mode, is tracked in
-[#168](https://github.com/SamErde/Personas/issues/168).
+Hosted probes against VS Code 1.148.0 now retain reproducible evidence for Linux x64 and macOS
+ARM64. The detailed evidence record is
+[issue-168-runtime.md](evidence/issue-168-runtime.md).
+
+| Claim | Evidence class | Result |
+| --- | --- | --- |
+| Existing integration suite | Existing CI | Runs real VS Code on Ubuntu, Windows, and macOS, but supplies temporary `--user-data-dir` and `--extensions-dir` values and mutates only the Default profile. It does not prove platform defaults or Portable Mode. |
+| Default user-data root, `storage.json`, and extensions root | New hosted runtime | Linux resolved `$HOME/.config/Code`; macOS resolved `$HOME/Library/Application Support/Code`; both used `User/globalStorage/storage.json` and `$HOME/.vscode/extensions` without path overrides. The extensions root also matches [official VS Code documentation](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace#_where-are-extensions-installed). |
+| Named-profile isolation | New hosted runtime | A target and control profile were associated with separate disposable workspaces. Installing and uninstalling in the target changed only its CLI listing and manifest; a separate shared-fixture phase proved that uninstalling Target preserved Control's CLI entry, manifest entry, and physical folder. |
+| Slash-containing profile location | Fixture plus live CLI/filesystem | `nested/profile-target` produced and used `User/profiles/nested/profile-target/extensions.json`; control profiles did not change. Automatic creation of slash-containing locations is not claimed. |
+| `.obsolete` flat object | New hosted runtime plus exact-build source | On Linux x64 and macOS ARM64, CLI uninstall first left the folder present with no marker; the owned workbench then produced raw `{"personas-tests.personas-hello-fixture-0.0.1":true}` while the folder remained for deferred deletion. Exact-build source independently corroborates the boolean dictionary and serialization. |
+| Extension folder grammar | Runtime plus exact-build source | Target-specific `linux-x64` and `darwin-arm64` VSIX files installed into the valid base form `publisher.name-version`. Exact-build `ExtensionKey` source proves the optional `-platform` suffix grammar. No hosted run observed the suffixed branch. |
+| True Portable Mode | New hosted runtime | Linux used distribution-local `data/{user-data,extensions}`; macOS used sibling `code-portable-data/{user-data,extensions}`. Both launched the real workbench and completed CLI install/list/uninstall without directory overrides. These layouts match [official Portable Mode documentation](https://code.visualstudio.com/docs/setup/portable). |
+
+Each probe used a fresh owned distribution and HOME, checked cleanup after terminating its process
+group, and removed the owned root. Linux workbench launches used `--no-sandbox` because an
+unprivileged hosted runner cannot make the extracted `chrome-sandbox` root-owned and mode 4755;
+the CLI and filesystem assertions did not use that flag. Intel macOS remains unverified; the
+hosted `macos-latest` runner was ARM64.
 
 ## The Agents window profile (VS Code 1.143.0, checked 2026-10-23)
 
@@ -316,7 +332,11 @@ The command exists (`workbench.extensions.action.toggleApplyToAllProfiles`), but
 **Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), running during the spike — same machine/version as Spikes A and B; the real install was otherwise idle throughout.
 **Method:** Per controller adjustment, the brief's manual "create a profile via the Profiles UI, install an extension via the Extensions view" step was replaced with a fully scripted, automated sandbox: two fresh temp dirs (`%TEMP%\personas-spikec-data`, `%TEMP%\personas-spikec-ext`) plus a throwaway workspace folder (`%TEMP%\personas-spikec-workspace`), driven entirely via the `code` CLI and PowerShell process management — no interactive UI clicking. A re-review follow-up added two more short-lived temp dirs for the partial-arg checks in Step 4 (read-only, windowless, deleted after). Full raw command transcript (every command, full output, process lists) is in `.superpowers/sdd/task-4-report.md` (gitignored, not committed); this section summarizes the evidence and verdicts.
 **Date:** 2026-07-03.
-**Scope note:** This exercises explicit `--user-data-dir`/`--extensions-dir` CLI flags, not literal VS Code "Portable Mode" (a `data\` folder dropped next to `Code.exe`). Per the original brief's own reasoning, this still covers true portable-mode installs: Personas always derives both paths from its own runtime context (`globalStorageUri`, etc.) and passes them explicitly to the CLI (Task 8's `CliRunner`), so a portable install and an explicit-flag invocation are indistinguishable from the CLI's point of view — same two flags, same code path either way.
+**Scope note:** This exercises explicit `--user-data-dir`/`--extensions-dir` CLI flags, not VS Code
+Portable Mode. Custom directories are not portable-mode evidence: Portable Mode is selected by an
+archive-local `data` folder on Linux/Windows or a sibling `code-portable-data` folder on macOS, and
+that layout overrides the two command-line options. True Linux and macOS portable layouts are
+verified separately in [the issue #168 evidence record](evidence/issue-168-runtime.md).
 
 ## Verdicts at a glance
 

@@ -52,3 +52,27 @@ jobs:
         env:
           PERSONAS_IT_VSCODE_VERSION: 1.101.0
         run: npm run test:integration:prebuilt
+      # These probes deliberately do not pass --user-data-dir or --extensions-dir. They use a
+      # temporary HOME and a probe-owned Stable archive extraction, then exercise
+      # the archive's real portable layout. Windows coverage remains in the integration suite;
+      # issue #168 specifically requires Linux x64 and macOS ARM64 runtime evidence.
+      - name: Verify default paths, named profiles, and portable mode (Linux)
+        if: runner.os == 'Linux'
+        env:
+          PERSONAS_RUNTIME_EVIDENCE: ${{ runner.temp }}/personas-runtime-evidence-Linux.json
+          PERSONAS_IMPLEMENTATION_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: xvfb-run -a npm run test:runtime-paths
+      - name: Verify default paths, named profiles, and portable mode (macOS)
+        if: runner.os == 'macOS'
+        env:
+          PERSONAS_RUNTIME_EVIDENCE: ${{ runner.temp }}/personas-runtime-evidence-macOS.json
+          PERSONAS_IMPLEMENTATION_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run test:runtime-paths
+      - name: Upload VS Code runtime evidence
+        if: always() && runner.os != 'Windows'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: vscode-runtime-evidence-${{ runner.os }}
+          path: ${{ runner.temp }}/personas-runtime-evidence-${{ runner.os }}.json
+          if-no-files-found: error
+          retention-days: 90

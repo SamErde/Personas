@@ -5,3 +5,4 @@ out-test/
 *.vsix
 releases/
 .vscode-test/
+.runtime-evidence/

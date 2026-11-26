@@ -993,6 +993,16 @@ describe('profileManifestPath', () => {
     expect(profileManifestPath(paths, p)).toBe('/data/User/profiles/aaa/extensions.json');
   });
 
+  it('preserves POSIX nesting in a slash-containing profile location', () => {
+    const p: Profile = {
+      id: 'nested/profile-target',
+      name: 'Nested',
+      isDefault: false,
+      inheritsDefaultExtensions: false,
+    };
+    expect(profileManifestPath(paths, p)).toBe('/data/User/profiles/nested/profile-target/extensions.json');
+  });
+
   it("returns undefined for a profile that inherits the default profile's extensions — it has no file of its own", () => {
     const p: Profile = { id: 'builtin/agents', name: 'Agents', isDefault: false, inheritsDefaultExtensions: true };
     expect(profileManifestPath(paths, p)).toBeUndefined();
