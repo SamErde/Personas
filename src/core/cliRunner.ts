@@ -59,7 +59,7 @@ export function buildSpawnCommand(platform: Platform, cliPath: string, args: str
 
 const defaultSpawn: CliSpawn = (command, args, options) => nodeSpawn(command, args, { ...options, windowsHide: true });
 
-/** Shared runner for the official CLIs Personas drives: `code` today, `git` for Git identity. */
+/** Shared runner for the official CLIs Personas drives: `code` for extensions, and `git`, which today only reads configuration. */
 export function createCliRunner(opts: {
   platform: Platform;
   timeoutMs: number;

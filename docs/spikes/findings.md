@@ -1,3 +1,27 @@
+# Verified VS Code facts
+
+This file records facts about VS Code's state files, CLI, and workbench that Personas depends on,
+each with how it was verified. Code comments and ADRs cite it. Add a new fact as a dated section
+with the VS Code version and method.
+
+**Index**
+
+- Profile registry, per-profile extension lists, the global manifest, application scope, the
+  extension pool, `.obsolete`, and orphans: Spike A, Facts 1–7.
+- `code --profile` scoping, the Agents window profile, unique profile names, and how `--profile`
+  resolves a name: the later sections of Spike A.
+- "Apply Extension to all Profiles" can't be toggled by an extension: Spike B.
+- Custom `--user-data-dir`/`--extensions-dir`, headless profile creation, and partial CLI flags:
+  Spike C.
+- Install sources in `metadata.source`: [Install sources](#install-sources).
+- Opening Settings with a query: [Opening Settings](#opening-settings-from-an-extension).
+- View sizing, title bar actions, the `...` menu, and webview clipping: [Home view layout](#home-view-layout-vs-code-main-8cfcc55-checked-2026-11-26).
+
+**About the older sections.** Spikes A–C were written against the v1 implementation plan, now
+removed. Their "Task N" references point to tasks in that plan
+([permalink](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/superpowers/plans/2026-07-03-visex-v1.md)). Evidence paths under
+`.superpowers/` were never committed.
+
 # Spike A — state-file semantics findings
 
 **Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), running during the spike.
@@ -166,14 +190,9 @@ No task adjustments are required as a result; both are refinements within the ex
 
 ## To re-verify on macOS/Linux
 
-Schema is platform-independent (confirmed above); only paths need re-checking. CI integration tests (Task 12) cover Linux automatically via `@vscode/test-electron`; macOS needs a manual one-time run of this same script. Checklist:
-
-- [ ] `userData` default resolves correctly: `~/Library/Application Support/Code` (macOS) / `~/.config/Code` (Linux) — confirm `storage.json` lives at `<userData>/User/globalStorage/storage.json` on both.
-- [ ] `extDir` default resolves correctly: `~/.vscode/extensions` on both macOS and Linux (same as Windows, no AppData-style redirect).
-- [ ] Profile folders still live at `<userData>/User/profiles/<location>/extensions.json` (location may contain `/`, e.g. `builtin/agents`) — confirm no path-separator quirks with POSIX paths.
-- [ ] `.obsolete` format (flat JSON object, folder name to `true`) is unchanged.
-- [ ] `code --profile "<name>" --install-extension` / `--uninstall-extension` remain scoped to the named profile only (re-run the Step 2 sequence against a disposable profile — do not reuse a profile with real user data on a shared macOS/Linux test machine).
-- [ ] Folder naming convention `<publisher.name>-<version>[-<platform>]` — confirm the `-<platform>` suffix pattern (e.g. `-darwin-arm64`, `-linux-x64`) matches what Task 6's folder-name parser expects.
+The schema is platform-independent (confirmed above). Only paths, CLI scoping, and folder-name
+suffixes need checking on macOS and Linux. That checklist, with portable mode, is tracked in
+[#168](https://github.com/SamErde/Personas/issues/168).
 
 ## The Agents window profile (VS Code 1.143.0, checked 2026-10-23)
 
@@ -477,3 +496,25 @@ These facts come from the VS Code source at commit `8cfcc55`, and they explain t
   - In the custom dialog style, `detail` keeps its line breaks (`white-space: pre-wrap`).
   - Esc and the X both return the Cancel choice.
   - Native dialogs are the default style. On macOS a native dialog has no X; Esc still cancels.
+
+# Install sources
+
+**Checked 2026-11-26, VS Code 1.148.0, Windows 11.** In a sandbox, extensions installed through
+`code --install-extension <id>` carry `metadata.source: "gallery"`, and a local `.vsix` installed
+through `code --install-extension <file>.vsix` carries `metadata.source: "vsix"`. The matrix
+labels these Marketplace and VSIX. No install path that writes `resource` has been verified, so
+that value, like any other unlabelled value, is shown as Other (`SOURCE_LABELS` in
+`src/webview/render.ts`).
+
+# Opening Settings from an extension
+
+**Checked 2026-11-26 in an Extension Development Host on VS Code 1.101.0 and 1.148.0**
+([PR #161](https://github.com/SamErde/Personas/pull/161#discussion_r4709361908)).
+
+- `workbench.action.openSettings` with a query string opens the **graphical** Settings editor on
+  the **User** tab: `PreferencesService.openSettings` sets the User target and turns off the JSON
+  editor whenever a query is given. That holds even when `workbench.settings.editor` is `json`,
+  and when Settings was last left on the Workspace tab, where machine-scoped settings are hidden.
+- `workbench.action.openGlobalSettings` with `{ query }` follows the JSON preference. It opens
+  `settings.json`, which loses the filter, and its argument sanitizer strips `jsonEditor`. Don't use
+  it for filtered settings links (see `src/panel/settingsActions.ts`).

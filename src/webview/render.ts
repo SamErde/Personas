@@ -12,7 +12,7 @@ import type { FilterDimension, MatrixFilters } from '../protocol';
 export const UNKNOWN_VALUE = '';
 
 /** Install sources with a label of their own. `resource` is left out because no install path that
- * writes it has been verified (docs/plans/2026-11-15-extension-matrix-filters.md, Uncertainty log). */
+ * writes it has been verified (docs/spikes/findings.md, Install sources). */
 export const SOURCE_LABELS: Readonly<Record<string, string>> = Object.freeze({ gallery: 'Marketplace', vsix: 'VSIX' });
 
 /** The source value every install source without a label matches. Any written value that is not

@@ -1,13 +1,17 @@
 # Passive PowerShell profile discovery
 
 **Date:** 2026-11-12
-**Status:** Research findings; runtime resolver implementation remains undecided
+**Status:** Research findings. The decisions they led to shipped in 1.3.0 and are recorded in
+[ADR-0005](../adr/0005-powershell-discovery-is-passive-first.md): passive discovery first, a
+`reg.exe` Documents resolver on Windows that requires two registry values to agree, and opt-in
+runtime discovery labeled **Run … to resolve**. The decisions marked Q6a, Q6b, and Q12 below were
+confirmed with the owner during design.
 
 ## Product constraint
 
 Passive discovery is the default. Runtime discovery that launches PowerShell
 is a last resort because of potential latency and EDR detections; it is not
-categorically prohibited. Q6b confirms an explicit **Resolve Using PowerShell...**
+categorically prohibited. Q6b confirms an explicit runtime action (shipped as **Run … to resolve**)
 action after passive discovery fails, with profiles disabled, a short timeout,
 and successful results cached for the session. Ordinary refreshes do not launch it.
 Querying PowerShell during development research or validation is permitted.
@@ -108,15 +112,15 @@ before conventional or OneDrive candidate paths. An existing script in an old
 folder is not sufficient evidence that PowerShell would load it. If the correct
 destination is unresolved, show that status and withhold creation.
 
-Choose and validate a Windows resolver that works from the extension without
-launching PowerShell. Native known-folder access and best-effort registry lookup
-have different packaging and reliability tradeoffs. Confirm any fallback result
-before offering creation at an uncertain destination.
+The Windows resolver that shipped is a best-effort registry lookup with `reg.exe`, used only
+when `User Shell Folders` and `Shell Folders` agree (ADR-0005). It was chosen over native
+known-folder access for packaging simplicity, with that agreement rule as the safeguard.
 
 Validate Windows PowerShell 5.1 paths separately from current PowerShell source.
 Also validate standard installation layouts, executable symlinks, Unix XDG
 behavior, missing destinations, multiple OneDrive folders, and inaccessible paths.
-These are development checks. A runtime PowerShell fallback must follow the
+These development checks are still open and tracked in
+[#163](https://github.com/SamErde/Personas/issues/163). The runtime fallback follows the
 explicit-action, timeout, and session-cache policy confirmed in Q6b.
 
 Source links to moving branches describe the inspected implementations; pin

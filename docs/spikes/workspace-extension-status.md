@@ -93,7 +93,8 @@ workspace, profile registry, and extension directory were not used.
 2026-10-20 and passed, as scenarios 1–11 of the "Manual test scenarios" checklist in
 `docs/local-build-test-and-release.md` ([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)). Scenarios 12–14 (duplicate
 candidate IDs, malformed or unreadable data, and existing profile features unchanged) are not yet
-run.
+run; they are tracked in [#167](https://github.com/SamErde/Personas/issues/167). The scenario
+numbers are those in the release guide.
 
 - Disable (Workspace), re-enable, and observe the refresh/restart flow;
 - install the local candidate from the Workspace Recommendations view and confirm the public runtime URI; and

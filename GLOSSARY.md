@@ -1,6 +1,6 @@
 # Personas
 
-Personas manages one developer's identity setup across their tools: which extensions each VS Code profile carries, and which Git identity each repository commits with.
+Personas manages one developer's identity setup across their tools: which extensions each VS Code profile carries, which PowerShell profile scripts run, and which Git identity each repository commits with. Git identity is read-only today (stage 1 of Git personas); saving and applying Git personas is planned.
 
 ## Language
 
@@ -11,7 +11,7 @@ One person's identity setup across their tools, made up of tool-specific parts s
 _Avoid_: using "persona" for a VS Code profile
 
 **Git persona**:
-A saved, named Git commit identity: a display name plus a Git `user.name` and `user.email`.
+A saved, named Git commit identity: a display name plus a Git `user.name` and `user.email`. Planned (ADR-0002, #162); today the Git Configuration view shows the identity in effect, which is stage 1.
 _Avoid_: identity profile, Git profile
 
 ### VS Code profiles and extensions
@@ -32,9 +32,36 @@ _Avoid_: app-scoped, application-scoped, shared, ALL
 An extension that is installed but not running in the current workspace, for a reason Personas cannot determine (one possibility is that it is disabled for the workspace).
 _Avoid_: disabled, disabled (workspace)
 
+**Orphaned extension**:
+An extension version folder on disk that no profile's extension list references. Personas lists orphans and moves the chosen ones to the Trash.
+_Avoid_: unused extension, stale extension
+
+**Install source**:
+Where an installed extension came from, read from its `metadata.source`: Marketplace, VSIX, Other, or Unknown.
+_Avoid_: origin, provenance
+
 **Install in every profile**:
 A Personas bulk operation that installs an extension separately into each profile; distinct from an extension being applied to all profiles.
 _Avoid_: install everywhere, install in all profiles
+
+### Current workspace
+
+**Current workspace**:
+The folder or saved workspace open in the window, shown as a card in the VS Code Profiles view and a column in the Extension Matrix. It reports status only and never changes enablement.
+_Avoid_: active workspace, workspace profile
+
+**Enabled**:
+An extension VS Code reports as running in the current workspace.
+
+**Not installed in profile**:
+An extension the active profile doesn't have, though another profile or the workspace may.
+
+**Workspace-local**:
+An unpacked extension under the workspace's `.vscode/extensions` that VS Code reports running from that folder.
+_Avoid_: workspace extension (ambiguous with recommendations)
+
+**Unknown**:
+A status Personas can't support with evidence: unreadable data, or a workspace candidate VS Code doesn't report. Never a guess at installed or disabled.
 
 ### PowerShell
 
@@ -65,7 +92,7 @@ _Avoid_: matched, active, enabled
 ### Product surfaces
 
 **Home**:
-The Personas sidebar, made up of one view per area: VS Code Profiles, PowerShell Profiles, and Git Configuration.
+The Personas sidebar, made up of one view per area: VS Code Profiles, PowerShell Profiles, and Git Configuration. An internal term: users see the sidebar titled "Personas", so user-facing text says "the Personas sidebar".
 _Avoid_: welcome view, dashboard
 
 **Git Configuration**:

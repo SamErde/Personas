@@ -1,9 +1,16 @@
 # Personas — project guide
 
-VS Code extension: an **extensions × profiles matrix** with cross-profile
-install/uninstall (via the `code` CLI) and orphaned-extension cleanup. Published as
-`SamErde.personas`. (The extension was renamed from "Profile Extension Manager" —
-earliest working name "Visex".)
+VS Code extension that shows and manages a developer's personas from one sidebar, published as
+`SamErde.personas`:
+
+- the **Extension Matrix** (extensions × profiles, cross-profile install/uninstall via the
+  `code` CLI, orphaned-extension cleanup, a Current workspace column);
+- three sidebar views: **VS Code Profiles**, **PowerShell Profiles** (create/open/trash profile
+  scripts), and **Git Configuration** (read-only; stage 1 of Git personas).
+
+User-facing docs are `README.md` (also the Marketplace page) and `docs/user-guide.md`; planned
+work is in `docs/roadmap.md` and its tracking issues. (The extension was renamed from "Profile
+Extension Manager"; earliest working name "Visex". See `docs/history.md`.)
 
 ## Workflow — important
 
@@ -29,8 +36,14 @@ earliest working name "Visex".)
 
 - Reads VS Code's own profile registry + per-profile extension lists from disk; performs
   installs/uninstalls through the supported `code` CLI. Never writes VS Code state files
-  directly (except deleting orphaned extension folders). `extensionKind: ["ui"]` — local
-  desktop only, no remote workspaces.
+  directly. ADR-0001 lists the exceptions: deleting orphaned extension folders, and creating
+  and trashing PowerShell profile scripts. Git configuration is only read (`git config
+  --list`). `extensionKind: ["ui"]` — local desktop only, no remote workspaces.
+- Source map: `src/core/` (inventory, parsers, CLI runner, mutations, cleanup), `src/panel/`
+  (view providers and the matrix panel), `src/webview/` (webview scripts and styles),
+  `src/powershell/` (discovery and file actions), `src/git/` (config reading).
+- Settings live under `personas.*` in `package.json`; PowerShell runtime discovery is off by
+  default (ADR-0005).
 - "Apply to all profiles" is **not** togglable via public VS Code API; a guided fallback
   ships instead (see `docs/spikes/findings.md`).
 
@@ -44,9 +57,11 @@ earliest working name "Visex".)
 
 ## Deeper context (read on demand — not every session)
 
-- `docs/project-memory/` — development history and release-workflow detail.
-- `docs/spikes/findings.md` — verified VS Code state-file / CLI facts.
-- `docs/superpowers/` — original design spec and implementation plan.
+- `docs/adr/` — architecture decisions (read the ones touching your area).
+- `docs/spikes/findings.md` — verified VS Code state-file / CLI / workbench facts.
+- `docs/design/` — the v1 design spec and the Git identity personas design.
+- `docs/history.md` — development history, renamed identifiers, and permalinks to removed docs.
+- `docs/local-build-test-and-release.md` — sandbox testing, manual scenarios, release recovery.
 
 ## Agent skills
 
@@ -60,4 +75,4 @@ Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `
 
 ### Domain docs
 
-Single-context: root `GLOSSARY.md` + `docs/adr/` (created lazily). See `docs/agents/domain.md`.
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.

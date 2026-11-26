@@ -13,7 +13,10 @@
 > - Whether an extension is applied to all profiles cannot be toggled through VS Code's
 >   built-in command from an extension; Personas ships a guided fallback instead (`docs/spikes/findings.md`, Spike B).
 >
-> The current state lives in the code, `CLAUDE.md`, and `docs/spikes/findings.md`.
+> The current state lives in the code, `CLAUDE.md`, `docs/user-guide.md`, the ADRs in `docs/adr/`,
+> and `docs/spikes/findings.md`. Deferred v1 items (sets and baselines, stale profile folders,
+> old extension versions) are tracked in [#164](https://github.com/SamErde/Personas/issues/164)
+> and [#165](https://github.com/SamErde/Personas/issues/165).
 
 ## Purpose
 
