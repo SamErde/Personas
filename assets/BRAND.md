@@ -44,7 +44,8 @@ Inter (700 wordmark, 400 taglines). Fallback: Segoe UI, sans-serif.
   `logo-light.svg`/`logo-light.png` (light); `banner.svg`, `banner.png` (1280×320, the README
   hero). The Marketplace icon is `media/icon-256.png`.
 - `assets/content/`: `social-preview.svg`/`.png` (1280×640, GitHub social preview) and
-  `blog-hero.svg`/`.png` (1600×840, the blog series hero).
+  `blog-hero.svg`/`.png` (1600×840, the blog series hero; it keeps its original blog-series
+  wording rather than the current tagline).
 - `assets/mockup/`: `marketplace-mockup` and `matrix-ui-mockup`, early design concepts with staged
   data that predate the three-view sidebar. Don't use them as product screenshots.
 - `docs/images/`: real product screenshots, captured with demo data, for the README and user guide.

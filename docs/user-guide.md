@@ -40,13 +40,15 @@ Cells that can't be changed show a symbol, and each symbol differs in shape as w
 | ⤷ | Installed through Default: the profile uses the Default profile's extensions. |
 | ✓ | Installed, can't change here. |
 | — | Not installed. |
-| ? | Unknown: the profile's extension list could not be read. |
+| ? | Unknown, list could not be read: the profile's extension list couldn't be read. |
 
 An extension applied to all profiles also shows an **ALL** badge beside its name.
 
 ### Hover cards and row actions
 
 Hover over an extension's name, or move keyboard focus to it, to see its publisher, description, and install details, with these actions:
+
+For an extension applied to all profiles, only **Apply to all profiles…** appears.
 
 - **Install in every profile** installs the extension separately into each profile. Unlike an extension applied to all profiles, profiles you create later won't get it.
 - **Remove from every profile** uninstalls it from every profile where it's installed directly.
@@ -89,7 +91,7 @@ Select an **Enabled**, **Not enabled**, or **Workspace-local** cell to open that
 
 **Workspace files.** For a saved `.code-workspace` file, the card can open the file read-only or for editing. VS Code doesn't keep extension enablement in that file, so editing it doesn't enable, disable, install, or remove extensions.
 
-**Workspace-local extensions.** Each valid unpacked extension under `.vscode/extensions` is listed as a candidate, including ones that exist only in the workspace. Personas calls one `Workspace-local` only when VS Code reports that it's running the extension from that folder. Otherwise it stays `Unknown`. A workspace-only row has no profile cells or row actions.
+**Workspace-local extensions.** Each valid unpacked extension under `.vscode/extensions` is listed as a candidate, including ones that exist only in the workspace. Personas calls one `Workspace-local` only when VS Code reports that it's running the extension from that folder. Otherwise it stays `Unknown`. A workspace-only row's profile cells are read-only (—), and it has no row actions.
 
 **Recommendations.** Extension recommendations in `.vscode/extensions.json` or a `.code-workspace` file are only suggestions. Personas never treats a recommendation as installed or enabled.
 
@@ -99,7 +101,7 @@ The VS Code Profiles view lists every profile in the same order as the matrix: D
 
 - how many extensions are installed in it directly, or how many it uses from Default;
 - how many extensions are applied to all profiles;
-- a ✎ button that opens the profile's raw extension list. VS Code owns that file, so edit it with care.
+- a ✎ button that opens the profile's raw extension list. VS Code owns that file, so edit it with care. Profiles that use Default's extensions have no list of their own, so they have no ✎; the Agents window profile shows "Same extensions as Default".
 
 **The Agents window profile** is VS Code's built-in profile for its separate Agents window. It always uses the Default profile's extensions, so its column always matches Default. Hide it with `personas.showAgentsWindowProfile`.
 
@@ -122,7 +124,7 @@ The PowerShell Profiles view lists the PowerShell profile scripts that exist, gr
 **Actions**
 
 - Select a row to open its script in the editor. For a missing file, confirm Create and Open.
-- Each row's menu offers **Copy Path**, **Reveal in File Manager**, and **Move to Trash** (with a confirmation).
+- Each row's menu offers **Copy Path**, **Reveal in File Manager**, and **Delete PowerShell Profile…**, which moves the script to the Trash after you confirm.
 - Deleting stops if the file has unsaved edits, or if the Trash or Recycle Bin isn't available.
 - You can edit a linked profile, but remove the link itself with your file manager. Personas can't guarantee on every platform that only the link, and not its target, goes to the Trash.
 
@@ -151,7 +153,7 @@ The Git Configuration view answers one question: which Git configuration is in e
 
   Personas reads these statuses from Git's own output and doesn't evaluate conditions itself. Each rule is judged on its own, so a file that two rules name can be Applied under one and Not applied here under the other.
 - **No repository.** With no repository open, the view shows system and global configuration only, and gives no status for `includeIf` rules.
-- **Opening files.** Each file has a button that opens it in the editor, where you edit and save it yourself. Personas never writes, creates, or deletes a Git config file.
+- **Opening files.** Each file that exists has a button that opens it in the editor, where you edit and save it yourself. Personas never writes, creates, or deletes a Git config file.
 - **Show Effective Git Configuration** (in the title bar) opens a read-only document of every value in the order Git reads it, grouped by key, with its scope and source file. It has the same content as `git config --list`, so treat it with the same care if your config holds credentials.
 - **Which Git.** The view uses the first Git that VS Code's `git.path` setting names and that exists, or else the one on your `PATH`. It never runs a Git found in the folder being inspected.
 - It works in local desktop windows only.
@@ -193,6 +195,7 @@ The design decisions behind this are recorded as [architecture decision records]
 
 - **"Personas can't manage profiles in this environment."** Personas manages only the local desktop VS Code install it runs in. Remote windows (SSH, WSL, dev containers) and VS Code for the Web aren't supported.
 - **A cell shows `?`.** That profile's extension list couldn't be read. Check the warnings in the VS Code Profiles view, then select **Refresh**.
+- **"Running in a development host — Personas manages the install it runs in; run from an installed build."** You're running Personas from source with F5. Install the packaged VSIX instead (see the [build guide](local-build-test-and-release.md)).
 - **An extension shows its ID instead of its name.** Some extensions use a translated display name, which Personas doesn't look up yet.
 - **The Git Configuration view says Git wasn't found.** Install Git, add it to your `PATH`, or set VS Code's `git.path` setting.
 - **A PowerShell location is unresolved.** See runtime discovery under [PowerShell Profiles](#powershell-profiles).

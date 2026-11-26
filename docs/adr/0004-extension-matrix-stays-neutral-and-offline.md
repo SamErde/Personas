@@ -25,6 +25,10 @@ data alone.
 ## Consequences
 
 - Filters cover category, publisher, and install source, all read from disk.
+- Other options were considered and rejected for the filters work: keyword, tag, or language
+  chips (too noisy or too incomplete); group by category (an extension with several categories
+  would appear in several groups and duplicate its checkboxes); and per-profile counts in the
+  column headers (the VS Code Profiles view already shows them).
 - Whether extension sets or baselines belong in Personas at all, in some surface other than the
   matrix, is an open question: [#165](https://github.com/SamErde/Personas/issues/165). Adding
   them to the matrix would require superseding this ADR.

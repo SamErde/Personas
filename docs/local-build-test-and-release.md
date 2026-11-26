@@ -186,9 +186,9 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
 11. Verify that a workspace-only row has no profile cell toggles or profile bulk actions.
 12. (Not yet run: [#167](https://github.com/SamErde/Personas/issues/167).) Introduce duplicate candidate IDs in different workspace roots and verify one deterministic row
     plus a warning.
-13. Exercise malformed or unreadable candidate/profile-association data and verify a warning,
+13. (Not yet run: #167.) Exercise malformed or unreadable candidate/profile-association data and verify a warning,
     `Unknown`, and no enabled mutation action.
-14. Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
+14. (Not yet run: #167.) Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
     unchanged.
 15. Hover over and tab through matrix cells. Verify that the row and column are highlighted, with
     stronger emphasis on the column header and the extension name. Check a light, a dark, and both
@@ -200,7 +200,7 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
     extension names stay pinned, with their row dividers, and that the top-left header stays on top
     when you scroll both ways.
 
-Scenarios 13 and 14 are also tracked in #167. The rest cover the sidebar views.
+The scenarios below cover the sidebar views.
 
 18. **VS Code Profiles.** Verify the profile order (Default, then the Agents window profile, then the
     rest by name), each profile's direct and applied-to-all counts, that **✎** opens the profile's
@@ -218,7 +218,7 @@ Scenarios 13 and 14 are also tracked in #167. The rest cover the sidebar views.
     to `@ext:SamErde.personas`.
 21. **View sizes.** In a workspace that has never shown the sidebar, the views split about 5/3/2.
 22. **PowerShell Profiles, files.** Select a missing profile and confirm Create and Open. Then check
-    Copy Path, Reveal in File Manager, and Move to Trash, which must refuse while the file has
+    Copy Path, Reveal in File Manager, and Delete PowerShell Profile… (Move to Trash), which must refuse while the file has
     unsaved edits. A linked profile can be opened, but not trashed through the link.
 23. **PowerShell Profiles, discovery.** With an unresolved location, verify **Runtime discovery is
     off**, turn on `personas.powerShellProfiles.allowRuntimeDiscovery`, and run **Run … to resolve**.

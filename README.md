@@ -86,7 +86,7 @@ Note: the older setting name `personas.openMatrixOnActivityBarClick` is still ho
 
 ## Privacy
 
-Personas has no telemetry. It reads local files and runs VS Code's `code` command line and `git`. On Windows it also runs `reg.exe` to find your Documents folder, and `taskkill` to stop a command that takes too long. It starts PowerShell only when you choose to. Network access happens only through those tools, for example when the `code` command line downloads an extension you install, or when you open a link.
+Personas has no telemetry. It reads and changes local files and runs VS Code's `code` command line and `git`. On Windows it also runs `reg.exe` to find your Documents folder, and `taskkill` to stop a command that takes too long. It starts PowerShell only when you choose to. Network access happens only through those tools, for example when the `code` command line downloads an extension you install, or when you open a link.
 
 ## Learn more
 

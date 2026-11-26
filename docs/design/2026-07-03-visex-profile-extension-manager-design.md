@@ -1,7 +1,6 @@
 # Personas: Design Spec
 
 **Date:** 2026-07-03
-**Status:** Shipped / superseded (see the note below)
 **Naming note:** originally drafted under the working name "Visex"; the extension was subsequently renamed to **Personas** (identifier `personas`).
 
 > **Status: Shipped / superseded.** This document is the historical design spec for Personas
@@ -34,7 +33,7 @@ A Visual Studio Code extension that makes VS Code profiles' extension state visi
 - Managing a **different** VS Code installation than the one Personas runs in.
 - Remote workspaces (SSH/WSL/Containers/web). Personas declares `"extensionKind": ["ui"]` and always runs locally.
 - Cleanup of stale profile folders or outdated duplicate extension versions (v2 candidates).
-- Telemetry. None, ever — stated in the README as a feature.
+- Telemetry. None, ever. (The README's Privacy section states the current wording.)
 
 ### Supported environments
 
