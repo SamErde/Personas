@@ -128,7 +128,7 @@ async function runProbe() {
 
   const defaultHome = makeHome('default-home');
   const defaultEnv = isolatedEnv(defaultHome);
-  const version = runCli('owned-code-version', cliPath, ['--version'], defaultEnv);
+  const version = await runCli('owned-code-version', cliPath, ['--version'], defaultEnv);
   const versionInfo = parseCodeVersion(version.stdout);
   assert.equal(versionInfo.arch, expectedNodeArch, 'VS Code binary architecture does not match runner');
   evidence.platform.vscode = versionInfo;
@@ -137,7 +137,7 @@ async function runProbe() {
   setPhase('package-target-vsix');
   const vsixPath = path.join(probeRoot, `personas-hello-fixture-${target}.vsix`);
   const vscePath = path.join(repoRoot, 'node_modules', '@vscode', 'vsce', 'vsce');
-  runCommand('package-target-vsix', process.execPath, [
+  await runCommand('package-target-vsix', process.execPath, [
     vscePath,
     'package',
     '--allow-missing-repository',
@@ -145,12 +145,12 @@ async function runProbe() {
     '--out', vsixPath,
   ], { cwd: path.join(repoRoot, 'test', 'fixtures', 'hello-ext'), env: isolatedEnv(defaultHome) });
   assert.ok(existsSync(vsixPath), 'target-specific fixture VSIX was not created');
-  const vsixManifest = runCommand(
+  const vsixManifest = (await runCommand(
     'inspect-target-vsix-manifest',
     'unzip',
     ['-p', vsixPath, 'extension.vsixmanifest'],
     { env: isolatedEnv(defaultHome) },
-  ).stdout;
+  )).stdout;
   const packagedTarget = vsixManifest.match(/\bTargetPlatform="([^"]+)"/)?.[1];
   assert.equal(packagedTarget, target, 'VSIX manifest target does not match the runner target');
   evidence.fixture.vsixManifestTargetPlatform = packagedTarget;
@@ -229,13 +229,13 @@ async function runProbe() {
     control: profileManifestPath(defaultLayout.userData, control.location),
     target: profileManifestPath(defaultLayout.userData, liveTarget.location),
   };
-  const liveBefore = snapshotNamedProfiles(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
-  runCli('install-live-target', cliPath, [
+  const liveBefore = await snapshotNamedProfiles(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
+  await runCli('install-live-target', cliPath, [
     '--profile', profileNames.target,
     '--install-extension', vsixPath,
     '--force',
   ], defaultEnv);
-  const liveInstalled = snapshotNamedProfiles(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
+  const liveInstalled = await snapshotNamedProfiles(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
   assertUnchanged(liveBefore.default, liveInstalled.default, 'Default changed during named-profile install');
   assertUnchanged(liveBefore.control, liveInstalled.control, 'control profile changed during target install');
   assertFixtureAbsent(liveInstalled.default);
@@ -244,11 +244,11 @@ async function runProbe() {
   assertOnlyFixtureDelta(liveBefore.target, liveInstalled.target, 'target install');
   const livePhysicalFolders = assertTargetFolder(defaultLayout.extensions, liveInstalled.target.manifest);
 
-  runCli('uninstall-live-target', cliPath, [
+  await runCli('uninstall-live-target', cliPath, [
     '--profile', profileNames.target,
     '--uninstall-extension', fixtureId,
   ], defaultEnv);
-  const liveUninstalled = snapshotNamedProfiles(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
+  const liveUninstalled = await snapshotNamedProfiles(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
   assertUnchanged(liveBefore.default, liveUninstalled.default, 'Default changed during named-profile uninstall');
   assertUnchanged(liveBefore.control, liveUninstalled.control, 'control profile changed during target uninstall');
   assertFixtureAbsent(liveUninstalled.target);
@@ -265,6 +265,73 @@ async function runProbe() {
     livePhysicalFolders.observedFixtureFolder,
   );
 
+  setPhase('shared-fixture-uninstall-isolation');
+  await runCli('install-shared-control', cliPath, [
+    '--profile', profileNames.control,
+    '--install-extension', vsixPath,
+    '--force',
+  ], defaultEnv);
+  const sharedControlInstalled = await snapshotNamedProfiles(
+    cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths,
+  );
+  assertUnchanged(liveBefore.default, sharedControlInstalled.default, 'Default changed during shared Control install');
+  assertFixturePresent(sharedControlInstalled.control);
+  assertFixtureAbsent(sharedControlInstalled.target);
+  assertOnlyFixtureDelta(liveBefore.control, sharedControlInstalled.control, 'shared Control install');
+
+  await runCli('install-shared-target', cliPath, [
+    '--profile', profileNames.target,
+    '--install-extension', vsixPath,
+    '--force',
+  ], defaultEnv);
+  const sharedBothInstalled = await snapshotNamedProfiles(
+    cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths,
+  );
+  assertUnchanged(sharedControlInstalled.default, sharedBothInstalled.default, 'Default changed during shared Target install');
+  assertUnchanged(sharedControlInstalled.control, sharedBothInstalled.control, 'Control changed during shared Target install');
+  assertFixturePresent(sharedBothInstalled.target);
+  assertOnlyFixtureDelta(liveBefore.target, sharedBothInstalled.target, 'shared Target install');
+  const sharedPhysicalFolders = assertTargetFolder(defaultLayout.extensions, sharedBothInstalled.control.manifest);
+
+  await runCli('uninstall-shared-target', cliPath, [
+    '--profile', profileNames.target,
+    '--uninstall-extension', fixtureId,
+  ], defaultEnv);
+  const sharedTargetUninstalled = await snapshotNamedProfiles(
+    cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths,
+  );
+  assertUnchanged(sharedBothInstalled.default, sharedTargetUninstalled.default, 'Default changed during shared Target uninstall');
+  assertUnchanged(sharedBothInstalled.control, sharedTargetUninstalled.control, 'Target uninstall removed Control fixture state');
+  assertFixtureAbsent(sharedTargetUninstalled.target);
+  assertOnlyFixtureDelta(liveBefore.target, sharedTargetUninstalled.target, 'shared Target uninstall');
+  const sharedFolderAfterTargetUninstall = assertTargetFolder(
+    defaultLayout.extensions,
+    sharedTargetUninstalled.control.manifest,
+  );
+  assert.equal(
+    sharedFolderAfterTargetUninstall.observedFixtureFolder,
+    sharedPhysicalFolders.observedFixtureFolder,
+    'Target uninstall changed Control physical fixture folder',
+  );
+
+  await runCli('uninstall-shared-control', cliPath, [
+    '--profile', profileNames.control,
+    '--uninstall-extension', fixtureId,
+  ], defaultEnv);
+  const sharedCleaned = await snapshotNamedProfiles(
+    cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths,
+  );
+  assertUnchanged(liveBefore, sharedCleaned, 'shared fixture cleanup did not restore all profiles');
+  evidence.liveProfiles.sharedFixtureIsolation = {
+    controlInstalled: sharedControlInstalled,
+    bothInstalled: sharedBothInstalled,
+    afterTargetUninstall: sharedTargetUninstalled,
+    afterControlCleanup: sharedCleaned,
+    physicalFoldersBeforeTargetUninstall: sharedPhysicalFolders,
+    physicalFoldersAfterTargetUninstall: sharedFolderAfterTargetUninstall,
+    physicalFolderPreservedForControl: true,
+  };
+
   setPhase('nested-profile-fixture');
   const nestedStorage = readJson(defaultLayout.storageJson);
   const currentProfiles = profileRegistry(nestedStorage);
@@ -275,24 +342,24 @@ async function runProbe() {
   ];
   writeFileSync(defaultLayout.storageJson, `${JSON.stringify(nestedStorage, null, 2)}\n`);
   const nestedManifest = profileManifestPath(defaultLayout.userData, nestedLocation);
-  const controlsBeforeNested = snapshotControls(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
-  const nestedBefore = snapshotProfile(cliPath, defaultEnv, profileNames.nested, nestedManifest);
-  runCli('install-nested-profile', cliPath, [
+  const controlsBeforeNested = await snapshotControls(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
+  const nestedBefore = await snapshotProfile(cliPath, defaultEnv, profileNames.nested, nestedManifest);
+  await runCli('install-nested-profile', cliPath, [
     '--profile', profileNames.nested,
     '--install-extension', vsixPath,
     '--force',
   ], defaultEnv);
-  const nestedInstalled = snapshotProfile(cliPath, defaultEnv, profileNames.nested, nestedManifest);
+  const nestedInstalled = await snapshotProfile(cliPath, defaultEnv, profileNames.nested, nestedManifest);
   assertFixturePresent(nestedInstalled);
   const nestedPhysicalFolders = assertTargetFolder(defaultLayout.extensions, nestedInstalled.manifest);
   assert.ok(existsSync(nestedManifest), 'slash-containing profile manifest was not created');
-  const controlsAfterNested = snapshotControls(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
+  const controlsAfterNested = await snapshotControls(cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths);
   assertUnchanged(controlsBeforeNested, controlsAfterNested, 'nested fixture install leaked into a control profile');
-  runCli('uninstall-nested-profile', cliPath, [
+  await runCli('uninstall-nested-profile', cliPath, [
     '--profile', profileNames.nested,
     '--uninstall-extension', fixtureId,
   ], defaultEnv);
-  const nestedUninstalled = snapshotProfile(cliPath, defaultEnv, profileNames.nested, nestedManifest);
+  const nestedUninstalled = await snapshotProfile(cliPath, defaultEnv, profileNames.nested, nestedManifest);
   assertFixtureAbsent(nestedUninstalled);
   assertOnlyFixtureDelta(nestedBefore, nestedUninstalled, 'nested profile uninstall');
   evidence.nestedProfile = {
@@ -329,14 +396,14 @@ async function runProbe() {
     () => existsAndParses(portableLayout.storageJson),
   );
   assert.ok(existsSync(portableLayout.storageJson), 'portable workbench did not create storage.json');
-  const portableBefore = snapshotProfile(cliPath, portableEnv, undefined, portableLayout.globalManifest);
-  runCli('install-portable-default', cliPath, ['--install-extension', vsixPath, '--force'], portableEnv);
-  const portableInstalled = snapshotProfile(cliPath, portableEnv, undefined, portableLayout.globalManifest);
+  const portableBefore = await snapshotProfile(cliPath, portableEnv, undefined, portableLayout.globalManifest);
+  await runCli('install-portable-default', cliPath, ['--install-extension', vsixPath, '--force'], portableEnv);
+  const portableInstalled = await snapshotProfile(cliPath, portableEnv, undefined, portableLayout.globalManifest);
   assertFixturePresent(portableInstalled);
   const portablePhysicalFolders = assertTargetFolder(portableLayout.extensions, portableInstalled.manifest);
   assertDefaultHomeDidNotReceiveFixture(portableHome);
-  runCli('uninstall-portable-default', cliPath, ['--uninstall-extension', fixtureId], portableEnv);
-  const portableUninstalled = snapshotProfile(cliPath, portableEnv, undefined, portableLayout.globalManifest);
+  await runCli('uninstall-portable-default', cliPath, ['--uninstall-extension', fixtureId], portableEnv);
+  const portableUninstalled = await snapshotProfile(cliPath, portableEnv, undefined, portableLayout.globalManifest);
   assertFixtureAbsent(portableUninstalled);
   evidence.portable = {
     marker: portableLayout.markerDescription,
@@ -474,6 +541,8 @@ async function launchWorkbenchUntil(label, executable, args, env, predicate) {
   const stdoutFd = openSync(stdoutPath, 'w', 0o600);
   const stderrFd = openSync(stderrPath, 'w', 0o600);
   let child;
+  let pgid;
+  let unverifiedGroup;
   let pendingError;
   try {
     child = spawn(executable, args, {
@@ -482,10 +551,11 @@ async function launchWorkbenchUntil(label, executable, args, env, predicate) {
       detached: true,
       stdio: ['ignore', stdoutFd, stderrFd],
     });
+    await waitForChildSpawn(child, label);
     assert.ok(child.pid, `${label} did not return a pid`);
-    const unverifiedGroup = `unverified:${child.pid}`;
+    unverifiedGroup = `unverified:${child.pid}`;
     activeProcessGroups.add(unverifiedGroup);
-    const pgid = processGroupId(child.pid);
+    pgid = processGroupId(child.pid);
     assert.equal(pgid, child.pid, `${label} child is not its process-group leader`);
     activeProcessGroups.delete(unverifiedGroup);
     activeProcessGroups.add(pgid);
@@ -497,10 +567,11 @@ async function launchWorkbenchUntil(label, executable, args, env, predicate) {
   } finally {
     if (child?.pid) {
       try {
-        if (processGroupMembers(child.pid).length > 0) {
-          await terminateOwnedProcessGroup(child, child.pid, `${label}-finally`);
+        pgid ??= reconcileUnverifiedProcessGroup(child, unverifiedGroup);
+        if (pgid && processGroupMembers(pgid).length > 0) {
+          await terminateOwnedProcessGroup(child, pgid, `${label}-finally`);
         } else {
-          activeProcessGroups.delete(child.pid);
+          if (pgid) activeProcessGroups.delete(pgid);
         }
       } catch (cleanupError) {
         evidence.cleanup.processGroupError = sanitize(String(cleanupError));
@@ -538,6 +609,17 @@ function processGroupMembers(pgid) {
     const [pidText, groupText] = line.trim().split(/\s+/);
     return Number(groupText) === pgid ? [Number(pidText)] : [];
   }).filter(Number.isInteger);
+}
+
+function reconcileUnverifiedProcessGroup(child, unverifiedGroup) {
+  if (!unverifiedGroup || !activeProcessGroups.has(unverifiedGroup)) return undefined;
+  if (!child.pid || processGroupMembers(child.pid).length === 0) {
+    activeProcessGroups.delete(unverifiedGroup);
+    return undefined;
+  }
+  activeProcessGroups.delete(unverifiedGroup);
+  activeProcessGroups.add(child.pid);
+  return child.pid;
 }
 
 async function terminateOwnedProcessGroup(child, pgid, label) {
@@ -582,28 +664,97 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function runCli(label, cliPath, args, env) {
+function waitForChildSpawn(child, label) {
+  return new Promise((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', (error) => reject(new Error(`${label} failed to spawn`, { cause: error })));
+  });
+}
+
+async function runCli(label, cliPath, args, env) {
   return runCommand(label, cliPath, args, { env, cwd: probeRoot });
 }
 
-function runCommand(label, executable, args, options) {
-  const result = spawnSync(executable, args, {
+async function runCommand(label, executable, args, options) {
+  const maxBuffer = 4 * 1024 * 1024;
+  let stdout = '';
+  let stderr = '';
+  let outputBytes = 0;
+  let outputError;
+  let pgid;
+  let timeoutId;
+  let result;
+  let pendingError;
+  const child = spawn(executable, args, {
     ...options,
-    encoding: 'utf8',
-    timeout: 120_000,
-    maxBuffer: 4 * 1024 * 1024,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  evidence.commands.push({
-    label,
-    executable: sanitize(executable),
-    args: args.map(sanitize),
-    exitCode: result.status,
-    stdout: sanitize(result.stdout || ''),
-    stderr: sanitize(result.stderr || ''),
+  const spawned = waitForChildSpawn(child, label);
+  const completed = new Promise((resolve) => {
+    child.once('error', (error) => resolve({ code: null, signal: null, error }));
+    child.once('close', (code, signal) => resolve({ code, signal }));
   });
-  if (result.error) throw result.error;
-  assert.equal(result.status, 0, `${label} failed: ${(result.stderr || result.stdout || '').trim()}`);
-  return result;
+  const appendOutput = (stream, chunk) => {
+    outputBytes += chunk.length;
+    if (outputBytes > maxBuffer) {
+      outputError ??= new Error(`${label} exceeded the ${maxBuffer}-byte output limit`);
+      try {
+        if (pgid) process.kill(-pgid, 'SIGTERM');
+        else child.kill('SIGTERM');
+      } catch (error) {
+        if (error?.code !== 'ESRCH') outputError = new AggregateError([outputError, error], `${label} output limit cleanup failed`);
+      }
+      return stream;
+    }
+    return stream + chunk.toString('utf8');
+  };
+  child.stdout.on('data', (chunk) => { stdout = appendOutput(stdout, chunk); });
+  child.stderr.on('data', (chunk) => { stderr = appendOutput(stderr, chunk); });
+
+  try {
+    await spawned;
+    assert.ok(child.pid, `${label} did not return a pid`);
+    pgid = child.pid;
+    activeProcessGroups.add(pgid);
+    const timedResult = new Promise((resolve) => {
+      timeoutId = setTimeout(() => resolve({ timedOut: true }), 120_000);
+    });
+    result = await Promise.race([completed, timedResult]);
+    if (result.timedOut) throw new Error(`${label} timed out after 120000 ms`);
+    if (result.error) throw result.error;
+    if (outputError) throw outputError;
+    assert.equal(result.code, 0, `${label} failed: ${(stderr || stdout).trim()}`);
+  } catch (error) {
+    pendingError = error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (child.pid) {
+      try {
+        if (pgid && processGroupMembers(pgid).length > 0) {
+          await terminateOwnedProcessGroup(child, pgid, `${label}-cleanup`);
+        } else if (pgid) {
+          activeProcessGroups.delete(pgid);
+        }
+      } catch (cleanupError) {
+        pendingError = pendingError
+          ? new AggregateError([pendingError, cleanupError], `${label} failed and its process group could not be cleaned up`)
+          : cleanupError;
+      }
+    }
+    evidence.commands.push({
+      label,
+      executable: sanitize(executable),
+      args: args.map(sanitize),
+      processGroup: pgid ? 'owned' : 'not-started',
+      exitCode: result?.code ?? null,
+      signal: result?.signal ?? null,
+      stdout: sanitize(stdout),
+      stderr: sanitize(stderr),
+    });
+  }
+  if (pendingError) throw pendingError;
+  return { status: result.code, signal: result.signal, stdout, stderr };
 }
 
 function parseCodeVersion(stdout) {
@@ -615,21 +766,21 @@ function parseCodeVersion(stdout) {
   return { version, commit, arch };
 }
 
-function snapshotNamedProfiles(cliPath, env, layout, control, targetProfile, manifests) {
+async function snapshotNamedProfiles(cliPath, env, layout, control, targetProfile, manifests) {
   return {
-    default: snapshotProfile(cliPath, env, undefined, layout.globalManifest),
-    control: snapshotProfile(cliPath, env, control.name, manifests.control),
-    target: snapshotProfile(cliPath, env, targetProfile.name, manifests.target),
+    default: await snapshotProfile(cliPath, env, undefined, layout.globalManifest),
+    control: await snapshotProfile(cliPath, env, control.name, manifests.control),
+    target: await snapshotProfile(cliPath, env, targetProfile.name, manifests.target),
   };
 }
 
-function snapshotControls(cliPath, env, layout, control, targetProfile, manifests) {
+async function snapshotControls(cliPath, env, layout, control, targetProfile, manifests) {
   return snapshotNamedProfiles(cliPath, env, layout, control, targetProfile, manifests);
 }
 
-function snapshotProfile(cliPath, env, profileName, manifestPath) {
+async function snapshotProfile(cliPath, env, profileName, manifestPath) {
   const args = [...(profileName ? ['--profile', profileName] : []), '--list-extensions', '--show-versions'];
-  const listed = runCli(`list-${profileName || 'Default'}`, cliPath, args, env).stdout
+  const listed = (await runCli(`list-${profileName || 'Default'}`, cliPath, args, env)).stdout
     .split(/\r?\n/)
     .map((line) => line.trim().toLowerCase())
     .filter((line) => /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*@/.test(line))
@@ -734,7 +885,11 @@ function exactlyOneProfile(profiles, name) {
 }
 
 function captureObsolete(file, extensionsDir, observedFixtureFolder) {
-  if (!existsSync(file)) return { exists: false, runtimeShapeVerified: false };
+  const folderStillExists = existsSync(path.join(extensionsDir, observedFixtureFolder));
+  if (!existsSync(file)) {
+    assert.equal(folderStillExists, false, 'uninstall left the fixture folder without an .obsolete entry');
+    return { exists: false, runtimeShapeVerified: false, fixtureFolderRemoved: true };
+  }
   const raw = readFileSync(file, 'utf8');
   const parsed = JSON.parse(raw);
   assert.ok(parsed && typeof parsed === 'object' && !Array.isArray(parsed), '.obsolete is not a flat object');
@@ -742,7 +897,6 @@ function captureObsolete(file, extensionsDir, observedFixtureFolder) {
   if (fixtureValue === true) {
     return { exists: true, runtimeShapeVerified: true, raw, observedFixtureFolder, fixtureValue };
   }
-  const folderStillExists = existsSync(path.join(extensionsDir, observedFixtureFolder));
   assert.equal(folderStillExists, false, '.obsolete omitted the fixture while its unreferenced folder remained');
   return {
     exists: true,
