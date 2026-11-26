@@ -12,6 +12,12 @@ type Inspected = { globalValue?: boolean; workspaceValue?: boolean; workspaceFol
 export const vscodeState = {
   /** Commands run through `commands.executeCommand`, in order. */
   commands: [] as string[],
+  /** The arguments each of those commands was run with, in the same order. */
+  commandArgs: [] as unknown[][],
+  /** Information messages shown, with their options and button labels. */
+  informationMessages: [] as { message: string; options: unknown; items: string[] }[],
+  /** The button label the next information message returns; `undefined` means the user dismissed it. */
+  informationChoice: undefined as string | undefined,
   /** Values the user set, by fully qualified setting name. */
   settings: {} as Record<string, Inspected>,
   /** URLs opened in the browser. */
@@ -19,6 +25,9 @@ export const vscodeState = {
   errors: [] as string[],
   reset(): void {
     this.commands.length = 0;
+    this.commandArgs.length = 0;
+    this.informationMessages.length = 0;
+    this.informationChoice = undefined;
     this.opened.length = 0;
     this.errors.length = 0;
     this.settings = {};
@@ -55,11 +64,18 @@ export function vscodeDouble() {
       constructor(public baseUri: unknown, public pattern: string) {}
     },
     commands: {
-      executeCommand: async (command: string) => {
+      executeCommand: async (command: string, ...args: unknown[]) => {
         vscodeState.commands.push(command);
+        vscodeState.commandArgs.push(args);
       },
     },
-    window: { showErrorMessage: (message: string) => vscodeState.errors.push(message) },
+    window: {
+      showErrorMessage: (message: string) => vscodeState.errors.push(message),
+      showInformationMessage: async (message: string, options: unknown, ...items: string[]) => {
+        vscodeState.informationMessages.push({ message, options, items });
+        return vscodeState.informationChoice;
+      },
+    },
     workspace: {
       textDocuments: [],
       getConfiguration: (section: string) => {

@@ -30,7 +30,8 @@
       {
         "command": "personas.openSettings",
         "title": "Open Personas Settings",
-        "category": "Personas"
+        "category": "Personas",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "personas.showMatrix",
@@ -74,7 +75,7 @@
         {
           "command": "personas.openSettings",
           "when": "view == personas.vscodeProfiles || view == personas.powerShellProfiles || view == personas.gitConfiguration",
-          "group": "settings"
+          "group": "navigation@9"
         },
         {
           "command": "personas.powerShellProfiles.refresh",
@@ -126,6 +127,7 @@
           "id": "personas.vscodeProfiles",
           "name": "VS Code Profiles",
           "type": "webview",
+          "initialSize": 5,
           "icon": "media/activity-icon.svg",
           "contextualTitle": "Personas"
         },
@@ -133,12 +135,14 @@
           "id": "personas.powerShellProfiles",
           "name": "PowerShell Profiles",
           "type": "webview",
+          "initialSize": 3,
           "icon": "media/activity-icon.svg",
           "contextualTitle": "Personas"
         },
         {
           "id": "personas.gitConfiguration",
           "name": "Git Configuration",
+          "initialSize": 2,
           "icon": "media/activity-icon.svg",
           "contextualTitle": "Personas"
         }
