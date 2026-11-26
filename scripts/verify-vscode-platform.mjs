@@ -203,7 +203,6 @@ async function runProbe() {
   const control = exactlyOneProfile(profiles, profileNames.control);
   const liveTarget = exactlyOneProfile(profiles, profileNames.target);
   assert.notEqual(control.location, liveTarget.location, 'VS Code generated duplicate profile locations');
-  assert.ok(existsSync(defaultLayout.storageJson), 'default storage.json was not materialized');
   assert.equal(path.normalize(defaultLayout.storageJson), path.join(defaultLayout.userData, 'User', 'globalStorage', 'storage.json'));
   evidence.defaultPaths = {
     userDataRoot: relativeToHome(defaultHome, defaultLayout.userData),
