@@ -116,7 +116,9 @@ async function runProbe() {
   const ownedExecutable = await downloadAndUnzipVSCode({
     version: 'stable',
     platform: target,
-    cachePath: path.join(probeRoot, 'vscode-cache'),
+    // macOS limits Unix-domain socket paths to 103 characters. Keep the
+    // owned distribution path short enough for portable user-data sockets.
+    cachePath: path.join(probeRoot, 'v'),
   });
   const ownedDistribution = distributionRoot(ownedExecutable);
   assert.ok(existsSync(ownedExecutable), 'owned VS Code executable is missing');
