@@ -293,7 +293,11 @@ newest numeric release with a regular `is-complete` marker for each platform. A 
 with no confirmed complete release keeps all its installs. The integration runner can still
 try to download a newer, incomplete minimum even when an older complete copy is available.
 
-Cleanup skips linked or malformed roots and excludes nested link destinations from size
-estimates. If it cannot inspect a completion marker, it skips that platform. If it cannot
-inspect or remove a target, it reports the error, continues with independent targets and
+Cleanup holds the selected directories open while sizing and removing their contents.
+On Linux and macOS it operates from directory descriptors. On Windows it holds handles
+that prevent the directories from being renamed or replaced. The Node-only CLI uses the
+Koffi development dependency for these OS calls. Cleanup skips linked or malformed roots
+and excludes nested link destinations from size estimates. If it cannot inspect a completion
+marker, it skips that platform. If it cannot inspect or remove a target, it reports the
+error, continues with independent targets and
 exits nonzero. The summary counts only successfully listed or removed targets.

@@ -17,11 +17,13 @@ beforeEach(() => {
   cache = path.join(checkout, '.vscode-test');
   fs.mkdirSync(path.join(checkout, 'scripts'), { recursive: true });
   fs.copyFileSync(cli, path.join(checkout, 'scripts', 'clean.mjs'));
+  fs.copyFileSync(path.resolve('scripts/cleanup-directory.mjs'), path.join(checkout, 'scripts', 'cleanup-directory.mjs'));
+  linkDir(path.resolve('node_modules'), path.join(checkout, 'node_modules'));
   fs.writeFileSync(path.join(checkout, 'package.json'), JSON.stringify({ engines: { vscode: '^1.101.0' } }));
 });
 afterEach(() => fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 3 }));
 
-function run(force = false, options: { response?: unknown; fault?: string; faultPath?: string } = {}) {
+function run(force = false, options: { response?: unknown; fault?: string; faultPath?: string; cache?: string } = {}) {
   const args = ['--require', preload, path.join(checkout, 'scripts', 'clean.mjs')];
   if (force) args.push('--force');
   const child = spawnSync(process.execPath, args, {
@@ -157,6 +159,29 @@ describe('cleanup CLI', () => {
       expect(fs.statSync(path.join(external, 'sentinel')).size).toBe(2 * mib);
     }
     expect(fs.existsSync(dist)).toBe(false);
+  });
+
+  it.each([
+    { force: false, fault: 'rotate-at-list', sizeMessage: 'Would remove' },
+    { force: true, fault: 'rotate-at-unlink', sizeMessage: 'Removed' },
+  ])('keeps the selected cache bound during $fault', ({ force, fault, sizeMessage }) => {
+    const name = install('linux-x64', '1.99.0', false);
+    const target = path.join(cache, name);
+    fs.writeFileSync(path.join(target, 'file'), Buffer.alloc(mib));
+    const replacement = path.join(checkout, 'replacement', name);
+    fs.mkdirSync(replacement, { recursive: true });
+    fs.writeFileSync(path.join(replacement, 'file'), Buffer.alloc(2 * mib));
+
+    const faultPath = force ? path.join(target, 'file') : target;
+    const result = run(force, { fault, faultPath, cache });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`${sizeMessage} ${path.join('.vscode-test', name)} (1.0 MiB)`);
+    const windows = process.platform === 'win32';
+    expect(result.stderr).toContain(windows ? 'rotation blocked' : 'rotation completed');
+    const untouched = windows ? replacement : target;
+    expect(fs.statSync(path.join(untouched, 'file')).size).toBe(2 * mib);
+    const original = windows ? target : path.join(checkout, 'original', name);
+    expect(fs.existsSync(original)).toBe(!force);
   });
 
   it.each(['marker-error', 'linked-marker'])('preserves the affected platform on %s', (fault) => {
