@@ -2,6 +2,21 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.5.0](https://github.com/SamErde/Personas/compare/v1.4.0...v1.5.0) (2026-11-26)
+
+
+### Features
+
+* add a read-only Git Configuration view to Home ([#156](https://github.com/SamErde/Personas/issues/156)) ([03f5b72](https://github.com/SamErde/Personas/commit/03f5b723d3293bf0e8c2dbafe9bb3e5f25dc7835))
+* add Home settings and turn PowerShell runtime discovery off by default ([ba3e757](https://github.com/SamErde/Personas/commit/ba3e7574041b18a4fec85ae0e4b17a7c2296d2ff))
+* size Home views, add a settings gear, show PowerShell help in a dialog ([#160](https://github.com/SamErde/Personas/issues/160)) ([#161](https://github.com/SamErde/Personas/issues/161)) ([337c7c0](https://github.com/SamErde/Personas/commit/337c7c0e95ea48811e52c910747de47ae1a8fc6b))
+* split Home into VS Code Profiles and PowerShell Profiles views ([#155](https://github.com/SamErde/Personas/issues/155)) ([6bd7660](https://github.com/SamErde/Personas/commit/6bd76607d1c3c81b278a280f742357d50bbdda09))
+
+
+### Bug Fixes
+
+* load each Home section once per show and repaint from last known state ([#153](https://github.com/SamErde/Personas/issues/153)) ([e5292da](https://github.com/SamErde/Personas/commit/e5292da700a55c1aed75bac62a52e04bfe599b53))
+
 ## [1.4.0](https://github.com/SamErde/Personas/compare/v1.3.0...v1.4.0) (2026-11-21)
 
 
