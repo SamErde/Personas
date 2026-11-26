@@ -316,7 +316,11 @@ The command exists (`workbench.extensions.action.toggleApplyToAllProfiles`), but
 **Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), running during the spike — same machine/version as Spikes A and B; the real install was otherwise idle throughout.
 **Method:** Per controller adjustment, the brief's manual "create a profile via the Profiles UI, install an extension via the Extensions view" step was replaced with a fully scripted, automated sandbox: two fresh temp dirs (`%TEMP%\personas-spikec-data`, `%TEMP%\personas-spikec-ext`) plus a throwaway workspace folder (`%TEMP%\personas-spikec-workspace`), driven entirely via the `code` CLI and PowerShell process management — no interactive UI clicking. A re-review follow-up added two more short-lived temp dirs for the partial-arg checks in Step 4 (read-only, windowless, deleted after). Full raw command transcript (every command, full output, process lists) is in `.superpowers/sdd/task-4-report.md` (gitignored, not committed); this section summarizes the evidence and verdicts.
 **Date:** 2026-07-03.
-**Scope note:** This exercises explicit `--user-data-dir`/`--extensions-dir` CLI flags, not literal VS Code "Portable Mode" (a `data\` folder dropped next to `Code.exe`). Per the original brief's own reasoning, this still covers true portable-mode installs: Personas always derives both paths from its own runtime context (`globalStorageUri`, etc.) and passes them explicitly to the CLI (Task 8's `CliRunner`), so a portable install and an explicit-flag invocation are indistinguishable from the CLI's point of view — same two flags, same code path either way.
+**Scope note:** This exercises explicit `--user-data-dir`/`--extensions-dir` CLI flags, not VS Code
+Portable Mode. Custom directories are not portable-mode evidence: Portable Mode is selected by an
+archive-local `data` folder on Linux/Windows or a sibling `code-portable-data` folder on macOS, and
+that layout overrides the two command-line options. True Linux and macOS portable layouts are
+tracked separately in [#168](https://github.com/SamErde/Personas/issues/168).
 
 ## Verdicts at a glance
 
