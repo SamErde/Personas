@@ -32,7 +32,6 @@ A Git persona is a saved, named Git identity that you can apply to the right rep
 - Cleaning up stale profile folders and old versions of installed extensions.
 - Creating, deleting, and renaming profiles from Personas.
 - Showing translated extension display names.
-- Whether extension sets or baselines belong in Personas is an open question: [#165](https://github.com/SamErde/Personas/issues/165).
 
 ## Waiting on VS Code
 
