@@ -2,6 +2,7 @@
 // are synchronous. On POSIX their single-component names resolve from the kernel cwd.
 import fs from 'node:fs';
 import path from 'node:path';
+import assert from 'node:assert/strict';
 import koffi from 'koffi';
 
 function posixDirectoryOpener() {
@@ -11,7 +12,7 @@ function posixDirectoryOpener() {
     return {
       stat: () => fs.fstatSync(fd, { bigint: true }),
       at(name) {
-        if (fchdir(fd) !== 0) throw new Error(`cannot enter held directory (errno ${koffi.errno()})`);
+        assert.equal(fchdir(fd), 0, 'cannot enter held directory');
         return name;
       },
       [Symbol.dispose]: () => fs.closeSync(fd),
@@ -29,12 +30,12 @@ function windowsDirectoryOpener() {
     // FILE_READ_ATTRIBUTES, FILE_SHARE_READ, OPEN_EXISTING, BACKUP_SEMANTICS | OPEN_REPARSE_POINT.
     // Keep each ancestor open without write/delete sharing while operating on its children.
     const handle = open(path.toNamespacedPath(location), 0x80, 1, null, 3, 0x02200000, 0);
-    if (handle === -1) throw new Error(`cannot pin ${location} (Win32 ${lastError()})`);
+    assert.notEqual(handle, -1, `cannot pin ${location} (Win32 ${lastError()})`);
     return {
       stat() {
         const tag = Buffer.alloc(8); // FILE_ATTRIBUTE_TAG_INFO
-        if (!attributes(handle, 9, tag, tag.length)) throw new Error(`cannot inspect ${location} (Win32 ${lastError()})`);
-        if (tag.readUInt32LE() & 0x400) throw new Error(`refusing reparse point: ${location}`);
+        assert.ok(attributes(handle, 9, tag, tag.length), `cannot inspect ${location} (Win32 ${lastError()})`);
+        assert.equal(tag.readUInt32LE() & 0x400, 0, `refusing reparse point: ${location}`);
         return fs.lstatSync(location, { bigint: true });
       },
       at: (name) => path.join(location, name),
@@ -46,11 +47,12 @@ function windowsDirectoryOpener() {
 const pin = process.platform === 'win32' ? windowsDirectoryOpener() : posixDirectoryOpener();
 
 export function assertIdentity(expected, actual) {
-  if (expected.dev !== actual.dev || expected.ino !== actual.ino) throw new Error('directory changed during cleanup');
+  assert.equal(actual.dev, expected.dev, 'directory changed during cleanup');
+  assert.equal(actual.ino, expected.ino, 'directory changed during cleanup');
 }
 
 export function openDirectory(location, expected) {
-  if (!expected.isDirectory()) throw new Error(`expected an ordinary directory at ${location}`);
+  assert.ok(expected.isDirectory(), `expected an ordinary directory at ${location}`);
   const held = pin(location);
   try {
     assertIdentity(expected, held.stat());

@@ -1,57 +1,55 @@
-// Runs only in the temporary cleanup CLI subprocess spawned by clean.test.ts.
+// Runs only in the test-owned cleanup subprocess. Match against the kernel cwd
+// because the POSIX directory handle changes it directly with fchdir.
 const fs = require('node:fs');
 const path = require('node:path');
+const assert = require('node:assert/strict');
 const options = JSON.parse(process.env.CLEAN_TEST_OPTIONS);
-
-// fchdir changes the kernel cwd directly on POSIX. Resolve fixture paths against it.
-const absolute = (location) => path.resolve(fs.realpathSync.native('.'), location);
-
+const { response = ['1.110.0'], status = 200 } = options;
 globalThis.fetch = async () => {
-  if (options.fault === 'timeout') throw new Error('simulated timeout');
-  if (options.fault === 'http-error') return { ok: false, status: 503 };
-  return { ok: true, json: async () => options.response ?? ['1.110.0'] };
+  if (!status) throw new Error('simulated timeout');
+  return Response.json(response, { status });
 };
 
-function failAtFixturePath(original) {
-  return (location, ...args) => {
-    if (absolute(location) === options.faultPath) throw new Error(`simulated ${options.fault}`);
-    return original(location, ...args);
-  };
-}
-if (options.fault === 'marker-error') fs.lstatSync = failAtFixturePath(fs.lstatSync);
-if (options.fault === 'scan-error') fs.readdirSync = failAtFixturePath(fs.readdirSync);
-if (options.fault === 'remove-error') fs.rmdirSync = failAtFixturePath(fs.rmdirSync);
-if (options.fault === 'changed-directory') {
-  const lstat = fs.lstatSync;
-  let observed = false;
-  fs.lstatSync = (location, ...args) => {
-    const stat = lstat(location, ...args);
-    if (absolute(location) === options.faultPath && !observed) {
-      // The identity captured before opening differs from the actual held directory.
-      stat.ino += 1n;
-      observed = true;
-    }
-    return stat;
-  };
+function fail() {
+  throw new Error(`simulated ${options.fault}`);
 }
 
-// Rotate two ordinary, test-owned directories at the actual list/unlink boundary.
-// POSIX permits renaming a held directory. A Windows deny-delete handle prevents it.
-function rotateBefore(operation) {
-  return (location, ...args) => {
-    if (absolute(location) === options.faultPath) {
-      const root = path.dirname(options.cache);
-      try {
-        fs.renameSync(options.cache, path.join(root, 'original'));
-        fs.renameSync(path.join(root, 'replacement'), options.cache);
-        console.error('rotation completed');
-      } catch (error) {
-        if (!['EBUSY', 'EPERM', 'EACCES'].includes(error.code)) throw error;
-        console.error('rotation blocked');
-      }
-    }
-    return operation(location, ...args);
+function differentIdentity(invoke) {
+  const stat = invoke();
+  stat.ino += 1n;
+  return stat;
+}
+
+function rotate(invoke) {
+  const root = path.dirname(options.cache);
+  try {
+    fs.renameSync(options.cache, path.join(root, 'original'));
+    fs.renameSync(path.join(root, 'replacement'), options.cache);
+    console.error('rotation completed');
+  } catch (error) {
+    assert.ok(['EBUSY', 'EPERM', 'EACCES'].includes(error.code), error);
+    console.error('rotation blocked');
+  }
+  return invoke();
+}
+
+// Each scenario intercepts one call at one exact fixture path, then restores fs.
+const hooks = new Map([
+  ['marker-error', ['lstatSync', fail]],
+  ['scan-error', ['readdirSync', fail]],
+  ['remove-error', ['rmdirSync', fail]],
+  ['changed-directory', ['lstatSync', differentIdentity]],
+  ['rotate-at-list', ['readdirSync', rotate]],
+  ['rotate-at-unlink', ['unlinkSync', rotate]],
+]);
+if (hooks.has(options.fault)) {
+  const [method, action] = hooks.get(options.fault);
+  const original = fs[method];
+  fs[method] = (location, ...args) => {
+    const invoke = () => original(location, ...args);
+    const absolute = path.resolve(fs.realpathSync.native('.'), location);
+    if (absolute !== options.faultPath) return invoke();
+    fs[method] = original;
+    return action(invoke);
   };
 }
-if (options.fault === 'rotate-at-list') fs.readdirSync = rotateBefore(fs.readdirSync);
-if (options.fault === 'rotate-at-unlink') fs.unlinkSync = rotateBefore(fs.unlinkSync);

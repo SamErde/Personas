@@ -27,15 +27,19 @@ function reportFailure(location, error) {
 
 // Every lookup is a single child of a held parent. Only non-recursive unlink/rmdir
 // operate on names; a replacement can never become the root of a recursive removal.
+function entryInfo(parent, name, required = true) {
+  return fs.lstatSync(parent.at(name), { bigint: true, throwIfNoEntry: required });
+}
+
 function removeEmpty(parent, name, expected) {
-  assertIdentity(expected, fs.lstatSync(parent.at(name), { bigint: true }));
+  assertIdentity(expected, entryInfo(parent, name));
   fs.rmdirSync(parent.at(name));
 }
 
 function walk(dir, remove) {
   let total = 0;
   for (const name of fs.readdirSync(dir.at('.'))) {
-    const entry = fs.lstatSync(dir.at(name), { bigint: true });
+    const entry = entryInfo(dir, name);
     if (entry.isDirectory()) {
       {
         using child = openDirectory(dir.at(name), entry);
@@ -56,7 +60,7 @@ function formatSize(size) {
 
 function processTarget(parent, name, relative = name) {
   try {
-    const entry = fs.lstatSync(parent.at(name), { bigint: true, throwIfNoEntry: parent !== root });
+    const entry = entryInfo(parent, name, parent !== root);
     if (!entry) return;
     let size;
     {
@@ -89,15 +93,15 @@ async function currentStable() {
 }
 
 function newestComplete(cache, installs) {
-  let newest;
+  let newest = '';
   for (const { name, version } of installs) {
     if (!release.test(version)) continue;
-    const entry = fs.lstatSync(cache.at(name), { bigint: true });
+    const entry = entryInfo(cache, name);
     using install = openDirectory(cache.at(name), entry);
-    const marker = fs.lstatSync(install.at('is-complete'), { throwIfNoEntry: false });
+    const marker = entryInfo(install, 'is-complete', false);
     if (!marker) continue;
     if (!marker.isFile()) throw new Error(`expected a regular completion marker in ${name}`);
-    if (!newest || versionOrder.compare(version, newest) > 0) newest = version;
+    if (versionOrder.compare(version, newest) > 0) newest = version;
   }
   return newest;
 }
@@ -152,7 +156,7 @@ using root = openDirectory(rootPath, fs.lstatSync(rootPath, { bigint: true }));
 for (const name of ['dist', 'out-test']) processTarget(root, name);
 
 try {
-  const entry = fs.lstatSync(root.at('.vscode-test'), { bigint: true, throwIfNoEntry: false });
+  const entry = entryInfo(root, '.vscode-test', false);
   if (entry) {
     using cache = openDirectory(root.at('.vscode-test'), entry);
     await processCache(cache);

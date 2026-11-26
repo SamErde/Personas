@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 3 }));
 
-function run(force = false, options: { response?: unknown; fault?: string; faultPath?: string; cache?: string } = {}) {
+function run(force = false, options: { response?: unknown; status?: number; fault?: string; faultPath?: string; cache?: string } = {}) {
   const args = ['--require', preload, path.join(checkout, 'scripts', 'clean.mjs')];
   if (force) args.push('--force');
   const child = spawnSync(process.execPath, args, {
@@ -32,7 +32,7 @@ function run(force = false, options: { response?: unknown; fault?: string; fault
     env: { ...process.env, CLEAN_TEST_OPTIONS: JSON.stringify(options) },
     timeout: 10_000,
   });
-  if (child.error) throw child.error;
+  expect(child.error).toBeUndefined();
   return child;
 }
 
@@ -45,7 +45,7 @@ function install(platform: string, version: string, complete = true) {
 }
 
 function linkDir(destination: string, at: string) {
-  fs.symlinkSync(destination, at, process.platform === 'win32' ? 'junction' : 'dir');
+  fs.symlinkSync(destination, at, 'junction');
 }
 
 describe('cleanup CLI', () => {
@@ -60,26 +60,27 @@ describe('cleanup CLI', () => {
       install('linux-x64', '1.99.0'), install('darwin-arm64', 'insiders'),
       install('win32-arm64-archive', '1.110.0-insider'), install('linux-armhf', 'a'.repeat(40)),
     ];
-    const generated = ['dist', 'out-test'];
-    for (const name of generated) fs.mkdirSync(path.join(checkout, name));
+    fs.mkdirSync(path.join(checkout, 'dist'));
+    fs.mkdirSync(path.join(checkout, 'out-test'));
     const preview = run();
     expect(preview.status).toBe(0);
-    for (const name of stale) expect(preview.stdout).toContain(`Would remove ${path.join('.vscode-test', name)}`);
+    const listed = Array.from(preview.stdout.matchAll(/^Would remove (.*) \([\d.]+ MiB\)$/gm), match => match[1]);
+    expect(listed.sort()).toEqual(['dist', 'out-test', ...stale.map(name => path.join('.vscode-test', name))].sort());
     expect(fs.readdirSync(cache).sort()).toEqual([...keep, ...stale].sort());
-    for (const name of generated) expect(fs.existsSync(path.join(checkout, name))).toBe(true);
+    expect(fs.readdirSync(checkout)).toEqual(expect.arrayContaining(['dist', 'out-test']));
 
     const forced = run(true);
     expect(forced.status).toBe(0);
     expect(fs.readdirSync(cache).sort()).toEqual(keep.sort());
-    for (const name of generated) expect(fs.existsSync(path.join(checkout, name))).toBe(false);
+    expect(fs.readdirSync(checkout).sort()).toEqual(['.vscode-test', 'node_modules', 'package.json', 'scripts']);
     const repeat = run(true);
     expect(repeat.status).toBe(0);
     expect(repeat.stdout).toContain('Nothing to clean');
   });
 
   it.each([
-    ['timeout', { fault: 'timeout' }],
-    ['http-error', { fault: 'http-error' }],
+    ['timeout', { status: 0 }],
+    ['http-error', { status: 503 }],
     ['invalid-string', { response: '1.110.0' }],
     ['invalid-first', { response: ['invalid'] }],
   ] as const)('keeps complete fallbacks by platform on %s', (_scenario, options) => {
@@ -162,9 +163,9 @@ describe('cleanup CLI', () => {
   });
 
   it.each([
-    { force: false, fault: 'rotate-at-list', sizeMessage: 'Would remove' },
-    { force: true, fault: 'rotate-at-unlink', sizeMessage: 'Removed' },
-  ])('keeps the selected cache bound during $fault', ({ force, fault, sizeMessage }) => {
+    { force: false, fault: 'rotate-at-list', leaf: '.', sizeMessage: 'Would remove' },
+    { force: true, fault: 'rotate-at-unlink', leaf: 'file', sizeMessage: 'Removed' },
+  ])('keeps the selected cache bound during $fault', ({ force, fault, leaf, sizeMessage }) => {
     const name = install('linux-x64', '1.99.0', false);
     const target = path.join(cache, name);
     fs.writeFileSync(path.join(target, 'file'), Buffer.alloc(mib));
@@ -172,15 +173,15 @@ describe('cleanup CLI', () => {
     fs.mkdirSync(replacement, { recursive: true });
     fs.writeFileSync(path.join(replacement, 'file'), Buffer.alloc(2 * mib));
 
-    const faultPath = force ? path.join(target, 'file') : target;
+    const faultPath = path.join(target, leaf);
     const result = run(force, { fault, faultPath, cache });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain(`${sizeMessage} ${path.join('.vscode-test', name)} (1.0 MiB)`);
-    const windows = process.platform === 'win32';
-    expect(result.stderr).toContain(windows ? 'rotation blocked' : 'rotation completed');
-    const untouched = windows ? replacement : target;
-    expect(fs.statSync(path.join(untouched, 'file')).size).toBe(2 * mib);
-    const original = windows ? target : path.join(checkout, 'original', name);
+    const [outcome, survivor, original] = process.platform === 'win32'
+      ? ['rotation blocked', replacement, target] as const
+      : ['rotation completed', target, path.join(checkout, 'original', name)] as const;
+    expect(result.stderr).toContain(outcome);
+    expect(fs.statSync(path.join(survivor, 'file')).size).toBe(2 * mib);
     expect(fs.existsSync(original)).toBe(!force);
   });
 
