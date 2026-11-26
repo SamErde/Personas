@@ -5,6 +5,7 @@ import { GitConfigService } from './git/configService';
 import { findGitExecutable } from './git/executable';
 import { GitConfigurationView, type GitNode } from './panel/gitConfigurationView';
 import { PowerShellProfilesViewProvider } from './panel/powerShellProfilesView';
+import { showPowerShellHelp } from './panel/powerShellHelp';
 import { VsCodeProfilesViewProvider } from './panel/vscodeProfilesView';
 import { MatrixPanel } from './panel/matrixPanel';
 import {
@@ -79,7 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.executeCommand('workbench.action.openSettings', '@ext:SamErde.personas')),
     // The buttons in the PowerShell Profiles view's title bar.
     vscode.commands.registerCommand('personas.powerShellProfiles.refresh', () => powerShellProfiles.refresh()),
-    vscode.commands.registerCommand('personas.powerShellProfiles.help', () => powerShellProfiles.help()),
+    vscode.commands.registerCommand('personas.powerShellProfiles.help', () => showPowerShellHelp()),
   );
   context.subscriptions.push(
     vscode.commands.registerCommand('personas.showMatrix', async () => {

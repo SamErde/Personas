@@ -439,3 +439,41 @@ So each flag independently overrides only its own half; every omitted flag's hal
 - Partial flag omission is a silent hybrid, not a clean fallback (Step 4 follow-up): each flag overrides only its own half of the state. Concretely, `--user-data-dir` alone still lists the real install's 42 extensions, and `--extensions-dir` alone lists a real named profile at 11 of its 32 visible extensions (the app-scoped union half lives in the extensions dir's global manifest). This is the strongest single argument for Task 8 treating the two `extraArgs` as an inseparable pair rather than two independent options.
 - `storage.json`/`state.vscdb` appeared before the first poll fired (effectively immediate on this machine) — nothing for Task 12 to guard against there.
 - A cosmetic Node `DEP0169` deprecation warning (`url.parse()`) appeared on stderr during the second `--install-extension` call — harmless noise from the CLI's bundled Node runtime, unrelated to Personas, not worth guarding against.
+
+---
+
+# Home view layout (VS Code main `8cfcc55`, checked 2026-11-26)
+
+These facts come from the VS Code source at commit `8cfcc55`, and they explain the choices made in
+[#160](https://github.com/SamErde/Personas/issues/160).
+
+- **No runtime sizing.** An extension cannot set a view's height or make a view fit its content.
+  - `WebviewView` has no size API.
+  - VS Code's size-to-content hooks are internal: `ViewPane.setSizeToContent`, `getOptimalHeight`,
+    and the minimum and maximum body sizes. Only built-in views such as Open Editors use them.
+- **`initialSize`** is a flex-like weight with a default of 20. VS Code honours it only when the
+  extension owns the view container (`viewsExtensionPoint.ts`). `computeInitialSizes()` splits the
+  container height in proportion to the weights, and only for views with no saved size
+  (`viewPaneContainer.ts`).
+- **Sizes are saved without the user resizing anything.** VS Code saves them after every layout,
+  per workspace, under `workbench.view.extension.personas.state`. So a new weight reaches only
+  workspaces that have not shown Home yet. "Reset View Locations" does not reset sizes.
+- **A view's weight moves with it.** If a Home view is moved into another container, it keeps
+  its weight there.
+- **Small windows.** With Home's 5 / 3 / 2 weights, Git Configuration reaches VS Code's minimum
+  body size of 120px (`paneview.ts`) in a container shorter than about 710px.
+- **When title bar buttons show.**
+  - Webview view panes use `ViewPaneShowActions.WhenExpanded` (`webviewViewPane.ts`), so their
+    title bar buttons show whenever the view is expanded.
+  - Tree view panes use the default, which shows them only on hover or focus.
+  - No per-view option changes this. Only the global `workbench.view.alwaysShowHeaderActions`
+    setting does.
+- **The `...` menu** appears only when a view has menu items outside the `navigation` group.
+  VS Code adds none of its own there.
+- **`viewContainer/title` is proposed and limited to the Debug container**
+  (`menusExtensionPoint.ts`), so Home cannot have one gear for the whole container.
+- **Webview content is clipped to its view.** A `<dialog>` cannot draw outside the iframe, but a
+  modal `showInformationMessage` with `detail` can.
+  - In the custom dialog style, `detail` keeps its line breaks (`white-space: pre-wrap`).
+  - Esc and the X both return the Cancel choice.
+  - Native dialogs are the default style. On macOS a native dialog has no X; Esc still cancels.

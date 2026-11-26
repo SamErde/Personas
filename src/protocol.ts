@@ -132,10 +132,9 @@ export type VsCodeProfilesToHost =
   | { type: 'reviewOrphans' };
 
 export type HostToPowerShellProfiles =
-  | { type: 'powerShellState'; inventory: PowerShellInventory; allowRuntimeDiscovery: boolean }
-  | { type: 'showPowerShellHelp' };
+  | { type: 'powerShellState'; inventory: PowerShellInventory; allowRuntimeDiscovery: boolean };
 
-/** Refresh and Help are buttons in the view's title bar, so the host starts them; the page sends the rest. */
+/** Refresh is a button in the view's title bar, so the host starts it; the page sends the rest. */
 export type PowerShellAction = {
   type: 'powerShellAction';
   action: 'refresh' | 'openSettings' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal';

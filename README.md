@@ -20,14 +20,14 @@ Personas brings your VS Code profiles and their extensions together in one view.
 - **Current workspace status**: When a folder or workspace is open, a separate column reports `Enabled`, `Not enabled`, `Not installed in profile`, `Workspace-local`, or `Unknown` from supported VS Code evidence. Select an `Enabled`, `Not enabled`, or `Workspace-local` cell to open the extension in VS Code's Extensions view, where you can enable or disable it for the workspace.
 - **Local workspace extensions**: Valid unpacked extensions under `.vscode/extensions` appear as candidates, including ones that exist only in the workspace. Personas calls one installed only when VS Code reports that exact local path as effective.
 - **Orphan cleanup**: Extension versions on disk that no profile references appear struck through under **All**. **Review N orphaned…** lists them with their size and last-modified date, and moves the ones you choose to the Trash or Recycle Bin.
-- **A sidebar you can arrange**: Home, the Personas sidebar, has one view per area: **VS Code Profiles**, **PowerShell Profiles**, and **Git Configuration**. Collapse, reorder, or hide them as you would any VS Code view. Showing VS Code Profiles also opens the Extension Matrix; turn that off with the `personas.extensionMatrix.openWithSidebar` setting. Collapsing the view stops it too, but only while another view is shown too: when you hide the others, VS Code expands the one view that is left and removes its header, so it can no longer be collapsed.
+- **A sidebar you can arrange**: Home, the Personas sidebar, has one view per area: **VS Code Profiles**, **PowerShell Profiles**, and **Git Configuration**. Collapse, reorder, or hide them as you would any VS Code view. Showing VS Code Profiles also opens the Extension Matrix; turn that off with the `personas.extensionMatrix.openWithSidebar` setting. Collapsing the view stops it too, but only while another view is shown too: when you hide the others, VS Code expands the one view that is left and removes its header, so it can no longer be collapsed. The first time a workspace shows Home, VS Code Profiles gets the most height and Git Configuration the least; after that VS Code keeps whatever sizes you drag the dividers to. VS Code shows Git Configuration's title bar buttons only while you hover over or focus that view; set `workbench.view.alwaysShowHeaderActions` to show them all the time.
 - **PowerShell profiles**: Your profile scripts are grouped by PowerShell edition and listed in the order PowerShell loads them. [More about PowerShell profiles](#powershell-profiles).
 - **Git configuration**: See the Git identity in effect for the current repository, and which config file each value comes from. [More about Git configuration](#git-configuration).
 - **Privacy**: Personas never collects or transmits any data.
 
 ## Home settings
 
-Choose **Open Personas Settings** from the `…` menu in any Home view’s title bar,
+Select the gear (**Open Personas Settings**) in any Home view’s title bar,
 or run **Personas: Open Personas Settings** from the Command Palette. Both open
 VS Code Settings filtered to Personas. The `…` on the Personas container itself
 lets you show and hide views.
@@ -133,8 +133,9 @@ On Windows, turn off `personas.powerShellProfiles.includeWindowsPowerShell` to
 exclude Windows PowerShell 5.1 and ISE from discovery, listing, and editing.
 PowerShell 7 remains available. The edition preference supports workspace overrides.
 
-The **?** in the PowerShell Profiles title bar opens section help with a link to
-Microsoft Learn about profiles and their load order.
+The **?** in the PowerShell Profiles title bar opens a help dialog. From there,
+**Open PowerShell Settings** shows the PowerShell Profiles settings and
+**Profiles on Microsoft Learn** explains profiles and their load order.
 
 This feature currently supports local desktop windows. WSL is the next planned
 scope; SSH and container windows may follow. Preview and custom installations,

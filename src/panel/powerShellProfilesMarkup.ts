@@ -2,21 +2,6 @@
 export const powerShellProfilesStyles = `
   /* VS Code dims secondary list text by opacity; several themes give description text the foreground color. */
   #powershell { margin: 0 -1rem; --ps-quiet: color-mix(in srgb, var(--vscode-foreground) 72%, transparent); }
-  #ps-help {
-    box-sizing: border-box;
-    width: min(30rem, calc(100% - 1rem));
-    max-height: calc(100vh - 0.5rem);
-    overflow: auto;
-    overscroll-behavior: contain;
-    margin: 0.25rem auto auto;
-    padding: 0.75rem;
-    background: var(--vscode-editorWidget-background);
-    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
-    border: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, var(--vscode-focusBorder)));
-  }
-  #ps-help h3 { margin: 0; }
-  #ps-help p { margin: 0.65em 0; }
-  #ps-help button { margin: 0.75em 0 0; }
   #powershell [hidden] { display: none; }
   .ps-message { margin: 0; padding: 0.15rem 1rem; color: var(--ps-quiet); }
   button.ps-settings {
@@ -169,12 +154,4 @@ export const powerShellProfilesStyles = `
 
 /** The page's skeleton; src/webview/powershell.ts draws the list inside it. */
 export const powerShellProfilesBody =
-  `<div id="powershell" tabindex="-1" aria-live="polite"><p class="ps-message">Discovering PowerShell profiles…</p></div>
-  <dialog id="ps-help" aria-labelledby="ps-help-heading">
-    <h3 id="ps-help-heading" tabindex="-1" autofocus>PowerShell Profiles help</h3>
-    <p><strong>How are paths found?</strong> Personas checks known locations without starting PowerShell, including when you refresh.</p>
-    <p><strong>What does runtime discovery allow?</strong> If a path is unresolved, enable Allow Runtime Discovery in Personas Settings to use “Run … to resolve”. Each click starts the named executable once with profiles disabled. Successful results are kept for this session.</p>
-    <p><strong>Can I create a missing profile?</strong> Yes, once its location is known and writable.</p>
-    <a href="https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles">Profiles and load order on Microsoft Learn</a>
-    <div><button id="ps-help-close" type="button">Close</button></div>
-  </dialog>`;
+  `<div id="powershell" tabindex="-1" aria-live="polite"><p class="ps-message">Discovering PowerShell profiles…</p></div>`;

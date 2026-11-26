@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PowerShellProfilesViewProvider } from '../../src/panel/powerShellProfilesView';
 import { PowerShellService } from '../../src/powershell/service';
@@ -66,21 +65,6 @@ it('applies edition exclusion to the first cached paint and to stale row actions
   expect(vscodeState.commands).not.toContain('revealFileInOS');
 });
 
-it('does not replay Help after a failed attempt to focus the view', async () => {
-  const { provider, page } = show();
-  await settled(page.posted, 1);
-  page.setVisible(false);
-  const focus = vi.spyOn(vscode.commands, 'executeCommand').mockRejectedValueOnce(new Error('Focus failed'));
-  try {
-    await expect(provider.help()).rejects.toThrow('Focus failed');
-    page.setVisible(true);
-    page.ready();
-    expect(page.posted).not.toContainEqual({type:'showPowerShellHelp'});
-  } finally {
-    focus.mockRestore();
-  }
-});
-
 it('opens the shared Settings command without starting discovery', async () => {
   const { page, discover } = show();
   await settled(page.posted, 1);
@@ -96,29 +80,4 @@ it('refreshes from the view title button', async () => {
   await provider.refresh();
   expect(discover).toHaveBeenCalledTimes(2);
   expect(page.posted).toHaveLength(2);
-});
-
-it('opens section help in the visible page and waits for a hidden page to become ready', async () => {
-  const { provider, page } = show();
-  await settled(page.posted, 1);
-  await provider.help();
-  expect(page.posted.at(-1)).toEqual({type:'showPowerShellHelp'});
-  page.posted.length = 0;
-  page.setVisible(false);
-  await provider.help();
-  page.setVisible(true);
-  expect(vscodeState.commands).toContain('personas.powerShellProfiles.focus');
-  page.ready();
-  expect(page.posted).toContainEqual({type:'showPowerShellHelp'});
-});
-
-it('cancels pending Help if the page is hidden before it becomes ready', async () => {
-  const { provider, page } = show();
-  await settled(page.posted, 1);
-  page.setVisible(false);
-  page.setVisible(true);
-  await provider.help();
-  page.setVisible(false);
-  page.reshow();
-  expect(page.posted).not.toContainEqual({type:'showPowerShellHelp'});
 });
