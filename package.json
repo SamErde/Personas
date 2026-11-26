@@ -1,7 +1,7 @@
 {
   "name": "personas",
   "displayName": "Personas",
-  "description": "Easily manage your dev personas: the different Git identities, VS Code profiles, and extensions that you need in different contexts.",
+  "description": "See and manage your developer personas in one sidebar: VS Code profiles and their extensions, PowerShell profiles, and the Git identity in effect.",
   "version": "1.5.0",
   "publisher": "SamErde",
   "license": "MIT",
@@ -10,6 +10,24 @@
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "profiles",
+    "vscode profiles",
+    "profile manager",
+    "extensions",
+    "extension manager",
+    "persona",
+    "identity",
+    "git",
+    "git config",
+    "git identity",
+    "includeIf",
+    "powershell",
+    "powershell profile",
+    "workspace",
+    "orphaned extensions",
+    "cleanup"
   ],
   "extensionKind": [
     "ui"
@@ -176,7 +194,7 @@
         "personas.showAgentsWindowProfile": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show VS Code's built-in Agents window profile in the Extension Matrix and Home. It uses the Default profile's extensions, so its column always matches Default."
+          "markdownDescription": "Show VS Code's built-in Agents window profile in the Extension Matrix and the Personas sidebar. It uses the Default profile's extensions, so its column always matches Default."
         }
       }
     }

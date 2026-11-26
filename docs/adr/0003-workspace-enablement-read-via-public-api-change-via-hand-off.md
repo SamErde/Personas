@@ -24,3 +24,18 @@ ADR-0001, a change no official CLI supports ships as a guided hand-off.
   Not installed in profile or Unknown.
 - After the user changes enablement, VS Code prompts to restart or reload; the column then
   reflects the change (manual scenarios 6-7 in `docs/local-build-test-and-release.md`).
+
+## Boundaries
+
+Workspace status stays within these limits, carried over from the implementation plan:
+
+- Personas does not read `state.vscdb`, add SQLite, or depend on proposed or private VS Code APIs.
+  Where the stable API can't support a claim, the status stays `Unknown`.
+- The workspace is not a synthetic profile. Workspace data lives in its own inventory and never
+  changes a profile's installed list or orphan detection.
+- `Extension.isActive` is not an enablement signal: activation is lazy.
+- `.vscode/extensions.json` recommendations are never treated as candidates or installations.
+- A workspace-only row has read-only profile cells and never calls the `code` CLI, because a
+  workspace-local extension may not be published, or may differ from a published extension with
+  the same ID.
+- The desktop-local, no-remote boundary is kept.

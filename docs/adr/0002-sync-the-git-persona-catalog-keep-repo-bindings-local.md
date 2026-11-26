@@ -1,6 +1,8 @@
 # ADR-0002: Sync the Git persona catalog; keep repo bindings local
 
-**Status:** Accepted
+**Status:** Accepted, not yet implemented. Stage 1 of Git personas, the read-only Git
+Configuration view, shipped in 1.5.0 without a catalog or bindings. The later stages that
+this decision governs are tracked in [#162](https://github.com/SamErde/Personas/issues/162).
 
 ## Decision
 
@@ -23,4 +25,4 @@ leak.
 - A binding whose persona was deleted (possibly on another machine) is reported as stale,
   never silently remapped.
 
-See `docs/superpowers/specs/2026-07-09-git-identity-personas-design.md`.
+See `docs/design/2026-07-09-git-identity-personas-design.md`.

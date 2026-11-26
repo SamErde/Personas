@@ -71,7 +71,7 @@
 ## 2026-07 / 08 — Git identity design and v1.0.0
 
 - **PR #24** imported this project memory and history; **PR #25** added the Git identity
-  personas design (`docs/superpowers/specs/2026-07-09-git-identity-personas-design.md`).
+  personas design (`docs/design/2026-07-09-git-identity-personas-design.md`).
 - Current-workspace extension status shipped (`c063ac7`): a read-only Current workspace
   card and matrix column with Enabled / Not enabled / Not installed in profile /
   Workspace-local / Unknown statuses. **PR #38** fixed the local sandbox testing guide.
@@ -118,3 +118,62 @@
     "Enable (Workspace)" / "Disable (Workspace)" actions (ADR-0003).
 - Test counts at v1.2.0: 215 unit tests passing (2 skipped) across 12 files, plus 2 integration
   tests.
+
+## 2026-11 — PowerShell profiles, matrix filters, and the three-view sidebar (v1.3.0 → v1.5.0)
+
+From here on, [CHANGELOG.md](../CHANGELOG.md) is the authoritative record. These are the
+highlights:
+
+- **v1.3.0** (2026-11-15):
+  - PowerShell profile management in Home (**PR #116**);
+  - the Agents window profile shown for what it is (**PR #110**);
+  - outlined buttons in high-contrast themes (**PR #118**).
+- **v1.4.0** (2026-11-21):
+  - accessible matrix cells with distinct states (**PR #131**);
+  - focus kept through rebuilds (**PR #134**);
+  - extension categories and install sources (**PR #130**), with a filter model, publisher
+    search, and session view state (**PR #135**);
+  - category, publisher, and source filters (**PR #137**) and group-by (**PR #138**);
+  - one toolbar style with a Legend (**PR #147**);
+  - a shared profile order (**PR #132**).
+- **v1.5.0** (2026-11-26):
+  - each Home section loads once per show (**PR #153**);
+  - Home split into separate VS Code Profiles and PowerShell Profiles views (**PR #155**);
+  - a read-only Git Configuration view, stage 1 of Git personas (**PR #156**);
+  - Home settings, with PowerShell runtime discovery off by default;
+  - default view sizes, a settings gear, and PowerShell help in a dialog (**PR #161**).
+- **Documentation refresh** (2026-11-26):
+  - a new README and user guide;
+  - planned work moved into tracking issues #162–#168;
+  - the stale documents listed below removed.
+
+## Renamed identifiers
+
+The extension was renamed twice, Visex → Profile Extension Manager → Personas (2026-07-06).
+Don't reintroduce these old identifiers:
+
+| Old | Current |
+| --- | --- |
+| `profileExtensionManager.*` command, view, and setting IDs | `personas.*` |
+| `pem-readonly` URI scheme | `personas-readonly` |
+| `PEM_DEV_ALLOW` | `PERSONAS_DEV_ALLOW` |
+| `VISEX_IT_*` integration-test variables | `PERSONAS_IT_*` |
+
+Historical CHANGELOG entries and commit links keep the old names on purpose.
+
+## Removed documents
+
+These documents were removed in the documentation refresh. Their lasting content moved to the
+places shown, and the originals remain available at the last commit that contained them.
+
+| Document | Where its content went |
+| --- | --- |
+| [v1 implementation plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/superpowers/plans/2026-07-03-visex-v1.md) | Facts in `docs/spikes/findings.md`; deferred items in #164 and #165 |
+| [Current workspace status plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-08-10-current-workspace-extension-status.md) and its [agent prompt](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-08-10-current-workspace-extension-status-prompt.md) | Boundaries in ADR-0003; open scenarios in #167 |
+| [Extension Matrix filters plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-11-15-extension-matrix-filters.md) | ADR-0004; install-source fact in `findings.md` |
+| [Home layout polish plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-11-26-home-layout-polish.md) | `findings.md` (Home view layout, Opening Settings) |
+| [Project memory index](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/project-memory/MEMORY.md), [project state](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/project-memory/profile-extension-manager-project.md), and [release workflow](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/project-memory/personas-release-workflow.md) | Renamed identifiers above; release realignment in `docs/local-build-test-and-release.md` |
+| [Upstream apply-to-all-profiles draft](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/upstream/vscode-toggle-apply-all-profiles.md) | #166 |
+
+The design specs moved from `docs/superpowers/specs/` to [`docs/design/`](design/).
+

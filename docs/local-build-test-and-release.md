@@ -7,7 +7,7 @@ need a new version, while release-please owns every committed version change.
 
 ## Prerequisites
 
-- Node.js (managed via `.nvmrc` and currently using the latest LTS release)
+- Node.js, the version pinned in `.nvmrc`
 - npm
 - VS Code 1.101 or newer with the `code` command available in `PATH`
 - A PowerShell terminal opened at the repository root
@@ -135,7 +135,7 @@ All `code` commands used for the sandbox must retain the same `--user-data-dir` 
 ## Repeatable UI iteration
 
 The **Run Extension** F5 configuration deliberately leaves Personas' development-host safety guard
-enabled. It is useful for verifying that guard, but it does not load the functional Personas UI. For
+enabled. It has no build task, so run `npm run build` (or keep `npm run watch` running) first. It is useful for verifying that guard, but it does not load the functional Personas UI. For
 UI iteration, keep the supported packaged sandbox open instead:
 
 ```powershell
@@ -163,8 +163,8 @@ workspace disposable while exercising the same production-host safety behavior t
 Trust only the disposable fixture workspace. In the sandbox, open the Personas activity-bar icon
 and run **Personas: Open Extension Matrix** if the matrix does not open automatically.
 
-1. Open an empty window and verify that profile cards remain but the Current workspace card and
-   matrix column are absent.
+1. Open an empty window and verify that the VS Code Profiles view still lists every profile, but the
+   Current workspace card and matrix column are absent.
 2. Open a single folder and verify one read-only Current workspace card and one visually separated
    final matrix column using the folder name.
 3. Open `$WorkspacePath` and verify that the saved multi-root workspace produces one aggregate card
@@ -184,11 +184,11 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
 10. Open the Extensions view, find the local fixture under **Workspace Recommendations**, install
     it, and verify a workspace-only row with `Workspace-local` status.
 11. Verify that a workspace-only row has no profile cell toggles or profile bulk actions.
-12. Introduce duplicate candidate IDs in different workspace roots and verify one deterministic row
+12. (Not yet run: [#167](https://github.com/SamErde/Personas/issues/167).) Introduce duplicate candidate IDs in different workspace roots and verify one deterministic row
     plus a warning.
-13. Exercise malformed or unreadable candidate/profile-association data and verify a warning,
+13. (Not yet run: #167.) Exercise malformed or unreadable candidate/profile-association data and verify a warning,
     `Unknown`, and no enabled mutation action.
-14. Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
+14. (Not yet run: #167.) Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
     unchanged.
 15. Hover over and tab through matrix cells. Verify that the row and column are highlighted, with
     stronger emphasis on the column header and the extension name. Check a light, a dark, and both
@@ -200,9 +200,47 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
     extension names stay pinned, with their row dividers, and that the top-left header stays on top
     when you scroll both ways.
 
-The inert profile fixture can be installed in the same sandbox when an ordinary VSIX is useful:
+The scenarios below cover the sidebar views.
+
+18. **VS Code Profiles.** Verify the profile order (Default, then the Agents window profile, then the
+    rest by name), each profile's direct and applied-to-all counts, that **✎** opens the profile's
+    raw extension list, and that **Open Extension Matrix** opens the matrix. Turn
+    `personas.showAgentsWindowProfile` off and verify the Agents window profile disappears from the
+    view and the matrix.
+19. **Opening the matrix with the sidebar.** With `personas.extensionMatrix.openWithSidebar` on,
+    showing the VS Code Profiles view opens the matrix, including on window restore. Turn it off and
+    verify it doesn't. Set only the legacy `personas.openMatrixOnActivityBarClick` to `false` and
+    verify it is honored.
+20. **Title bars and settings.** Every view shows the settings gear and no `...`. Git
+    Configuration's actions appear on hover or focus, and always with
+    `workbench.view.alwaysShowHeaderActions` on. Starting from Settings left on the Workspace tab
+    with `workbench.settings.editor` set to `json`, the gear opens graphical User Settings filtered
+    to `@ext:SamErde.personas`.
+21. **View sizes.** In a workspace that has never shown the sidebar, the views split about 5/3/2.
+22. **PowerShell Profiles, files.** Select a missing profile and confirm Create and Open. Then check
+    Copy Path, Reveal in File Manager, and Delete PowerShell Profile… (Move to Trash), which must refuse while the file has
+    unsaved edits. A linked profile can be opened, but not trashed through the link.
+23. **PowerShell Profiles, discovery.** With an unresolved location, verify **Runtime discovery is
+    off**, turn on `personas.powerShellProfiles.allowRuntimeDiscovery`, and run **Run … to resolve**.
+    On Windows, turn off `personas.powerShellProfiles.includeWindowsPowerShell`, with and without a
+    workspace override.
+24. **PowerShell help.** Open help from the **?** and from the Command Palette, also with the view
+    collapsed, in both `window.dialogStyle` values. Check that Open PowerShell Settings, Profiles on
+    Microsoft Learn, Cancel, Esc, and the X (where shown) each behave as expected, and that help
+    doesn't reveal or expand the view.
+25. **Git Configuration.** In a repository with a global identity and an `includeIf` file, verify the
+    repository name in the title, `user.name` and `user.email` with their sources, and the Applied,
+    Not applied here, Empty, and Missing statuses. Check that each file's open button opens it.
+    Check that **Show Effective Git Configuration** opens a read-only document. Check the no-repository
+    view, Git missing from `PATH`, and `git.path`.
+
+The inert profile fixture can be installed in the same sandbox when an ordinary VSIX is useful. It
+isn't committed: `npm run test:integration` packages it, or package it yourself first:
 
 ```powershell
+Push-Location .\test\fixtures\hello-ext
+node ..\..\..\node_modules\@vscode\vsce\vsce package --allow-missing-repository --out fixture.vsix
+Pop-Location
 $FixtureVsix = (Resolve-Path '.\test\fixtures\hello-ext\fixture.vsix').Path
 & code @CodeArgs --install-extension $FixtureVsix --force
 ```
@@ -245,8 +283,8 @@ The normal publication sequence is:
 3. Review the release PR and confirm that `CHANGELOG.md`, `package.json`, `package-lock.json`, and
    `.release-please-manifest.json` agree.
 4. Merge the release PR.
-5. The release workflow runs lint, build, unit tests, and disposable integration tests; packages the
-   VSIX; attaches it to a draft GitHub release; and publishes the GitHub release.
+5. The release workflow runs lint, build, unit tests, and disposable integration tests (on Linux);
+   packages the VSIX; attaches it to a draft GitHub release; and publishes the GitHub release.
 6. A separate job publishes that exact released VSIX to the VS Code Marketplace using the
    `VSCE_PAT` repository secret. A Marketplace failure remains visible without changing the sealed
    GitHub release.
@@ -267,6 +305,15 @@ locked in `package-lock.json`, as the workflow does. This is the only exception 
 `vsce publish` manually" rule. It must use `--packagePath` with the released file (never a version
 argument such as `patch`, which bumps and publishes a version release-please does not know about),
 and an agent must not run it.
+
+### Realigning release-please after drift (maintainer only)
+
+If versions were ever published outside release-please (for example, a manual `vsce publish patch`
+in July 2026), the manifest, tags, and GitHub releases drift apart. release-please then opens bogus
+PRs that re-collect history or roll the version backward. To realign, the maintainer sets
+`.release-please-manifest.json` `"."` to the **actually published** version that has a matching
+`vX.Y.Z` tag, merges that, and if needed adds a `Release-As: X.Y.Z` footer for the next version.
+This is the only time the manifest is edited by hand, and an agent never does it.
 
 ## Cleanup
 

@@ -1,7 +1,14 @@
 # Personas: Git Identity Personas Design
 
 **Date:** 2026-07-09
-**Status:** Approved design, pending implementation plan
+**Status:** Approved design, partly delivered. Stage 1 shipped in 1.5.0 as the read-only Git
+Configuration view (#109, #156): it shows the effective identity and where each value comes from,
+including include and `includeIf` files. It differs from this design in two ways. There is no
+repository picker: the current repository is the one containing the active editor's file, or else
+the first workspace folder (see `GLOSSARY.md`). And the identity appears in its own sidebar view
+rather than a Home section. The catalog, bindings, and apply flow (stage 2), and the later items,
+are tracked in [#162](https://github.com/SamErde/Personas/issues/162). ADR-0001 and ADR-0002
+record the governing decisions.
 
 ## Purpose
 
