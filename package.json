@@ -157,6 +157,7 @@
   },
   "scripts": {
     "build": "node esbuild.mjs",
+    "clean": "node scripts/clean.mjs",
     "vscode:prepublish": "npm run build",
     "watch": "node esbuild.mjs --watch",
     "lint": "tsc --noEmit",
@@ -173,6 +174,7 @@
     "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.28.2",
     "jsdom": "^31.0.1",
+    "koffi": "3.3.8",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"
   },
@@ -180,5 +182,10 @@
     "@vscode/vsce": {
       "minimatch": "^11.0.1"
     }
+  },
+  "allowScripts": {
+    "koffi@3.3.8": false,
+    "esbuild@0.28.2": true,
+    "@vscode/vsce-sign@2.1.1": true
   }
 }

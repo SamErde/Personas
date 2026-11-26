@@ -274,3 +274,30 @@ When testing is complete, close every VS Code window launched with the disposabl
 entire sandbox is under the unique path stored in `$TestRoot`; inspect that value before removing
 the directory. The packaged VSIX files under `releases` are gitignored and may be retained for
 additional local testing.
+
+Stop integration runs and close their VS Code windows before cleanup. Preview the eligible
+directories and their estimated file sizes, then add `--force` to remove them.
+
+```powershell
+npm run clean
+npm run clean -- --force
+```
+
+Cleanup removes the entire generated `dist/` and `out-test/` directories. Under
+`.vscode-test/` it recognizes desktop release, Insiders and commit-pinned installations.
+It keeps the `engines.vscode` minimum and the current stable release for every platform.
+Unknown cache entries and linked installs are left in place.
+
+If the stable release list is unavailable or invalid, cleanup keeps the minimum and the
+newest numeric release with a regular `is-complete` marker for each platform. A platform
+with no confirmed complete release keeps all its installs. The integration runner can still
+try to download a newer, incomplete minimum even when an older complete copy is available.
+
+Cleanup holds the selected directories open while sizing and removing their contents.
+On Linux and macOS it operates from directory descriptors. On Windows it holds handles
+that prevent the directories from being renamed or replaced. The Node-only CLI uses the
+Koffi development dependency for these OS calls. Cleanup skips linked or malformed roots
+and excludes nested link destinations from size estimates. If it cannot inspect a completion
+marker, it skips that platform. If it cannot inspect or remove a target, it reports the
+error, continues with independent targets and
+exits nonzero. The summary counts only successfully listed or removed targets.

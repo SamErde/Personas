@@ -7,5 +7,6 @@
   "license": "MIT",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other"],
+  "files": ["LICENSE", "README.md"],
   "contributes": {}
 }
