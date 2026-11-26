@@ -90,6 +90,16 @@ it('uses the system folders as Windows PowerShell homes while a .NET tool shim s
       },
       realpath:async file=>String(file) as never,
     });
+    const inspected: string[] = [];
+    const included = await discoverPowerShell({...fs, readdir:async()=>[] as never,
+      stat:async file=>{
+        inspected.push(posix(file));
+        throw Object.assign(new Error('missing'), {code:'ENOENT'});
+      },
+    }, false);
+    expect(included.map(item=>item.edition)).toEqual(['PowerShell 7']);
+    expect(inspected.some(file=>executables.includes(file))).toBe(false);
+
     const windows=editions.find(edition=>edition.edition==='Windows PowerShell');
     expect(windows?.installations.map(i=>posix(i.home))).toEqual(executables.map(file=>file.replace('/powershell.exe','')));
     const seven=editions.find(edition=>edition.edition==='PowerShell 7');

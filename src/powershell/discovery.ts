@@ -55,7 +55,7 @@ async function locate(file: string, platform: string, io: DiscoveryIo, errors: s
   }
 }
 
-export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionInfo[]> {
+export async function discoverPowerShell(io: DiscoveryIo = fs, includeWindowsPowerShell = true): Promise<EditionInfo[]> {
   const errorsByEdition = new Map<Edition, string[]>();
   const errorsFor = (edition: Edition): string[] => {
     let errors = errorsByEdition.get(edition);
@@ -73,7 +73,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
       const children = await io.readdir(directory).catch(error => {reportDiscoveryError(directory, error, errorsFor('PowerShell 7')); return [];});
       for (const child of children.filter(c => /^7(?:\.\d+)*$/.test(c))) add(path.join(directory, child, 'pwsh.exe'));
     }
-    if (process.env.SystemRoot) {
+    if (includeWindowsPowerShell && process.env.SystemRoot) {
       for (const system of ['System32', 'SysWOW64']) add(
         path.join(process.env.SystemRoot, system, 'WindowsPowerShell', 'v1.0', 'powershell.exe'), 'Windows PowerShell');
     }
@@ -110,7 +110,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
     if (!installs.some(i => i.id.toLowerCase() === installation.id.toLowerCase() && platform === 'win32' || i.id === installation.id)) installs.push(installation);
     found.set(candidate.edition, installs);
   }
-  const editions: Edition[] = platform === 'win32' ? ['PowerShell 7', 'Windows PowerShell'] : ['PowerShell 7'];
+  const editions: Edition[] = platform === 'win32' && includeWindowsPowerShell ? ['PowerShell 7', 'Windows PowerShell'] : ['PowerShell 7'];
   return editions.map(edition => {
     const errors = errorsFor(edition);
     const installations = found.get(edition) ?? [];
@@ -118,7 +118,7 @@ export async function discoverPowerShell(io: DiscoveryIo = fs): Promise<EditionI
       edition, installations,
       userDirectory: installations.length ? userProfileDirectory(platform, edition, process.env, home, documents) : undefined,
       reason: errors.length ? errors.join('; ') : !installations.length ? 'Installation not found'
-        : platform === 'win32' && !documents ? 'Documents location unresolved. Run PowerShell from this section to resolve it.' : undefined,
+        : platform === 'win32' && !documents ? 'Documents location unresolved.' : undefined,
     };
   });
 }

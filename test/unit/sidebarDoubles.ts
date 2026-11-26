@@ -10,9 +10,11 @@ export const vscodeState = {
   settings: {} as Record<string, Inspected>,
   /** URLs opened in the browser. */
   opened: [] as string[],
+  errors: [] as string[],
   reset(): void {
     this.commands.length = 0;
     this.opened.length = 0;
+    this.errors.length = 0;
     this.settings = {};
   },
 };
@@ -51,11 +53,12 @@ export function vscodeDouble() {
         vscodeState.commands.push(command);
       },
     },
-    window: { showErrorMessage: () => undefined },
+    window: { showErrorMessage: (message: string) => vscodeState.errors.push(message) },
     workspace: {
       textDocuments: [],
       getConfiguration: () => ({
-        get: <T>(_key: string, fallback: T) => fallback,
+        get: <T>(key: string, fallback: T) =>
+          vscodeState.settings[key]?.workspaceValue ?? vscodeState.settings[key]?.globalValue ?? fallback,
         inspect: (key: string) => vscodeState.settings[key],
       }),
       onDidSaveTextDocument: event,

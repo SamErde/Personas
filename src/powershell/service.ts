@@ -1,4 +1,4 @@
-import { buildProfileLocations, type PowerShellInventory, type ProfileRow } from './profiles';
+import { buildProfileLocations, type PowerShellInventory, type PowerShellPreferences, type ProfileRow } from './profiles';
 import { discoverPowerShell, isPowerShellHome, probeInstallation } from './discovery';
 import { inspectProfile } from './files';
 
@@ -6,13 +6,13 @@ export class PowerShellService {
   private cached = new Map<string, {home: string; userDirectory: string}>();
   private current: PowerShellInventory = { editions: [], rows: [] };
   constructor(
-    private readonly discover = discoverPowerShell,
+    private readonly discover = (includeWindowsPowerShell: boolean) => discoverPowerShell(undefined, includeWindowsPowerShell),
     private readonly probe = probeInstallation,
     private readonly platform = process.platform,
     private readonly holdsPowerShell = isPowerShellHome,
   ) {}
-  async refresh(): Promise<PowerShellInventory> {
-    const editions = await this.discover();
+  async refresh(includeWindowsPowerShell = true): Promise<PowerShellInventory> {
+    const editions = await this.discover(includeWindowsPowerShell);
     for (const edition of editions) {
       for (const installation of edition.installations) {
         let result = this.cached.get(installation.executable);
@@ -37,8 +37,10 @@ export class PowerShellService {
   }
   get snapshot(): PowerShellInventory { return this.current; }
   row(id: string): ProfileRow | undefined { return this.current.rows.find(row => row.id === id); }
-  async resolve(installationId: string): Promise<void> {
+  async resolve(installationId: string, preferences: PowerShellPreferences): Promise<void> {
+    if (!preferences.allowRuntimeDiscovery) throw new Error('Runtime discovery is off');
     for (const edition of this.current.editions) {
+      if (!preferences.includeWindowsPowerShell && edition.edition === 'Windows PowerShell') continue;
       const installation = edition.installations.find(i => i.id === installationId);
       if (!installation) continue;
       if (edition.userDirectory && installation.home) return;

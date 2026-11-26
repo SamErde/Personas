@@ -97,6 +97,11 @@ folder being inspected. It works in local desktop windows only.
 
 ## PowerShell profiles
 
+Choose **Open Personas Settings** from the `…` menu in any Home view’s title bar,
+or run **Personas: Open Personas Settings** from the Command Palette. Both open
+VS Code Settings filtered to Personas. The `…` on the Personas container itself
+lets you show and hide views.
+
 Home, the Personas sidebar, includes a PowerShell Profiles view. It lists the
 PowerShell profiles that exist, grouped by edition and labeled by host and
 scope, in the order PowerShell loads them. Locations that have no script yet
@@ -112,13 +117,21 @@ or unavailable Trash. Linked profiles can be edited, but use the file manager
 to remove a link: the extension cannot guarantee link-only Trash behavior on
 every platform.
 
-Discovery is passive by default and respects redirected Documents information.
-When a location cannot be resolved, the view says so and offers to run the
-detected executable (for example, "Run pwsh.exe to resolve"). That action
-launches it once with profiles disabled and a five-second timeout. Successful
-results are cached for the session. The Refresh and Help buttons are in the
-view's title bar: Refresh never launches PowerShell, and Help opens Microsoft's
-about_Profiles documentation.
+Passive discovery respects redirected Documents information. Opening or refreshing
+the view finds profile paths without starting PowerShell. When an installed
+edition has an unresolved location and runtime discovery is off, the view says
+**Runtime discovery is off**. To allow an explicit fallback, enable
+`personas.powerShellProfiles.allowRuntimeDiscovery` in this machine's user settings.
+Then choose the named executable, for example **Run pwsh.exe to resolve**. Each
+click launches it once with profiles disabled and a five-second timeout. Successful
+results stay available for the session, including after you turn runtime discovery off.
+
+On Windows, turn off `personas.powerShellProfiles.includeWindowsPowerShell` to
+exclude Windows PowerShell 5.1 and ISE from discovery, listing, and editing.
+PowerShell 7 remains available. The edition preference supports workspace overrides.
+
+The **?** in the PowerShell Profiles title bar opens section help with a link to
+Microsoft Learn about profiles and their load order.
 
 This feature currently supports local desktop windows. WSL is the next planned
 scope; SSH and container windows may follow. Preview and custom installations,

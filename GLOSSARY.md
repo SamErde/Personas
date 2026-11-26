@@ -42,6 +42,12 @@ _Avoid_: install everywhere, install in all profiles
 A startup script stored at a standard, user- and host-scoped location that PowerShell loads automatically when starting a session with profile loading enabled. It customizes the shell through variables, functions, modules, prompts, and other session settings.
 _Avoid_: unqualified "profile", VS Code profile, persona
 
+**Passive discovery**:
+Finding PowerShell installations and profile locations without starting PowerShell.
+
+**Runtime discovery**:
+Starting a detected PowerShell executable at the user's request to resolve a profile location that passive discovery could not determine.
+
 ### Git configuration
 
 **Current repository**:
