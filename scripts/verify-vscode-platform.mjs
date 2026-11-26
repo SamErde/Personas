@@ -143,6 +143,15 @@ async function runProbe() {
     '--out', vsixPath,
   ], { cwd: path.join(repoRoot, 'test', 'fixtures', 'hello-ext'), env: isolatedEnv(defaultHome) });
   assert.ok(existsSync(vsixPath), 'target-specific fixture VSIX was not created');
+  const vsixManifest = runCommand(
+    'inspect-target-vsix-manifest',
+    'unzip',
+    ['-p', vsixPath, 'extension.vsixmanifest'],
+    { env: isolatedEnv(defaultHome) },
+  ).stdout;
+  const packagedTarget = vsixManifest.match(/\bTargetPlatform="([^"]+)"/)?.[1];
+  assert.equal(packagedTarget, target, 'VSIX manifest target does not match the runner target');
+  evidence.fixture.vsixManifestTargetPlatform = packagedTarget;
 
   const defaultLayout = layoutForHome(defaultHome);
   const defaultWorkspace = path.join(probeRoot, 'workspace-default');
@@ -651,7 +660,6 @@ function assertFixturePresent(snapshot) {
     [baseFolder, expectedFolder].includes(entry.relativeLocation),
     `fixture folder ${entry.relativeLocation} does not match the supported base or target-suffixed form`,
   );
-  assert.equal(entry.targetPlatform, target, 'fixture manifest did not retain the packaged target platform');
 }
 
 function assertFixtureAbsent(snapshot) {
@@ -683,12 +691,12 @@ function assertTargetFolder(extensionsDir, manifest) {
     [baseFolder, expectedFolder].includes(fixtureEntry.relativeLocation),
     `physical folder ${fixtureEntry.relativeLocation} does not match the supported base or target-suffixed form`,
   );
-  assert.equal(fixtureEntry.targetPlatform, target, 'physical folder manifest did not retain the packaged target platform');
   return {
     allFolders: folders,
     observedFixtureFolder: fixtureEntry.relativeLocation,
     usedTargetSuffix: fixtureEntry.relativeLocation === expectedFolder,
-    targetPlatform: fixtureEntry.targetPlatform,
+    profileManifestTargetPlatform: fixtureEntry.targetPlatform ?? null,
+    vsixManifestTargetPlatform: evidence.fixture.vsixManifestTargetPlatform,
   };
 }
 
