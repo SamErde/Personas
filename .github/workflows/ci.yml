@@ -60,11 +60,13 @@ jobs:
         if: runner.os == 'Linux'
         env:
           PERSONAS_RUNTIME_EVIDENCE: ${{ runner.temp }}/personas-runtime-evidence-Linux.json
+          PERSONAS_IMPLEMENTATION_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: xvfb-run -a npm run test:runtime-paths
       - name: Verify default paths, named profiles, and portable mode (macOS)
         if: runner.os == 'macOS'
         env:
           PERSONAS_RUNTIME_EVIDENCE: ${{ runner.temp }}/personas-runtime-evidence-macOS.json
+          PERSONAS_IMPLEMENTATION_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run test:runtime-paths
       - name: Upload VS Code runtime evidence
         if: always() && runner.os != 'Windows'

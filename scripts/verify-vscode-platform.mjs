@@ -479,7 +479,9 @@ async function waitForValue(predicate, timeoutMs) {
   return predicate();
 }
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function runCli(label, cliPath, args, env) {
   return runCommand(label, cliPath, args, { env, cwd: probeRoot });
@@ -726,6 +728,9 @@ function safeName(value) {
 }
 
 function gitHead() {
+  // pull_request workflows check out a shallow synthetic merge commit, so the workflow passes the
+  // event's head SHA explicitly. Keep it distinct from ci.workflowSha (the tested merge revision).
+  if (process.env.PERSONAS_IMPLEMENTATION_HEAD) return process.env.PERSONAS_IMPLEMENTATION_HEAD;
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
   return result.status === 0 ? result.stdout.trim() : 'unknown';
 }
