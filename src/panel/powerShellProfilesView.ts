@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { PowerShellService } from '../powershell/service';
 import type { HostToPowerShellProfiles, PowerShellProfilesToHost } from '../protocol';
 import { PowerShellController } from './powerShellController';

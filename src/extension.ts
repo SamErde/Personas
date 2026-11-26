@@ -76,8 +76,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VsCodeProfilesViewProvider.viewId, vscodeProfiles),
     vscode.window.registerWebviewViewProvider(PowerShellProfilesViewProvider.viewId, powerShellProfiles),
+    // User Settings, not the last-used tab: a Workspace tab would hide the machine-scoped settings.
     vscode.commands.registerCommand('personas.openSettings', () =>
-      vscode.commands.executeCommand('workbench.action.openSettings', '@ext:SamErde.personas')),
+      vscode.commands.executeCommand('workbench.action.openGlobalSettings', { query: '@ext:SamErde.personas' })),
     // The buttons in the PowerShell Profiles view's title bar.
     vscode.commands.registerCommand('personas.powerShellProfiles.refresh', () => powerShellProfiles.refresh()),
     vscode.commands.registerCommand('personas.powerShellProfiles.help', () => showPowerShellHelp()),

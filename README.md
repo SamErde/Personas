@@ -29,7 +29,7 @@ Personas brings your VS Code profiles and their extensions together in one view.
 
 Select the gear (**Open Personas Settings**) in any Home view’s title bar,
 or run **Personas: Open Personas Settings** from the Command Palette. Both open
-VS Code Settings filtered to Personas. The `…` on the Personas container itself
+VS Code's User Settings filtered to Personas. The `…` on the Personas container itself
 lets you show and hide views.
 
 ## Requirements & Limitations

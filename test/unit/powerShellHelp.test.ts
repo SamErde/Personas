@@ -27,11 +27,11 @@ it('shows the help as a modal dialog with every question and both buttons', asyn
   expect(shown.items).toHaveLength(2);
 });
 
-it('opens Settings filtered to the PowerShell Profiles settings', async () => {
+it('opens User Settings filtered to the PowerShell Profiles settings', async () => {
   vscodeState.informationChoice = 'Open PowerShell Settings';
   await showPowerShellHelp();
-  expect(vscodeState.commands).toEqual(['workbench.action.openSettings']);
-  expect(vscodeState.commandArgs).toEqual([[powerShellSettingsQuery]]);
+  expect(vscodeState.commands).toEqual(['workbench.action.openGlobalSettings']);
+  expect(vscodeState.commandArgs).toEqual([[{ query: powerShellSettingsQuery }]]);
   expect(vscodeState.opened).toEqual([]);
 });
 

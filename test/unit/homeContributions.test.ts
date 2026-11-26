@@ -35,7 +35,7 @@ it('shows Open Personas Settings as a gear at the end of every Home title bar', 
 
 it('puts every Home title action in the title bar itself, so no "..." menu appears', () => {
   for (const view of homeViews) {
-    for (const item of itemsFor(view)) expect(item.group?.startsWith('navigation')).toBe(true);
+    for (const item of itemsFor(view)) expect(item.group).toMatch(/^navigation(@\d+)?$/);
   }
 });
 

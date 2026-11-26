@@ -66,8 +66,10 @@ No ADR: every decision is cheap to reverse. No glossary change: no new domain te
   - `detail` holds the three existing Q&As as plain text: each question on its own line, its
     answer on the next line, and a blank line between pairs. The wording is unchanged except
     for dropping the bold.
-  - **Open PowerShell Settings** runs `workbench.action.openSettings` with
-    `@ext:SamErde.personas powerShellProfiles`. The `@ext` tag limits results to Personas,
+  - **Open PowerShell Settings** runs `workbench.action.openGlobalSettings` with
+    `{ query: '@ext:SamErde.personas powerShellProfiles' }`. It opens User Settings rather than
+    the last-used tab, because the Workspace tab hides the machine-scoped Allow Runtime
+    Discovery setting (adversarial review). `personas.openSettings` gets the same change. The `@ext` tag limits results to Personas,
     and the remaining text is matched case-insensitively against setting IDs
     (`preferencesSearch.ts:199-206`). Only the two `personas.powerShellProfiles.*` settings
     match. The query is ignored when `workbench.settings.editor` is `json`, as it already is

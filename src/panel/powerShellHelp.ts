@@ -34,7 +34,9 @@ export async function showPowerShellHelp(): Promise<void> {
     learnMore,
   );
   if (choice === openSettings) {
-    await vscode.commands.executeCommand('workbench.action.openSettings', powerShellSettingsQuery);
+    // Open User Settings, not the last-used tab: the Workspace tab hides the machine-scoped
+    // Allow Runtime Discovery setting that this help points to.
+    await vscode.commands.executeCommand('workbench.action.openGlobalSettings', { query: powerShellSettingsQuery });
   } else if (choice === learnMore) {
     await vscode.env.openExternal(vscode.Uri.parse(powerShellProfilesDocsUrl));
   }
