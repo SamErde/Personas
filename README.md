@@ -57,7 +57,7 @@ The [user guide](docs/user-guide.md) covers every feature in detail.
 ## Requirements and limitations
 
 - VS Code Stable or Insiders 1.101 or newer, on Windows, macOS, or Linux.
-- Personas manages the local desktop VS Code install it runs in, including custom `--user-data-dir` and `--extensions-dir` locations. Remote windows (SSH, WSL, dev containers) and VS Code for the Web are not supported.
+- Personas manages the local desktop VS Code install it runs in, including true VS Code Portable Mode and custom `--user-data-dir` and `--extensions-dir` locations. Remote windows (SSH, WSL, dev containers) and VS Code for the Web are not supported.
 - The Git Configuration view needs Git, found through VS Code's `git.path` setting or your `PATH`.
 
 ## Settings

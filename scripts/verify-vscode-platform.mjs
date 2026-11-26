@@ -312,6 +312,7 @@ async function runProbe() {
 
   setPhase('exact-build-obsolete-source');
   evidence.obsolete.source = await inspectObsoleteSource(versionInfo.commit);
+  evidence.fixture.folderKeySource = await inspectFolderKeySource(versionInfo.commit);
 
   setPhase('true-portable-mode');
   const portableHome = makeHome('portable-home');
@@ -773,6 +774,32 @@ async function inspectObsoleteSource(commit) {
       obsoleteResource: { symbol: "userExtensionsLocation + '.obsolete'", line: obsoleteResourceLine },
       folderKeyMapsToTrue: { symbol: 'removedExtensions[extensionKey.toString()] = true', line: folderKeyTrueLine },
       jsonSerialization: { symbol: 'JSON.stringify(removed)', line: jsonSerializationLine },
+    },
+  };
+}
+
+async function inspectFolderKeySource(commit) {
+  const sourceUrl = `https://raw.githubusercontent.com/microsoft/vscode/${commit}/src/vs/platform/extensionManagement/common/extensionManagementUtil.ts`;
+  const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(30_000) });
+  assert.ok(response.ok, `cannot read exact-build VS Code folder-key source: HTTP ${response.status}`);
+  const source = await response.text();
+  const lines = source.split('\n');
+  const optionalSuffixRegexLine = lineNumber(lines, 'const ExtensionKeyRegex = ');
+  const parsedTargetLine = lineNumber(lines, 'matches[4] as TargetPlatform || undefined');
+  const undefinedTargetLine = lineNumber(lines, 'readonly targetPlatform: TargetPlatform = TargetPlatform.UNDEFINED');
+  const optionalSuffixSerializationLine = lineNumber(lines, 'this.targetPlatform !== TargetPlatform.UNDEFINED ? `-${this.targetPlatform}` : \'\'');
+  assert.ok(
+    optionalSuffixRegexLine && parsedTargetLine && undefinedTargetLine && optionalSuffixSerializationLine,
+    'exact-build source lacks expected optional target-platform folder-key signals',
+  );
+  return {
+    evidenceType: 'exact-runtime-commit source inspection',
+    url: sourceUrl.replace('raw.githubusercontent.com', 'github.com').replace(`/${commit}/`, `/blob/${commit}/`),
+    signals: {
+      optionalSuffixRegex: { symbol: 'ExtensionKeyRegex optional fourth group', line: optionalSuffixRegexLine },
+      parsesTargetSuffix: { symbol: 'matches[4] as TargetPlatform', line: parsedTargetLine },
+      undefinedTargetIsDefault: { symbol: 'TargetPlatform.UNDEFINED constructor default', line: undefinedTargetLine },
+      serializesSuffixConditionally: { symbol: 'targetPlatform !== UNDEFINED', line: optionalSuffixSerializationLine },
     },
   };
 }

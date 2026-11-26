@@ -33,6 +33,28 @@ describe('resolvePaths', () => {
     expect(p.userDir).toBe('/home/sam/.config/Code/User');
     expect(p.extensionsDir).toBe('/home/sam/.vscode/extensions');
   });
+
+  it('derives the Linux portable layout from the running extension context', () => {
+    const p = resolvePaths({
+      globalStorageFsPath: '/opt/code/data/user-data/User/globalStorage/samerde.personas',
+      extensionFsPath: '/opt/code/data/extensions/samerde.personas-1.5.0',
+      platform: 'linux',
+    });
+    expect(p.userDataDir).toBe('/opt/code/data/user-data');
+    expect(p.storageJson).toBe('/opt/code/data/user-data/User/globalStorage/storage.json');
+    expect(p.extensionsDir).toBe('/opt/code/data/extensions');
+  });
+
+  it('derives the macOS sibling portable layout from the running extension context', () => {
+    const p = resolvePaths({
+      globalStorageFsPath: '/Applications/code-portable-data/user-data/User/globalStorage/samerde.personas',
+      extensionFsPath: '/Applications/code-portable-data/extensions/samerde.personas-1.5.0',
+      platform: 'darwin',
+    });
+    expect(p.userDataDir).toBe('/Applications/code-portable-data/user-data');
+    expect(p.storageJson).toBe('/Applications/code-portable-data/user-data/User/globalStorage/storage.json');
+    expect(p.extensionsDir).toBe('/Applications/code-portable-data/extensions');
+  });
 });
 
 describe('findCli', () => {
