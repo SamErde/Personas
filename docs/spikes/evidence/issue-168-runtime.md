@@ -6,29 +6,27 @@ the GitHub Actions artifacts; the probe is durable CI coverage and can reproduce
 
 ## Provenance
 
-- Implementation head: `845464be5b32b7e9e952fb365c391b9e4f7a3762`
+- Implementation head: `e9115186168dfc693ccff22c3ffe3b1bfcb736e4`
 - VS Code: 1.148.0, commit `661626d0e72f97806550790a98fb87116c9db825`
-- Workflow run: [45887825269](https://github.com/SamErde/Personas/actions/runs/45887825269)
-- macOS evidence: attempt 1, artifact `vscode-runtime-evidence-macOS`, ARM64,
+- Workflow run: [45898779791](https://github.com/SamErde/Personas/actions/runs/45898779791)
+- macOS evidence: artifact `vscode-runtime-evidence-macOS`, ARM64,
   extracted JSON SHA-256
-  `5EBC6E44F85CEF8E3EA628DE2AA0895F90F736921E81738CB83F37F221EF1F68`
-- Linux evidence: attempt 2 after an unrelated existing integration-test flake, artifact
-  `vscode-runtime-evidence-Linux`, x64, extracted JSON SHA-256
-  `58099CF4799DDDEC3E9857CD6CF52E138917D3F17F3DA25A5C905F9C8ACF1C75`
+  `FAF14089F667AB424CE959EB1A630E9218EDAC698C40C0E1B332D5C479A4C208`
+- Linux evidence: artifact `vscode-runtime-evidence-Linux`, x64, extracted JSON SHA-256
+  `E54E1338BA8B7EA253D4A8E71466259F3A4DD5BEAF218F2DCFA4F949C99718E4`
 
-The first Ubuntu attempt never reached the new probe: an existing active-editor integration test
-momentarily reported no repository open. The failed job retained no runtime artifact. The rerun
-passed that test, both supported VS Code versions, and the new probe.
+All three CI jobs passed in this run. Both runtime artifacts report the implementation head above,
+`status: passed`, and successful owned-root cleanup.
 
 ## Evidence classification
 
 | Class | What it supports |
 | --- | --- |
 | Existing CI | Real VS Code launches and Default-profile install/uninstall with temporary directory overrides on Ubuntu, Windows, and macOS. |
-| New runtime | Platform default roots, live named-profile isolation, nested POSIX profile storage, target-specific VSIX installation, observed physical folder form, and true Linux/macOS Portable Mode. |
+| New runtime | Platform default roots, live named-profile isolation including a shared-fixture uninstall, nested POSIX profile storage, raw `.obsolete` transitions, target-specific VSIX installation, observed physical folder form, and true Linux/macOS Portable Mode. |
 | Authoritative documentation | Default `~/.vscode/extensions` roots and the Linux `data` / macOS sibling `code-portable-data` layouts. |
-| Exact-build source | `.obsolete` serialization and the optional target-platform folder suffix. |
-| Unverified | Intel macOS, automatic creation of a slash-containing profile location, a raw `.obsolete` file after uninstall, and a runtime-created target-suffixed folder. None is required to infer the runtime results above. |
+| Exact-build source | Corroborating `.obsolete` serialization and the optional target-platform folder suffix. |
+| Unverified | Intel macOS, automatic creation of a slash-containing profile location, and a runtime-created target-suffixed folder. None is required to infer the runtime results above. |
 
 ## Runtime observations
 
@@ -40,7 +38,10 @@ passed that test, both supported VS Code versions, and the new probe.
 | Path overrides during default probe | none | none |
 | Named-profile install result | only target CLI listing and manifest gained `personas-tests.personas-hello-fixture@0.0.1` | same |
 | Named-profile uninstall result | Default, control, and target returned to their before state | same |
+| Shared-fixture uninstall | removing Target preserved Control's CLI entry, manifest entry, and physical folder | same |
 | Nested profile manifest | `User/profiles/nested/profile-target/extensions.json` | same |
+| Immediate post-CLI cleanup | fixture folder present; `.obsolete` absent | same |
+| Workbench cleanup transition | raw `{"personas-tests.personas-hello-fixture-0.0.1":true}`; folder still present and explicitly obsolete | same |
 | Packaged target in VSIX manifest | `linux-x64` | `darwin-arm64` |
 | Physical extension folder | `personas-tests.personas-hello-fixture-0.0.1` | same |
 | Portable marker | distribution-root `data` | `code-portable-data` beside `Visual Studio Code.app` |
@@ -67,14 +68,11 @@ not receive the fixture or `storage.json`.
 
 ## Source- and documentation-backed observations
 
-CLI removal from a profile manifest is not itself evidence that the shared physical extension
-folder was removed or marked obsolete. The artifacts named in this record did not retain that
-distinction. A follow-up probe revision now captures the immediate post-uninstall folder and
-`.obsolete` state. If the folder remains without a marker, it launches the owned workbench to allow
-extension garbage collection and then requires either physical folder removal or a raw `.obsolete`
-entry mapping that folder to `true`. That transition remains pending hosted verification until a
-revised Linux and macOS run passes. Exact VS Code runtime source supplies the permitted fallback
-evidence when no raw marker survives cleanup:
+CLI removal from a profile manifest did not immediately remove or mark the shared physical
+extension folder on either platform. The probe retained that intermediate state, launched the
+owned workbench, and then captured the raw single-entry `.obsolete` object mapping the exact folder
+name to `true` while the folder remained for deferred deletion. The exact-build VS Code source
+corroborates the observed shape and serialization:
 
 - [`extensionManagementService.ts`](https://github.com/microsoft/vscode/blob/661626d0e72f97806550790a98fb87116c9db825/src/vs/platform/extensionManagement/node/extensionManagementService.ts)
   declares `Queue<IStringDictionary<boolean>>` (line 537), addresses `.obsolete` (line 472), maps
