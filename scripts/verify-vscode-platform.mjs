@@ -43,6 +43,7 @@ if (platform !== 'linux' && platform !== 'darwin') {
 const target = platform === 'linux' ? 'linux-x64' : 'darwin-arm64';
 const expectedNodeArch = platform === 'linux' ? 'x64' : 'arm64';
 const expectedFolder = `${fixtureId}-${fixtureVersion}-${target}`;
+const probeTempBase = platform === 'darwin' ? '/tmp' : tmpdir();
 const outputPath = path.resolve(
   process.env.PERSONAS_RUNTIME_EVIDENCE || path.join(repoRoot, '.runtime-evidence', `${target}.json`),
 );
@@ -334,7 +335,7 @@ function setPhase(name) {
 }
 
 function createOwnedRoot() {
-  const root = mkdtempSync(path.join(tmpdir(), 'personas-vscode-runtime-'));
+  const root = mkdtempSync(path.join(probeTempBase, 'p168-'));
   writeFileSync(path.join(root, '.personas-runtime-probe'), 'issue=168\n', { mode: 0o600 });
   return root;
 }
@@ -342,9 +343,9 @@ function createOwnedRoot() {
 function removeOwnedRoot(root) {
   assert.equal(activeProcessGroups.size, 0, `refusing to remove probe root with active process groups: ${[...activeProcessGroups].join(', ')}`);
   const resolvedRoot = realpathSync(root);
-  const resolvedTemp = realpathSync(tmpdir());
+  const resolvedTemp = realpathSync(probeTempBase);
   assert.equal(path.dirname(resolvedRoot), resolvedTemp, 'probe root is not a direct child of the temp directory');
-  assert.ok(path.basename(resolvedRoot).startsWith('personas-vscode-runtime-'), 'probe root prefix mismatch');
+  assert.ok(path.basename(resolvedRoot).startsWith('p168-'), 'probe root prefix mismatch');
   assert.ok(existsSync(path.join(resolvedRoot, '.personas-runtime-probe')), 'probe ownership sentinel is missing');
   rmSync(resolvedRoot, { recursive: true, force: false, maxRetries: 3, retryDelay: 250 });
 }
@@ -398,6 +399,7 @@ function layoutForHome(home) {
 function workbenchArgs(workspace, profileName) {
   return [
     ...(profileName ? ['--profile', profileName] : []),
+    ...(platform === 'linux' ? ['--no-sandbox'] : []),
     '--new-window',
     workspace,
     '--disable-extensions',
