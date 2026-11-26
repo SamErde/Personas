@@ -44,12 +44,12 @@ Inter (700 wordmark, 400 taglines). Fallback: Segoe UI, sans-serif.
   `logo-light.svg`/`logo-light.png` (light); `banner.svg`, `banner.png` (1280×320, the README
   hero). The Marketplace icon is `media/icon-256.png`.
 - `assets/content/`: `social-preview.svg`/`.png` (1280×640, GitHub social preview) and
-  `blog-hero.svg`/`.png` (1600×840, the blog series hero; it keeps its original blog-series
-  wording rather than the current tagline).
+  `blog-hero.svg`/`.png` (1600×840, the blog series hero).
 - `assets/mockup/`: `marketplace-mockup` and `matrix-ui-mockup`, early design concepts with staged
   data that predate the three-view sidebar. Don't use them as product screenshots.
 - `docs/images/`: real product screenshots, captured with demo data, for the README and user guide.
-- The banner and social preview carry the tagline. Re-render the PNGs from the SVGs (Inter,
+- The banner, social preview, and blog hero carry the tagline, and the Marketplace mockup carries
+  its first sentence. Re-render the PNGs from the SVGs (Inter,
   falling back to Segoe UI) whenever the tagline changes. The README loads the banner from the
   default branch, so keep its path.
 
