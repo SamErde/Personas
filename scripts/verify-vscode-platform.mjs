@@ -42,6 +42,7 @@ if (platform !== 'linux' && platform !== 'darwin') {
 
 const target = platform === 'linux' ? 'linux-x64' : 'darwin-arm64';
 const expectedNodeArch = platform === 'linux' ? 'x64' : 'arm64';
+const baseFolder = `${fixtureId}-${fixtureVersion}`;
 const expectedFolder = `${fixtureId}-${fixtureVersion}-${target}`;
 const probeTempBase = platform === 'darwin' ? '/tmp' : tmpdir();
 const outputPath = path.resolve(
@@ -59,7 +60,12 @@ const evidence = {
     nodeArch: process.arch,
     target,
   },
-  fixture: { id: fixtureId, version: fixtureVersion, expectedFolder },
+  fixture: {
+    id: fixtureId,
+    version: fixtureVersion,
+    acceptedFolderForms: [baseFolder, expectedFolder],
+    packagedTarget: target,
+  },
   ci: githubMetadata(),
   phases: [],
   commands: [],
@@ -243,7 +249,11 @@ async function runProbe() {
     afterUninstall: liveUninstalled,
   };
   evidence.liveProfiles.physicalFoldersAfterInstall = livePhysicalFolders;
-  evidence.obsolete.afterLiveUninstall = captureObsolete(defaultLayout.obsolete, defaultLayout.extensions);
+  evidence.obsolete.afterLiveUninstall = captureObsolete(
+    defaultLayout.obsolete,
+    defaultLayout.extensions,
+    livePhysicalFolders.observedFixtureFolder,
+  );
 
   setPhase('nested-profile-fixture');
   const nestedStorage = readJson(defaultLayout.storageJson);
@@ -285,7 +295,11 @@ async function runProbe() {
     physicalFoldersAfterInstall: nestedPhysicalFolders,
     controlsUnchanged: true,
   };
-  evidence.obsolete.afterNestedUninstall = captureObsolete(defaultLayout.obsolete, defaultLayout.extensions);
+  evidence.obsolete.afterNestedUninstall = captureObsolete(
+    defaultLayout.obsolete,
+    defaultLayout.extensions,
+    nestedPhysicalFolders.observedFixtureFolder,
+  );
 
   setPhase('exact-build-obsolete-source');
   evidence.obsolete.source = await inspectObsoleteSource(versionInfo.commit);
@@ -623,6 +637,7 @@ function readManifest(file) {
       id: id.toLowerCase(),
       version: entry.version,
       ...(typeof entry.relativeLocation === 'string' ? { relativeLocation: entry.relativeLocation } : {}),
+      ...(typeof entry.metadata?.targetPlatform === 'string' ? { targetPlatform: entry.metadata.targetPlatform } : {}),
     }];
   }).sort((a, b) => `${a.id}@${a.version}`.localeCompare(`${b.id}@${b.version}`));
 }
@@ -632,7 +647,11 @@ function assertFixturePresent(snapshot) {
   const entry = snapshot.manifest.find((item) => item.id === fixtureId);
   assert.ok(entry, 'fixture is missing from manifest');
   assert.equal(entry.version, fixtureVersion);
-  assert.equal(entry.relativeLocation, expectedFolder);
+  assert.ok(
+    [baseFolder, expectedFolder].includes(entry.relativeLocation),
+    `fixture folder ${entry.relativeLocation} does not match the supported base or target-suffixed form`,
+  );
+  assert.equal(entry.targetPlatform, target, 'fixture manifest did not retain the packaged target platform');
 }
 
 function assertFixtureAbsent(snapshot) {
@@ -657,10 +676,20 @@ function assertTargetFolder(extensionsDir, manifest) {
     ? readdirSync(extensionsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
     : [];
   folders.sort();
-  assert.ok(folders.includes(expectedFolder), `target-specific folder ${expectedFolder} was not created`);
   const fixtureEntry = manifest.find((entry) => entry.id === fixtureId);
-  assert.equal(fixtureEntry?.relativeLocation, expectedFolder);
-  return folders;
+  assert.ok(fixtureEntry, 'target-specific fixture is missing from the profile manifest');
+  assert.ok(folders.includes(fixtureEntry.relativeLocation), `manifest folder ${fixtureEntry.relativeLocation} was not created`);
+  assert.ok(
+    [baseFolder, expectedFolder].includes(fixtureEntry.relativeLocation),
+    `physical folder ${fixtureEntry.relativeLocation} does not match the supported base or target-suffixed form`,
+  );
+  assert.equal(fixtureEntry.targetPlatform, target, 'physical folder manifest did not retain the packaged target platform');
+  return {
+    allFolders: folders,
+    observedFixtureFolder: fixtureEntry.relativeLocation,
+    usedTargetSuffix: fixtureEntry.relativeLocation === expectedFolder,
+    targetPlatform: fixtureEntry.targetPlatform,
+  };
 }
 
 function profileManifestPath(userData, location) {
@@ -694,21 +723,22 @@ function exactlyOneProfile(profiles, name) {
   return { name, location: found[0].location };
 }
 
-function captureObsolete(file, extensionsDir) {
+function captureObsolete(file, extensionsDir, observedFixtureFolder) {
   if (!existsSync(file)) return { exists: false, runtimeShapeVerified: false };
   const raw = readFileSync(file, 'utf8');
   const parsed = JSON.parse(raw);
   assert.ok(parsed && typeof parsed === 'object' && !Array.isArray(parsed), '.obsolete is not a flat object');
-  const fixtureValue = parsed[expectedFolder];
+  const fixtureValue = parsed[observedFixtureFolder];
   if (fixtureValue === true) {
-    return { exists: true, runtimeShapeVerified: true, raw, fixtureValue };
+    return { exists: true, runtimeShapeVerified: true, raw, observedFixtureFolder, fixtureValue };
   }
-  const folderStillExists = existsSync(path.join(extensionsDir, expectedFolder));
+  const folderStillExists = existsSync(path.join(extensionsDir, observedFixtureFolder));
   assert.equal(folderStillExists, false, '.obsolete omitted the fixture while its unreferenced folder remained');
   return {
     exists: true,
     runtimeShapeVerified: true,
     raw,
+    observedFixtureFolder,
     fixtureValue: 'absent-after-eager-folder-removal',
   };
 }
@@ -788,7 +818,11 @@ function assertDefaultHomeDidNotReceiveFixture(home) {
   const manifest = readManifest(layout.globalManifest);
   assert.ok(!manifest.some((entry) => entry.id === fixtureId), 'portable fixture leaked to default extension manifest');
   if (existsSync(layout.extensions)) {
-    assert.ok(!readdirSync(layout.extensions).includes(expectedFolder), 'portable fixture leaked to default extension root');
+    const defaultFolders = readdirSync(layout.extensions);
+    assert.ok(
+      ![baseFolder, expectedFolder].some((folder) => defaultFolders.includes(folder)),
+      'portable fixture leaked to default extension root',
+    );
   }
   assert.ok(!existsSync(layout.storageJson), 'portable workbench wrote default user-data storage.json');
 }
