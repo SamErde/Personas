@@ -75,15 +75,21 @@ describe('cleanup CLI', () => {
     expect(repeat.stdout).toContain('Nothing to clean');
   });
 
-  it.each(['timeout', 'http-error', 'invalid-string', 'invalid-first'])('keeps complete fallbacks by platform on %s', (scenario) => {
+  it.each([
+    ['timeout', { fault: 'timeout' }],
+    ['http-error', { fault: 'http-error' }],
+    ['invalid-string', { response: '1.110.0' }],
+    ['invalid-first', { response: ['invalid'] }],
+  ] as const)('keeps complete fallbacks by platform on %s', (_scenario, options) => {
     const keep = [
       install('linux-x64', '1.100.0'), install('linux-x64', '1.101.0', false),
       install('darwin', '1.109.0'), install('linux-armhf', '1.20.0', false), install('linux-armhf', 'insiders'),
     ];
-    for (const version of ['1.99.0', '1.111.0', 'insiders']) install('linux-x64', version, version !== '1.111.0');
+    install('linux-x64', '1.99.0');
+    install('linux-x64', '1.111.0', false);
+    install('linux-x64', 'insiders');
     install('darwin', '1.108.0');
-    const response = scenario === 'invalid-string' ? '1.110.0' : ['invalid'];
-    const result = run(true, { fault: scenario, response });
+    const result = run(true, options);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(`${keep[0]} (offline fallback)`);
     expect(result.stdout).toContain(`${keep[1]} (minimum engine version)`);
@@ -169,19 +175,22 @@ describe('cleanup CLI', () => {
     expect(fs.readdirSync(cache).sort()).toEqual(kept.sort());
   });
 
-  it.each(['scan-error', 'remove-error', 'changed-directory'])('reports %s, continues, and completes on retry', (fault) => {
+  it.each([
+    ['scan-error', 'dist', 'simulated scan-error'],
+    ['remove-error', 'dist', 'simulated remove-error'],
+    ['changed-directory', 'dist/nested', 'directory changed during cleanup'],
+  ])('reports %s, continues, and completes on retry', (fault, relativePath, expectedError) => {
     const dist = path.join(checkout, 'dist');
     const out = path.join(checkout, 'out-test');
     for (const dir of [dist, out]) {
       fs.mkdirSync(dir);
       fs.writeFileSync(path.join(dir, 'file'), Buffer.alloc(mib));
     }
-    const nested = path.join(dist, 'nested');
-    fs.mkdirSync(nested);
-    const result = run(true, { fault, faultPath: fault === 'changed-directory' ? nested : dist });
+    fs.mkdirSync(path.join(dist, 'nested'));
+    const result = run(true, { fault, faultPath: path.join(checkout, relativePath) });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Skipping dist');
-    if (fault === 'changed-directory') expect(result.stderr).toContain('directory changed during cleanup');
+    expect(result.stderr).toContain(expectedError);
     expect(result.stderr).toContain('Cleanup incomplete');
     expect(result.stdout).toContain('Removed 1 target(s), estimated 1.0 MiB');
     expect(fs.existsSync(dist)).toBe(true);
