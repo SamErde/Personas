@@ -8,15 +8,25 @@ globalThis.fetch = async () => {
   return { ok: true, json: async () => options.response ?? ['1.110.0'] };
 };
 
-const method = {
-  'marker-error': 'lstatSync',
-  'scan-error': 'readdirSync',
-  'remove-error': 'rmSync',
-}[options.fault];
-if (method) {
-  const original = fs[method];
-  fs[method] = (location, ...args) => {
+function failAtFixturePath(original) {
+  return (location, ...args) => {
     if (location === options.faultPath) throw new Error(`simulated ${options.fault}`);
     return original(location, ...args);
+  };
+}
+if (options.fault === 'marker-error') fs.lstatSync = failAtFixturePath(fs.lstatSync);
+if (options.fault === 'scan-error') fs.readdirSync = failAtFixturePath(fs.readdirSync);
+if (options.fault === 'remove-error') fs.rmSync = failAtFixturePath(fs.rmSync);
+if (options.fault === 'changed-directory') {
+  const lstat = fs.lstatSync;
+  let observed = false;
+  fs.lstatSync = (location, ...args) => {
+    const stat = lstat(location, ...args);
+    if (location === options.faultPath) {
+      // Model a replacement between queueing the directory and descending into it.
+      if (observed) stat.ino += 1n;
+      observed = true;
+    }
+    return stat;
   };
 }

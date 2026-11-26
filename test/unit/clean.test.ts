@@ -12,7 +12,7 @@ let checkout: string;
 let cache: string;
 
 beforeEach(() => {
-  sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'personas-clean-'));
+  sandbox = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'personas-clean-')));
   checkout = path.join(sandbox, 'checkout');
   cache = path.join(checkout, '.vscode-test');
   fs.mkdirSync(path.join(checkout, 'scripts'), { recursive: true });
@@ -169,16 +169,19 @@ describe('cleanup CLI', () => {
     expect(fs.readdirSync(cache).sort()).toEqual(kept.sort());
   });
 
-  it.each(['scan-error', 'remove-error'])('reports %s, continues, and completes on retry', (fault) => {
+  it.each(['scan-error', 'remove-error', 'changed-directory'])('reports %s, continues, and completes on retry', (fault) => {
     const dist = path.join(checkout, 'dist');
     const out = path.join(checkout, 'out-test');
     for (const dir of [dist, out]) {
       fs.mkdirSync(dir);
       fs.writeFileSync(path.join(dir, 'file'), Buffer.alloc(mib));
     }
-    const result = run(true, { fault, faultPath: dist });
+    const nested = path.join(dist, 'nested');
+    fs.mkdirSync(nested);
+    const result = run(true, { fault, faultPath: fault === 'changed-directory' ? nested : dist });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Skipping dist');
+    if (fault === 'changed-directory') expect(result.stderr).toContain('directory changed during cleanup');
     expect(result.stderr).toContain('Cleanup incomplete');
     expect(result.stdout).toContain('Removed 1 target(s), estimated 1.0 MiB');
     expect(fs.existsSync(dist)).toBe(true);

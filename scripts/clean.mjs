@@ -11,7 +11,7 @@ const platformPattern = 'darwin-arm64|darwin|win32-(?:x64|arm64)-archive|linux-(
 const component = '(?:0|[1-9][0-9]*)';
 const releasePattern = `${component}\\.${component}\\.${component}`;
 const release = new RegExp(`^${releasePattern}$`);
-const installName = new RegExp(`^vscode-(?<platform>${platformPattern})-(?<version>${releasePattern}(?:-insider)?|insiders|[0-9a-f]{40})$`);
+const installName = new RegExp(`^vscode-(${platformPattern})-(${releasePattern}(?:-insider)?|insiders|[0-9a-f]{40})$`);
 const versionOrder = new Intl.Collator('en', { numeric: true });
 
 let failures = 0;
@@ -29,29 +29,35 @@ function directory(location, parent, optional = false) {
   const stat = fs.lstatSync(location, { bigint: true, throwIfNoEntry: !optional });
   if (!stat) return undefined;
   if (!stat.isDirectory() || stat.isSymbolicLink() ||
-      path.relative(location, fs.realpathSync(location)) !== '' ||
+      path.relative(location, fs.realpathSync.native(location)) !== '' ||
       (parent && path.relative(parent.location, path.dirname(location)) !== '')) {
     throw new Error('expected an ordinary directory at its original checkout path');
   }
   return { location, parent, stat };
 }
 
-function recheck(dir) {
-  if (dir.parent) recheck(dir.parent);
+function checkIdentity(dir) {
   const current = directory(dir.location, dir.parent);
   if (current.stat.dev !== dir.stat.dev || current.stat.ino !== dir.stat.ino) {
     throw new Error(`directory changed during cleanup: ${dir.location}`);
   }
 }
 
-function sizeOf(location) {
+function recheck(dir) {
+  if (dir.parent) recheck(dir.parent);
+  checkIdentity(dir);
+}
+
+function sizeOf(target) {
   let total = 0;
-  const pending = [location];
+  const pending = [target];
   while (pending.length) {
     const current = pending.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const child = path.join(current, entry.name);
-      if (entry.isDirectory()) pending.push(child);
+    // A queued Dirent may be stale. Reopen only an ordinary directory with the same identity.
+    checkIdentity(current);
+    for (const entry of fs.readdirSync(current.location, { withFileTypes: true })) {
+      const child = path.join(current.location, entry.name);
+      if (entry.isDirectory()) pending.push(directory(child, current));
       else if (entry.isFile()) total += fs.lstatSync(child).size;
     }
   }
@@ -68,7 +74,7 @@ function processTarget(parent, name, optional = false) {
     recheck(parent);
     const target = directory(location, parent, optional);
     if (!target) return;
-    const size = sizeOf(location);
+    const size = sizeOf(target);
     if (force) {
       recheck(target);
       fs.rmSync(location, { recursive: true, maxRetries: 3 });
@@ -111,15 +117,36 @@ function newestComplete(cache, installs) {
   return newest;
 }
 
-async function processCache(cache) {
+function installsByPlatform(cache) {
   const groups = new Map();
   for (const entry of fs.readdirSync(cache.location, { withFileTypes: true })) {
     const match = installName.exec(entry.name);
     if (!match || !entry.isDirectory()) continue;
-    const { platform, version } = match.groups;
+    const [, platform, version] = match;
     if (!groups.has(platform)) groups.set(platform, []);
     groups.get(platform).push({ name: entry.name, version });
   }
+  return groups;
+}
+
+function processPlatform(cache, platform, installs, minimum, stable) {
+  const retained = stable ?? newestComplete(cache, installs);
+  if (!retained) {
+    console.log(`Keeping ${platform} installs (no complete offline release found).`);
+    return;
+  }
+  const reasons = new Map([
+    [retained, stable ? 'current stable' : 'offline fallback'],
+    [minimum, 'minimum engine version'],
+  ]);
+  for (const { name, version } of installs) {
+    if (reasons.has(version)) console.log(`Keeping ${path.join('.vscode-test', name)} (${reasons.get(version)})`);
+    else processTarget(cache, name);
+  }
+}
+
+async function processCache(cache) {
+  const groups = installsByPlatform(cache);
   if (!groups.size) return;
 
   const manifest = JSON.parse(fs.readFileSync(path.join(rootPath, 'package.json'), 'utf8'));
@@ -128,27 +155,10 @@ async function processCache(cache) {
 
   const stable = await currentStable();
   for (const [platform, installs] of groups) {
-    let retained = stable;
-    if (!stable) {
-      try {
-        retained = newestComplete(cache, installs);
-      } catch (error) {
-        reportFailure(cache.location, new Error(`keeping ${platform} installs: ${error.message}`));
-        continue;
-      }
-      if (!retained) {
-        console.log(`Keeping ${platform} installs (no complete offline release found).`);
-        continue;
-      }
-    }
-    const retainedReason = stable ? 'current stable' : 'offline fallback';
-    for (const { name, version } of installs) {
-      if (version === minimum || version === retained) {
-        const reason = version === minimum ? 'minimum engine version' : retainedReason;
-        console.log(`Keeping ${path.join('.vscode-test', name)} (${reason})`);
-      } else {
-        processTarget(cache, name);
-      }
+    try {
+      processPlatform(cache, platform, installs, minimum, stable);
+    } catch (error) {
+      reportFailure(cache.location, new Error(`keeping ${platform} installs: ${error.message}`));
     }
   }
 }
