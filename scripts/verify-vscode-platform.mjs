@@ -259,6 +259,13 @@ async function runProbe() {
     afterUninstall: liveUninstalled,
   };
   evidence.liveProfiles.physicalFoldersAfterInstall = livePhysicalFolders;
+  evidence.obsolete.liveCleanupTransition = await settleExtensionCleanup(
+    'live-target',
+    ownedExecutable,
+    defaultEnv,
+    defaultLayout,
+    livePhysicalFolders.observedFixtureFolder,
+  );
   evidence.obsolete.afterLiveUninstall = captureObsolete(
     defaultLayout.obsolete,
     defaultLayout.extensions,
@@ -318,6 +325,13 @@ async function runProbe() {
     '--profile', profileNames.control,
     '--uninstall-extension', fixtureId,
   ], defaultEnv);
+  const sharedCleanupTransition = await settleExtensionCleanup(
+    'shared-control',
+    ownedExecutable,
+    defaultEnv,
+    defaultLayout,
+    sharedPhysicalFolders.observedFixtureFolder,
+  );
   const sharedCleaned = await snapshotNamedProfiles(
     cliPath, defaultEnv, defaultLayout, control, liveTarget, liveManifestPaths,
   );
@@ -330,6 +344,7 @@ async function runProbe() {
     physicalFoldersBeforeTargetUninstall: sharedPhysicalFolders,
     physicalFoldersAfterTargetUninstall: sharedFolderAfterTargetUninstall,
     physicalFolderPreservedForControl: true,
+    cleanupTransition: sharedCleanupTransition,
   };
 
   setPhase('nested-profile-fixture');
@@ -372,6 +387,13 @@ async function runProbe() {
     physicalFoldersAfterInstall: nestedPhysicalFolders,
     controlsUnchanged: true,
   };
+  evidence.obsolete.nestedCleanupTransition = await settleExtensionCleanup(
+    'nested-profile',
+    ownedExecutable,
+    defaultEnv,
+    defaultLayout,
+    nestedPhysicalFolders.observedFixtureFolder,
+  );
   evidence.obsolete.afterNestedUninstall = captureObsolete(
     defaultLayout.obsolete,
     defaultLayout.extensions,
@@ -885,26 +907,88 @@ function exactlyOneProfile(profiles, name) {
 }
 
 function captureObsolete(file, extensionsDir, observedFixtureFolder) {
-  const folderStillExists = existsSync(path.join(extensionsDir, observedFixtureFolder));
+  const state = obsoleteState(file, extensionsDir, observedFixtureFolder);
+  if (!state.exists) {
+    assert.equal(state.fixtureFolderExists, false, 'uninstall left the fixture folder without an .obsolete entry');
+    return {
+      ...state,
+      topLevelObjectObserved: false,
+      fixtureEntryRuntimeVerified: false,
+      fixtureFolderRemoved: true,
+    };
+  }
+  if (state.fixtureEntryPresent) {
+    assert.equal(state.fixtureValue, true, '.obsolete fixture entry does not map the folder name to true');
+    return { ...state, topLevelObjectObserved: true, fixtureEntryRuntimeVerified: true };
+  }
+  assert.equal(state.fixtureFolderExists, false, '.obsolete omitted the fixture while its unreferenced folder remained');
+  return {
+    ...state,
+    topLevelObjectObserved: true,
+    fixtureEntryRuntimeVerified: false,
+  };
+}
+
+function obsoleteState(file, extensionsDir, observedFixtureFolder) {
+  const fixtureFolderExists = existsSync(path.join(extensionsDir, observedFixtureFolder));
   if (!existsSync(file)) {
-    assert.equal(folderStillExists, false, 'uninstall left the fixture folder without an .obsolete entry');
-    return { exists: false, runtimeShapeVerified: false, fixtureFolderRemoved: true };
+    return {
+      exists: false,
+      observedFixtureFolder,
+      fixtureFolderExists,
+      fixtureEntryPresent: false,
+      fixtureValue: null,
+    };
   }
   const raw = readFileSync(file, 'utf8');
   const parsed = JSON.parse(raw);
   assert.ok(parsed && typeof parsed === 'object' && !Array.isArray(parsed), '.obsolete is not a flat object');
-  const fixtureValue = parsed[observedFixtureFolder];
-  if (fixtureValue === true) {
-    return { exists: true, runtimeShapeVerified: true, raw, observedFixtureFolder, fixtureValue };
-  }
-  assert.equal(folderStillExists, false, '.obsolete omitted the fixture while its unreferenced folder remained');
+  const fixtureEntryPresent = Object.hasOwn(parsed, observedFixtureFolder);
   return {
     exists: true,
-    runtimeShapeVerified: true,
     raw,
     observedFixtureFolder,
-    fixtureValue: 'absent-after-eager-folder-removal',
+    fixtureFolderExists,
+    fixtureEntryPresent,
+    fixtureValue: fixtureEntryPresent ? parsed[observedFixtureFolder] : null,
   };
+}
+
+function pollObsoleteState(file, extensionsDir, observedFixtureFolder) {
+  try {
+    return obsoleteState(file, extensionsDir, observedFixtureFolder);
+  } catch (error) {
+    if (error instanceof SyntaxError || error?.code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function settleExtensionCleanup(label, executable, env, layout, observedFixtureFolder) {
+  const before = obsoleteState(layout.obsolete, layout.extensions, observedFixtureFolder);
+  if (!before.fixtureFolderExists || (before.fixtureEntryPresent && before.fixtureValue === true)) {
+    return { workbenchLaunched: false, before, after: before };
+  }
+
+  const workspace = path.join(probeRoot, `cleanup-${safeName(label)}`);
+  mkdirSync(workspace);
+  await launchWorkbenchUntil(
+    `settle-extension-cleanup-${label}`,
+    executable,
+    workbenchArgs(workspace),
+    env,
+    () => {
+      const current = pollObsoleteState(layout.obsolete, layout.extensions, observedFixtureFolder);
+      return current !== undefined && (
+        !current.fixtureFolderExists || (current.fixtureEntryPresent && current.fixtureValue === true)
+      );
+    },
+  );
+  const after = obsoleteState(layout.obsolete, layout.extensions, observedFixtureFolder);
+  assert.ok(
+    !after.fixtureFolderExists || (after.fixtureEntryPresent && after.fixtureValue === true),
+    `${label} cleanup left an unreferenced extension folder without an .obsolete entry`,
+  );
+  return { workbenchLaunched: true, before, after };
 }
 
 async function inspectObsoleteSource(commit) {

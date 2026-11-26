@@ -67,9 +67,14 @@ not receive the fixture or `storage.json`.
 
 ## Source- and documentation-backed observations
 
-The controlled uninstalls removed the fixture directory eagerly on both platforms, so `.obsolete`
-did not exist after either uninstall. The exact VS Code runtime source supplies the permitted
-fallback evidence:
+CLI removal from a profile manifest is not itself evidence that the shared physical extension
+folder was removed or marked obsolete. The artifacts named in this record did not retain that
+distinction. A follow-up probe revision now captures the immediate post-uninstall folder and
+`.obsolete` state. If the folder remains without a marker, it launches the owned workbench to allow
+extension garbage collection and then requires either physical folder removal or a raw `.obsolete`
+entry mapping that folder to `true`. That transition remains pending hosted verification until a
+revised Linux and macOS run passes. Exact VS Code runtime source supplies the permitted fallback
+evidence when no raw marker survives cleanup:
 
 - [`extensionManagementService.ts`](https://github.com/microsoft/vscode/blob/661626d0e72f97806550790a98fb87116c9db825/src/vs/platform/extensionManagement/node/extensionManagementService.ts)
   declares `Queue<IStringDictionary<boolean>>` (line 537), addresses `.obsolete` (line 472), maps
