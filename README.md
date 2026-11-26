@@ -16,7 +16,7 @@ If you keep separate setups for work, clients, open source, or teaching, each on
 - Hover over an extension's name for its details and quick actions: **Install in every profile**, **Remove from every profile**, and **Apply to all profiles…**.
 - Search, filter by category, publisher, or install source, and group by name or publisher. Each filter choice shows how many extensions it matches.
 - A **Current workspace** column shows whether each extension is enabled in the open folder or workspace.
-- Find extension versions that no profile uses any more, and move them to the Trash.
+- Find orphaned extensions, which are still on disk but in no profile, and move their version folders to the Trash.
 
 ![Extension Matrix filters with counts for category, publisher, and install source](docs/images/matrix-filters.png)
 

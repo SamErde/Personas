@@ -109,7 +109,15 @@ The view also shows the **Current workspace** card and a summary of orphaned ext
 
 ## Orphan cleanup
 
-Extension versions that are on disk but that no profile uses any more are **orphans**. In the matrix, switch to **All** to see them struck through. Select **Review N orphaned…**, or **Review…** in the VS Code Profiles view, to list them with their size and last-modified date. Then move the ones you choose to the Trash or Recycle Bin.
+An extension is **orphaned** when it's still on disk but no profile includes it, and it isn't applied to all profiles. Orphans are found per extension, not per version.
+
+- In the matrix, switch to **All** to see orphaned extensions struck through.
+- Select **Review N orphaned…**, or **Review…** in the VS Code Profiles view. This lists every on-disk version folder of each orphaned extension, with its size and last-modified date.
+- Select the folders you want to remove, and Personas moves them to the Trash or Recycle Bin after you confirm.
+
+An older version folder of an extension that some profile still uses is not an orphan, so it isn't listed or removed here. Pruning old versions is planned ([#164](https://github.com/SamErde/Personas/issues/164)).
+
+If any profile's extension list, or VS Code's record of obsolete versions, can't be read, Personas doesn't report orphans at all, rather than risk calling an extension that's in use an orphan.
 
 ## PowerShell Profiles
 

@@ -33,8 +33,8 @@ An extension that is installed but not running in the current workspace, for a r
 _Avoid_: disabled, disabled (workspace)
 
 **Orphaned extension**:
-An extension version folder on disk that no profile's extension list references. Personas lists orphans and moves the chosen ones to the Trash.
-_Avoid_: unused extension, stale extension
+An extension that is still on disk but appears in no profile's extension list and isn't applied to all profiles. Orphans are decided per extension ID, not per version: an unused older version of an extension that some profile still references is not an orphan. Orphan cleanup moves the orphaned extension's on-disk version folders to the Trash.
+_Avoid_: unused extension, stale extension; calling a single unused version folder an orphan
 
 **Install source**:
 Where an installed extension came from, read from its `metadata.source`: Marketplace, VSIX, Other, or Unknown.

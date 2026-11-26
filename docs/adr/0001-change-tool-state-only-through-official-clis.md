@@ -16,8 +16,9 @@ a Git persona to a repository (see ADR-0002 and
 
 Exceptions:
 
-- Deleting orphaned extension folders: extension folders on disk that no profile
-  references. No CLI command removes them, so Personas deletes them itself, to the
+- Deleting orphaned extension folders: the on-disk version folders of an extension that
+  no profile references (an orphan is decided per extension ID; see `GLOSSARY.md`). No CLI
+  command removes them, so Personas deletes them itself, to the
   trash and only after the user confirms.
 - Managing PowerShell profile scripts: Personas may create and delete these files
   directly, while users edit their contents in the VS Code editor. These are
