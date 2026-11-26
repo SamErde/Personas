@@ -13,9 +13,10 @@
 >   built-in command from an extension; Personas ships a guided fallback instead (`docs/spikes/findings.md`, Spike B).
 >
 > The current state lives in the code, `CLAUDE.md`, `docs/user-guide.md`, the ADRs in `docs/adr/`,
-> and `docs/spikes/findings.md`. Deferred v1 items (sets and baselines, stale profile folders,
-> old extension versions) are tracked in [#164](https://github.com/SamErde/Personas/issues/164)
-> and [#165](https://github.com/SamErde/Personas/issues/165).
+> and `docs/spikes/findings.md`. Remaining deferred v1 cleanup items (stale profile folders and
+> old extension versions) are tracked in [#164](https://github.com/SamErde/Personas/issues/164).
+> Extension sets, baselines, synchronization between profiles, and the Differences view were
+> later closed as not planned in [#165](https://github.com/SamErde/Personas/issues/165).
 
 ## Purpose
 

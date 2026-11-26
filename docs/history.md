@@ -168,7 +168,7 @@ places shown, and the originals remain available at the last commit that contain
 
 | Document | Where its content went |
 | --- | --- |
-| [v1 implementation plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/superpowers/plans/2026-07-03-visex-v1.md) | Facts in `docs/spikes/findings.md`; deferred items in #164 and #165 |
+| [v1 implementation plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/superpowers/plans/2026-07-03-visex-v1.md) | Facts in `docs/spikes/findings.md`; remaining deferred items in #164; the not-planned sets, baselines, sync, and Differences view decision in #165 |
 | [Current workspace status plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-08-10-current-workspace-extension-status.md) and its [agent prompt](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-08-10-current-workspace-extension-status-prompt.md) | Boundaries in ADR-0003; open scenarios in #167 |
 | [Extension Matrix filters plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-11-15-extension-matrix-filters.md) | ADR-0004; install-source fact in `findings.md` |
 | [Home layout polish plan](https://github.com/SamErde/Personas/blob/7cfc5ac/docs/plans/2026-11-26-home-layout-polish.md) | `findings.md` (Home view layout, Opening Settings) |
