@@ -4,31 +4,22 @@ import type { EditionInfo } from '../../src/powershell/profiles';
 
 const runtimeAllowed = { allowRuntimeDiscovery:true, includeWindowsPowerShell:true };
 
-it('rejects a runtime request made after permission was turned off and preserves confirmed paths', async () => {
+it('requires explicit runtime permission and retains confirmed paths when permission is withdrawn', async () => {
   const discover = async (): Promise<EditionInfo[]> => [{
-    edition:'PowerShell 7', installations:[{id:'pwsh', executable:'/test/pwsh'}],
+    edition: 'PowerShell 7', installations: [{id:'pwsh', executable:'/test/pwsh'}],
   }];
   const probe = vi.fn(async () => ({home:'/resolved', userDirectory:'/user/powershell'}));
   const service = new PowerShellService(discover, probe, 'linux', async () => true);
+  const runtimeOff = {...runtimeAllowed, allowRuntimeDiscovery:false};
   await service.refresh();
-  await expect(service.resolve('pwsh', {allowRuntimeDiscovery:false, includeWindowsPowerShell:true})).rejects.toThrow('off');
+  await expect(service.resolve('pwsh', runtimeOff)).rejects.toThrow('off');
+  await service.refresh();
   expect(probe).not.toHaveBeenCalled();
-  await service.resolve('pwsh', {allowRuntimeDiscovery:true, includeWindowsPowerShell:true});
-  await service.refresh();
-  await expect(service.resolve('pwsh', {allowRuntimeDiscovery:false, includeWindowsPowerShell:true})).rejects.toThrow('off');
-  expect(service.snapshot.rows.some(row => row.path === '/user/powershell/profile.ps1')).toBe(true);
-  expect(probe).toHaveBeenCalledTimes(1);
-});
 
-it('launches only on explicit resolution and caches successful results across refreshes', async () => {
-  const discover = async (): Promise<EditionInfo[]> => [{
-    edition:'PowerShell 7', installations:[{id:'pwsh',executable:'/test/pwsh'}],
-  }];
-  const probe = vi.fn(async () => ({home:'/resolved',userDirectory:'/user/powershell'}));
-  const service = new PowerShellService(discover,probe,'linux',async()=>true);
-  await service.refresh(); await service.refresh();
-  expect(probe).not.toHaveBeenCalled();
-  await service.resolve('pwsh', runtimeAllowed); await service.refresh(); await service.refresh();
+  await service.resolve('pwsh', runtimeAllowed);
+  await service.refresh();
+  await expect(service.resolve('pwsh', runtimeOff)).rejects.toThrow('off');
+  await service.refresh();
   expect(probe).toHaveBeenCalledTimes(1);
   expect(service.snapshot.rows.find(r=>r.host==='Console' && r.scope==='Current User')?.path).toBe('/user/powershell/Microsoft.PowerShell_profile.ps1');
   expect(service.snapshot.rows.find(r=>r.host==='Console' && r.scope==='All Users')?.path).toBe('/resolved/Microsoft.PowerShell_profile.ps1');

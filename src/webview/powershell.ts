@@ -68,7 +68,7 @@ export function renderPowerShell(inventory: PowerShellInventory, send: Send, all
     for (const edition of inventory.editions) {
       root.append(renderEdition(edition, inventory.rows.filter(row => row.edition === edition.edition), allowRuntimeDiscovery));
     }
-    if (!allowRuntimeDiscovery && inventory.editions.some(edition => edition.installations.some(i => !edition.userDirectory || !i.home))) {
+    if (!allowRuntimeDiscovery && inventory.editions.some(edition => unresolvedInstallations(edition).length > 0)) {
       root.append(el('p', 'ps-message', 'Runtime discovery is off'));
     }
   }
@@ -120,12 +120,16 @@ function setFold(fold: HTMLElement, expanded: boolean): void {
   if (list instanceof HTMLElement) list.hidden = !expanded;
 }
 
+function unresolvedInstallations(edition: EditionInfo): Installation[] {
+  return edition.installations.filter(installation => !edition.userDirectory || !installation.home);
+}
+
 /**
  * Explains what could not be found for an edition. Where an installed executable can supply the
  * answer, each offer names the program it starts before the user chooses it.
  */
 function renderNotices(edition: EditionInfo, names: Map<string, string>, allowRuntimeDiscovery: boolean): HTMLElement[] {
-  const pending = edition.installations.filter(installation => !edition.userDirectory || !installation.home);
+  const pending = unresolvedInstallations(edition);
   if (!pending.length) {
     return edition.reason ? [note(edition.reason, edition.reason, edition.installations.length > 0)] : [];
   }
