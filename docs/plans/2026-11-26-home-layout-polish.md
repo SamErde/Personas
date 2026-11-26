@@ -66,14 +66,22 @@ No ADR: every decision is cheap to reverse. No glossary change: no new domain te
   - `detail` holds the three existing Q&As as plain text: each question on its own line, its
     answer on the next line, and a blank line between pairs. The wording is unchanged except
     for dropping the bold.
-  - **Open PowerShell Settings** runs `workbench.action.openGlobalSettings` with
-    `{ query: '@ext:SamErde.personas powerShellProfiles' }`. It opens User Settings rather than
-    the last-used tab, because the Workspace tab hides the machine-scoped Allow Runtime
-    Discovery setting (adversarial review). `personas.openSettings` gets the same change. The `@ext` tag limits results to Personas,
-    and the remaining text is matched case-insensitively against setting IDs
-    (`preferencesSearch.ts:199-206`). Only the two `personas.powerShellProfiles.*` settings
-    match. The query is ignored when `workbench.settings.editor` is `json`, as it already is
-    for `personas.openSettings`.
+  - **Open PowerShell Settings** runs `workbench.action.openSettings` with the query
+    `@ext:SamErde.personas powerShellProfiles`, the same command and argument form the Home
+    gear (`personas.openSettings`) uses with `@ext:SamErde.personas`.
+    - With a query, VS Code 1.101's `PreferencesService.openSettings` sets the User target and
+      turns off the JSON editor. The graphical editor therefore opens on the User tab even when
+      `workbench.settings.editor` is `json`, or when Settings was last left on the Workspace
+      tab, where the machine-scoped Allow Runtime Discovery setting is hidden.
+    - Do not use `workbench.action.openGlobalSettings`. It follows the JSON preference, which
+      opens `settings.json` and loses the filter, and its argument sanitizer strips
+      `jsonEditor: false`. A follow-up commit briefly switched both actions to it; review on
+      PR #161 caught the regression, and both now use `workbench.action.openSettings` again.
+    - The `@ext` tag limits results to Personas, and the remaining text is matched
+      case-insensitively against setting IDs (`preferencesSearch.ts:199-206`). Only the two
+      `personas.powerShellProfiles.*` settings match.
+    - The previous gear did **not** ignore its query in JSON mode: a query forces the
+      graphical editor. An earlier draft of this plan said otherwise.
     - This is preferred over an `@id:` list: it is an older search path and needs no change
       when a PowerShell setting is added.
   - **Profiles on Microsoft Learn** calls `vscode.env.openExternal` with the existing

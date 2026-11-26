@@ -6,6 +6,7 @@ import { findGitExecutable } from './git/executable';
 import { GitConfigurationView, type GitNode } from './panel/gitConfigurationView';
 import { PowerShellProfilesViewProvider } from './panel/powerShellProfilesView';
 import { showPowerShellHelp } from './panel/powerShellHelp';
+import { openPersonasSettings } from './panel/settingsActions';
 import { VsCodeProfilesViewProvider } from './panel/vscodeProfilesView';
 import { MatrixPanel } from './panel/matrixPanel';
 import {
@@ -76,9 +77,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VsCodeProfilesViewProvider.viewId, vscodeProfiles),
     vscode.window.registerWebviewViewProvider(PowerShellProfilesViewProvider.viewId, powerShellProfiles),
-    // User Settings, not the last-used tab: a Workspace tab would hide the machine-scoped settings.
-    vscode.commands.registerCommand('personas.openSettings', () =>
-      vscode.commands.executeCommand('workbench.action.openGlobalSettings', { query: '@ext:SamErde.personas' })),
+    vscode.commands.registerCommand('personas.openSettings', () => openPersonasSettings()),
     // The buttons in the PowerShell Profiles view's title bar.
     vscode.commands.registerCommand('personas.powerShellProfiles.refresh', () => powerShellProfiles.refresh()),
     vscode.commands.registerCommand('personas.powerShellProfiles.help', () => showPowerShellHelp()),

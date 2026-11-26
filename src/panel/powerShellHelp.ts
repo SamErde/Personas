@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
+import { openPowerShellSettings } from './settingsActions';
 
-/** The settings query behind the help's settings button: Personas' settings whose IDs name PowerShell Profiles. */
-export const powerShellSettingsQuery = '@ext:SamErde.personas powerShellProfiles';
 export const powerShellProfilesDocsUrl =
   'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles';
 
@@ -34,9 +33,7 @@ export async function showPowerShellHelp(): Promise<void> {
     learnMore,
   );
   if (choice === openSettings) {
-    // Open User Settings, not the last-used tab: the Workspace tab hides the machine-scoped
-    // Allow Runtime Discovery setting that this help points to.
-    await vscode.commands.executeCommand('workbench.action.openGlobalSettings', { query: powerShellSettingsQuery });
+    await openPowerShellSettings();
   } else if (choice === learnMore) {
     await vscode.env.openExternal(vscode.Uri.parse(powerShellProfilesDocsUrl));
   }
