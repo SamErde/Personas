@@ -25,6 +25,13 @@ Personas brings your VS Code profiles and their extensions together in one view.
 - **Git configuration**: See the Git identity in effect for the current repository, and which config file each value comes from. [More about Git configuration](#git-configuration).
 - **Privacy**: Personas never collects or transmits any data.
 
+## Home settings
+
+Choose **Open Personas Settings** from the `…` menu in any Home view’s title bar,
+or run **Personas: Open Personas Settings** from the Command Palette. Both open
+VS Code Settings filtered to Personas. The `…` on the Personas container itself
+lets you show and hide views.
+
 ## Requirements & Limitations
 
 - VS Code Stable or Insiders 1.101 or newer, on Windows, macOS, or Linux.
@@ -97,11 +104,6 @@ folder being inspected. It works in local desktop windows only.
 
 ## PowerShell profiles
 
-Choose **Open Personas Settings** from the `…` menu in any Home view’s title bar,
-or run **Personas: Open Personas Settings** from the Command Palette. Both open
-VS Code Settings filtered to Personas. The `…` on the Personas container itself
-lets you show and hide views.
-
 Home, the Personas sidebar, includes a PowerShell Profiles view. It lists the
 PowerShell profiles that exist, grouped by edition and labeled by host and
 scope, in the order PowerShell loads them. Locations that have no script yet
@@ -120,7 +122,8 @@ every platform.
 Passive discovery respects redirected Documents information. Opening or refreshing
 the view finds profile paths without starting PowerShell. When an installed
 edition has an unresolved location and runtime discovery is off, the view says
-**Runtime discovery is off**. To allow an explicit fallback, enable
+**Runtime discovery is off** beside the first unresolved location. Choose
+**Open Personas Settings** there to enable
 `personas.powerShellProfiles.allowRuntimeDiscovery` in this machine's user settings.
 Then choose the named executable, for example **Run pwsh.exe to resolve**. Each
 click launches it once with profiles disabled and a five-second timeout. Successful

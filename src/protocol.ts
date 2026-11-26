@@ -138,7 +138,7 @@ export type HostToPowerShellProfiles =
 /** Refresh and Help are buttons in the view's title bar, so the host starts them; the page sends the rest. */
 export type PowerShellAction = {
   type: 'powerShellAction';
-  action: 'refresh' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal';
+  action: 'refresh' | 'openSettings' | 'resolve' | 'open' | 'delete' | 'copy' | 'reveal';
   id?: string;
 };
 export type PowerShellProfilesToHost = { type: 'ready' } | PowerShellAction;

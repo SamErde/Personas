@@ -68,9 +68,7 @@ export function renderPowerShell(inventory: PowerShellInventory, send: Send, all
     for (const edition of inventory.editions) {
       root.append(renderEdition(edition, inventory.rows.filter(row => row.edition === edition.edition), allowRuntimeDiscovery));
     }
-    if (!allowRuntimeDiscovery && inventory.editions.some(edition => unresolvedInstallations(edition).length > 0)) {
-      root.append(el('p', 'ps-message', 'Runtime discovery is off'));
-    }
+    if (!allowRuntimeDiscovery) root.querySelector('.ps-unresolved')?.after(runtimeDiscoveryNotice());
   }
   restoreInteraction();
 }
@@ -120,6 +118,15 @@ function setFold(fold: HTMLElement, expanded: boolean): void {
   if (list instanceof HTMLElement) list.hidden = !expanded;
 }
 
+function runtimeDiscoveryNotice(): HTMLElement {
+  const line = el('p', 'ps-message', 'Runtime discovery is off. ');
+  const settings = button('ps-settings', 'openSettings', () => dispatch('openSettings'));
+  settings.textContent = 'Open Personas Settings';
+  settings.dataset.psNav = '';
+  line.append(settings);
+  return line;
+}
+
 function unresolvedInstallations(edition: EditionInfo): Installation[] {
   return edition.installations.filter(installation => !edition.userDirectory || !installation.home);
 }
@@ -143,7 +150,9 @@ function renderNotices(edition: EditionInfo, names: Map<string, string>, allowRu
     edition.reason ?? '',
   ].filter(Boolean).join('\n');
   const actions = allowRuntimeDiscovery ? pending.map(i => renderResolve(i, names.get(i.id))) : [];
-  return [note(summary, explanation, true), ...actions];
+  const notice = note(summary, explanation, true);
+  notice.classList.add('ps-unresolved');
+  return [notice, ...actions];
 }
 
 function note(text: string, tooltip: string, warning: boolean): HTMLElement {
@@ -389,7 +398,7 @@ function captureInteraction(root: HTMLElement): () => void {
     JSON.stringify([editionOf(element), rowOf(element), element.dataset.psId ?? '', element.dataset.psAction]);
   const active = document.activeElement;
   const focused = active instanceof HTMLElement && root.contains(active) ? active : undefined;
-  const focusedKey = focused ? key(focused) : undefined;
+  const focusedKey = focused && focused !== root ? key(focused) : undefined;
   const focusedRow = focused ? rowOf(focused) : '';
   const focusedEdition = focused ? editionOf(focused) : '';
   const openMenus = new Set(Array.from(root.querySelectorAll('.ps-menu-open')).map(rowOf));

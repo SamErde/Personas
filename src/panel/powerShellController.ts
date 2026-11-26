@@ -196,6 +196,7 @@ export class PowerShellController implements vscode.Disposable {
   async handle(message: PowerShellAction): Promise<void> {
     if (vscode.env.remoteName) return;
     try {
+      if (message.action === 'openSettings') { await vscode.commands.executeCommand('personas.openSettings'); return; }
       if (message.action === 'refresh') { await this.refresh(); return; }
       if (message.action === 'resolve') {
         await this.service.resolve(message.id ?? '', readPreferences());

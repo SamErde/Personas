@@ -134,6 +134,6 @@ it.each([
   ['when the user turned opening with the sidebar off', 'extensionMatrix.openWithSidebar'],
   ['when the user turned it off under the name the setting had before the rename', 'openMatrixOnActivityBarClick'],
 ])('leaves the Extension Matrix closed %s', async (_when, setting) => {
-  vscodeState.settings = { [setting]: { globalValue: false } };
+  vscodeState.settings = { ['personas.' + setting]: { globalValue: false } };
   await staysClosed(show().page.posted);
 });

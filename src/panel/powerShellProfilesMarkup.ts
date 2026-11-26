@@ -19,6 +19,13 @@ export const powerShellProfilesStyles = `
   #ps-help button { margin: 0.75em 0 0; }
   #powershell [hidden] { display: none; }
   .ps-message { margin: 0; padding: 0.15rem 1rem; color: var(--ps-quiet); }
+  button.ps-settings {
+    padding: 0;
+    color: var(--vscode-textLink-foreground);
+    background: transparent;
+    border: none;
+    text-decoration: underline;
+  }
   .ps-edition + .ps-edition { margin-top: 6px; }
   .ps-edition-name {
     margin: 0;

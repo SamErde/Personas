@@ -14,7 +14,7 @@ export class PowerShellProfilesViewProvider implements vscode.WebviewViewProvide
   private view: vscode.WebviewView | undefined;
   private readonly controller: PowerShellController;
   private ready = false;
-  private helpRequested = false;
+  private pendingHelp?: symbol;
 
   constructor(private readonly context: vscode.ExtensionContext, service = new PowerShellService()) {
     this.controller = new PowerShellController((message) => this.post(message), service);
@@ -35,13 +35,17 @@ export class PowerShellProfilesViewProvider implements vscode.WebviewViewProvide
       // hidden and loads it again when shown; its script sends `ready` each time, and that message
       // drives the load, so profiles are discovered once per show (#150).
       onVisibilityChange: visible => {
-        if (!visible) this.ready = false;
+        if (!visible) {
+          this.ready = false;
+          this.pendingHelp = undefined;
+        }
         this.controller.setActive(visible);
       },
       onDispose: () => {
         if (this.view !== webviewView) return;
         this.view = undefined;
         this.ready = false;
+        this.pendingHelp = undefined;
         this.controller.setActive(false);
       },
     });
@@ -54,14 +58,23 @@ export class PowerShellProfilesViewProvider implements vscode.WebviewViewProvide
 
   /** The Help button in the view's title bar. */
   async help(): Promise<void> {
-    this.helpRequested = true;
-    if (!this.view?.visible) await vscode.commands.executeCommand(PowerShellProfilesViewProvider.viewId + '.focus');
+    // VS Code can finish the focus command before delivering visibility and ready events.
+    const request = Symbol();
+    this.pendingHelp = request;
+    if (!this.view?.visible) {
+      try {
+        await vscode.commands.executeCommand(PowerShellProfilesViewProvider.viewId + '.focus');
+      } catch (error) {
+        if (this.pendingHelp === request) this.pendingHelp = undefined;
+        throw error;
+      }
+    }
     this.showRequestedHelp();
   }
 
   private showRequestedHelp(): void {
-    if (this.ready && this.view?.visible && this.helpRequested) {
-      this.helpRequested = false;
+    if (this.ready && this.view?.visible && this.pendingHelp) {
+      this.pendingHelp = undefined;
       this.post({type:'showPowerShellHelp'});
     }
   }
