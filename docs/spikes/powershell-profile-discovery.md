@@ -95,8 +95,17 @@ edition/family and distinguish actual installation roots for all-users profiles
 only when multiple supported roots are discovered. Installation channels and
 package types are descriptive metadata; no installation selector is needed.
 Standard Preview discovery is tracked in
-[#183](https://github.com/SamErde/Personas/issues/183). Generic custom-installation
-discovery is not planned.
+[#183](https://github.com/SamErde/Personas/issues/183). Its initial contract is limited to the
+documented Microsoft Preview layouts: `%ProgramFiles%\PowerShell\7-preview` and the
+`Microsoft.PowerShell.Preview` MSIX package on Windows,
+`/usr/local/microsoft/powershell/7-preview` on macOS, and
+`/opt/microsoft/powershell/7-preview` on Linux. The runtime probe remains authoritative for
+the canonical installation root. PATH scans, arbitrary archive destinations, Homebrew, Snap,
+.NET global-tool Preview, and generic custom-installation discovery are not part of that work.
+See the Microsoft installation guidance for
+[Windows](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-windows),
+[macOS](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-macos),
+and [Linux](https://learn.microsoft.com/powershell/scripting/install/install-ubuntu).
 
 ## VS Code host clarification
 
