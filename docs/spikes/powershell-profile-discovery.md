@@ -99,10 +99,12 @@ Standard Preview discovery is tracked in
 documented Microsoft Preview layouts: `%ProgramFiles%\PowerShell\7-preview` and the
 `Microsoft.PowerShell.Preview` MSIX package through
 `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh-preview.exe` on Windows,
-`/usr/local/microsoft/powershell/7-preview` on macOS, and
-`/opt/microsoft/powershell/7-preview` on Linux. The runtime probe remains authoritative for
-the canonical installation root. That work adds no candidates for PATH scans, user-selected
-archive destinations, Homebrew, Snap, .NET global-tool Preview, or generic custom installations.
+`/usr/local/bin/pwsh-preview` with `$PSHOME` at
+`/usr/local/microsoft/powershell/7-preview` on macOS, and `/usr/bin/pwsh-preview` with
+`$PSHOME` at `/opt/microsoft/powershell/7-preview` on Linux. The runtime probe remains
+authoritative for the canonical installation root. That work adds no candidates for PATH scans,
+user-selected archive destinations, Homebrew, Snap, .NET global-tool Preview, or generic custom
+installations.
 Discovery cannot infer installer provenance: an archive placed at an included canonical path is
 indistinguishable from that layout and can be discovered.
 See the Microsoft installation guidance for
