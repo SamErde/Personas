@@ -97,7 +97,8 @@ package types are descriptive metadata; no installation selector is needed.
 Standard Preview discovery is tracked in
 [#183](https://github.com/SamErde/Personas/issues/183). Its initial contract is limited to the
 documented Microsoft Preview layouts: `%ProgramFiles%\PowerShell\7-preview` and the
-`Microsoft.PowerShell.Preview` MSIX package on Windows,
+`Microsoft.PowerShell.Preview` MSIX package through
+`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh-preview.exe` on Windows,
 `/usr/local/microsoft/powershell/7-preview` on macOS, and
 `/opt/microsoft/powershell/7-preview` on Linux. The runtime probe remains authoritative for
 the canonical installation root. That work adds no candidates for PATH scans, user-selected
