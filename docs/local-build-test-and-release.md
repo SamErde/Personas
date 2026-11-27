@@ -184,11 +184,15 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
 10. Open the Extensions view, find the local fixture under **Workspace Recommendations**, install
     it, and verify a workspace-only row with `Workspace-local` status.
 11. Verify that a workspace-only row has no profile cell toggles or profile bulk actions.
-12. (Not yet run: [#167](https://github.com/SamErde/Personas/issues/167).) Introduce duplicate candidate IDs in different workspace roots and verify one deterministic row
+Scenarios 12–14 still need a real-window run. See the
+[fixture setup and evidence](spikes/workspace-extension-status.md#scenarios-1214-evidence-and-remaining-work)
+before continuing ([#167](https://github.com/SamErde/Personas/issues/167)).
+
+12. Introduce duplicate candidate IDs in different workspace roots and verify one deterministic row
     plus a warning.
-13. (Not yet run: #167.) Exercise malformed or unreadable candidate/profile-association data and verify a warning,
+13. Exercise malformed or unreadable candidate/profile-association data and verify a warning,
     `Unknown`, and no enabled mutation action.
-14. (Not yet run: #167.) Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
+14. Verify that existing profile toggles, bulk actions, filters, hover cards, and orphan cleanup are
     unchanged.
 15. Hover over and tab through matrix cells. Verify that the row and column are highlighted, with
     stronger emphasis on the column header and the extension name. Check a light, a dark, and both
