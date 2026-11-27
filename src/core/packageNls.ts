@@ -4,6 +4,7 @@ import { asError } from './errors';
 import { parsePackageMeta, type PackageMeta } from './parsers';
 
 type ReadFile = (path: string) => Promise<string | undefined | Error>;
+type JoinPath = (folder: string, fileName: string) => string;
 type NlsBundle = Record<string, unknown>;
 
 const MAX_LOCALE_LENGTH = 32;
@@ -46,14 +47,23 @@ async function readParsedPackageMeta(folder: string, readFile: ReadFile): Promis
   }
 }
 
-async function readDefaultBundle(folder: string, readFile: ReadFile): Promise<NlsBundle | undefined> {
-  const text = await readFile(join(folder, 'package.nls.json'));
+async function readDefaultBundle(
+  folder: string,
+  readFile: ReadFile,
+  joinPath: JoinPath,
+): Promise<NlsBundle | undefined> {
+  const text = await readFile(joinPath(folder, 'package.nls.json'));
   return typeof text === 'string' ? parseBundle(text) : undefined;
 }
 
-async function readLocaleBundle(folder: string, language: string, readFile: ReadFile): Promise<NlsBundle | undefined> {
+async function readLocaleBundle(
+  folder: string,
+  language: string,
+  readFile: ReadFile,
+  joinPath: JoinPath,
+): Promise<NlsBundle | undefined> {
   for (const fileName of packageNlsLocaleFileNames(language)) {
-    const text = await readFile(join(folder, fileName));
+    const text = await readFile(joinPath(folder, fileName));
     if (text === undefined) continue;
     // The first present locale candidate wins. A read or parse failure falls directly back
     // to the default bundle rather than continuing to a less-specific locale.
@@ -68,14 +78,15 @@ export async function resolveLocalizedPackageDisplayName(
   folder: string,
   language: string,
   readFile: ReadFile,
+  joinPath: JoinPath = join,
 ): Promise<string | undefined> {
   if (meta.displayNameKey === undefined) return meta.displayName;
 
   // VS Code only attempts a locale bundle when the extension has a usable default bundle.
-  const defaultBundle = await readDefaultBundle(folder, readFile);
+  const defaultBundle = await readDefaultBundle(folder, readFile, joinPath);
   if (!defaultBundle) return undefined;
 
-  const localeBundle = await readLocaleBundle(folder, language, readFile);
+  const localeBundle = await readLocaleBundle(folder, language, readFile, joinPath);
   const localized = localeBundle?.[meta.displayNameKey];
   // Match VS Code's `translated === undefined` fallback: a present but empty locale value is
   // selected, then rejected, rather than being replaced with the nonempty default message.

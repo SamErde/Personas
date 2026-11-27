@@ -283,6 +283,7 @@ export async function discoverWorkspaceLocalExtensions(
           folderPath,
           language,
           (p) => io.readCandidateFile(p, extensionsRoot, MAX_WORKSPACE_EXTENSION_METADATA_BYTES),
+          joinFsPath,
         );
       } catch {
         // Localization is optional metadata. A broken adapter or rejected NLS read keeps the
