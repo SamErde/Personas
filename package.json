@@ -234,6 +234,6 @@
     "@vscode/vsce-sign@2.1.1": true
   },
   "dependencies": {
-    "jsonc-parser": "^3.3.1"
+    "jsonc-parser": "3.3.1"
   }
 }

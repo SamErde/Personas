@@ -29,12 +29,37 @@ function parseBundle(text: string): NlsBundle | undefined {
     : undefined;
 }
 
-function message(bundle: NlsBundle, key: string): string | undefined {
-  const value = bundle[key];
+function message(value: unknown): string | undefined {
   if (typeof value === 'string') return value || undefined;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const candidate = (value as Record<string, unknown>)['message'];
   return typeof candidate === 'string' && candidate !== '' ? candidate : undefined;
+}
+
+async function readParsedPackageMeta(folder: string, readFile: ReadFile): Promise<PackageMeta | undefined | Error> {
+  const packageText = await readFile(join(folder, 'package.json'));
+  if (packageText === undefined || packageText instanceof Error) return packageText;
+  try {
+    return parsePackageMeta(packageText);
+  } catch (error) {
+    return asError(error);
+  }
+}
+
+async function readDefaultBundle(folder: string, readFile: ReadFile): Promise<NlsBundle | undefined> {
+  const text = await readFile(join(folder, 'package.nls.json'));
+  return typeof text === 'string' ? parseBundle(text) : undefined;
+}
+
+async function readLocaleBundle(folder: string, language: string, readFile: ReadFile): Promise<NlsBundle | undefined> {
+  for (const fileName of packageNlsLocaleFileNames(language)) {
+    const text = await readFile(join(folder, fileName));
+    if (text === undefined) continue;
+    // The first present locale candidate wins. A read or parse failure falls directly back
+    // to the default bundle rather than continuing to a less-specific locale.
+    return typeof text === 'string' ? parseBundle(text) : undefined;
+  }
+  return undefined;
 }
 
 /** Reads package metadata and resolves an exact displayName placeholder like VS Code's scanner. */
@@ -43,35 +68,19 @@ export async function readLocalizedPackageMeta(
   language: string,
   readFile: ReadFile,
 ): Promise<PackageMeta | undefined | Error> {
-  const packageText = await readFile(join(folder, 'package.json'));
-  if (packageText === undefined || packageText instanceof Error) return packageText;
-
-  let meta: PackageMeta;
-  try {
-    meta = parsePackageMeta(packageText);
-  } catch (error) {
-    return asError(error);
-  }
+  const meta = await readParsedPackageMeta(folder, readFile);
+  if (meta === undefined || meta instanceof Error) return meta;
   if (meta.displayNameKey === undefined) return meta;
 
   // VS Code only attempts a locale bundle when the extension has a usable default bundle.
-  const defaultText = await readFile(join(folder, 'package.nls.json'));
-  if (defaultText === undefined || defaultText instanceof Error) return meta;
-  const defaultBundle = parseBundle(defaultText);
+  const defaultBundle = await readDefaultBundle(folder, readFile);
   if (!defaultBundle) return meta;
 
-  let localeBundle: NlsBundle | undefined;
-  for (const fileName of packageNlsLocaleFileNames(language)) {
-    const localizedText = await readFile(join(folder, fileName));
-    if (localizedText === undefined) continue;
-    // The first present locale candidate wins. A read or parse failure falls directly back
-    // to the default bundle rather than continuing to a less-specific locale.
-    if (!(localizedText instanceof Error)) localeBundle = parseBundle(localizedText);
-    break;
-  }
-
-  const localized = localeBundle ? message(localeBundle, meta.displayNameKey) : undefined;
-  const fallback = message(defaultBundle, meta.displayNameKey);
-  const displayName = localized ?? fallback;
+  const localeBundle = await readLocaleBundle(folder, language, readFile);
+  const localized = localeBundle?.[meta.displayNameKey];
+  // Match VS Code's `translated === undefined` fallback: a present but empty locale value is
+  // selected, then rejected, rather than being replaced with the nonempty default message.
+  const selected = localized === undefined ? defaultBundle[meta.displayNameKey] : localized;
+  const displayName = message(selected);
   return displayName === undefined ? meta : { ...meta, displayName };
 }

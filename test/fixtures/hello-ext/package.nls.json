@@ -1,4 +1,3 @@
 {
-  // Integration proof that installed extension metadata accepts VS Code's JSON-with-comments.
-  "displayName": "Localized Personas Hello Fixture",
+  "displayName": "Localized Personas Hello Fixture"
 }

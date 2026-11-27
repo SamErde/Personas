@@ -1016,16 +1016,17 @@ describe('profileManifestPath', () => {
 });
 
 describe('InventoryService package metadata', () => {
+  const metadataPaths: ResolvedPaths = {
+    ...({} as ResolvedPaths),
+    platform: 'linux',
+    storageJson: '/data/User/globalStorage/storage.json',
+    globalExtensionsJson: '/ext/extensions.json',
+    obsoleteFile: '/ext/.obsolete',
+    extensionsDir: '/ext',
+    profilesDir: '/data/User/profiles',
+  };
+
   it('reads extension folders together rather than one after another', async () => {
-    const paths: ResolvedPaths = {
-      ...({} as ResolvedPaths),
-      platform: 'linux',
-      storageJson: '/data/User/globalStorage/storage.json',
-      globalExtensionsJson: '/ext/extensions.json',
-      obsoleteFile: '/ext/.obsolete',
-      extensionsDir: '/ext',
-      profilesDir: '/data/User/profiles',
-    };
     let reading = 0;
     let mostAtOnce = 0;
     const order: string[] = [];
@@ -1041,7 +1042,7 @@ describe('InventoryService package metadata', () => {
         return { displayName: folder };
       },
     };
-    const inv = await new InventoryService(paths, io).getInventory();
+    const inv = await new InventoryService(metadataPaths, io).getInventory();
     expect(mostAtOnce).toBe(3);
     expect(order[2]).toBe('/ext/pub.alpha-1.0.0');
     // Natural package-folder precedence still selects the older numbered folder here.
@@ -1049,15 +1050,6 @@ describe('InventoryService package metadata', () => {
   });
 
   it('stabilizes only display-name precedence across folder and completion order', async () => {
-    const paths: ResolvedPaths = {
-      ...({} as ResolvedPaths),
-      platform: 'linux',
-      storageJson: '/data/User/globalStorage/storage.json',
-      globalExtensionsJson: '/ext/extensions.json',
-      obsoleteFile: '/ext/.obsolete',
-      extensionsDir: '/ext',
-      profilesDir: '/data/User/profiles',
-    };
     const metadata = (folder: string) => {
       const version = folder.includes('-2.0.0') ? 'Two' : 'Ten';
       return {
@@ -1076,7 +1068,7 @@ describe('InventoryService package metadata', () => {
           return metadata(folder);
         },
       };
-      return new InventoryService(paths, io).getInventory();
+      return new InventoryService(metadataPaths, io).getInventory();
     };
 
     const tenFirst = (await inventoryFor(['pub.alpha-10.0.0', 'pub.alpha-2.0.0'])).extensions[0];
@@ -1101,15 +1093,6 @@ describe('InventoryService package metadata', () => {
   });
 
   it('uses raw folder names to break case-insensitive and numeric ties', async () => {
-    const paths: ResolvedPaths = {
-      ...({} as ResolvedPaths),
-      platform: 'linux',
-      storageJson: '/data/User/globalStorage/storage.json',
-      globalExtensionsJson: '/ext/extensions.json',
-      obsoleteFile: '/ext/.obsolete',
-      extensionsDir: '/ext',
-      profilesDir: '/data/User/profiles',
-    };
     const names: Record<string, string> = {
       'Pub.Alpha-1.0.0': 'Uppercase folder',
       'pub.alpha-1.0.0': 'Lowercase folder',
@@ -1117,7 +1100,7 @@ describe('InventoryService package metadata', () => {
       'pub.beta-2.0.0': 'Plain-number folder',
     };
     const inventoryFor = (folders: string[]) =>
-      new InventoryService(paths, {
+      new InventoryService(metadataPaths, {
         readFile: () => Promise.resolve(undefined),
         listDirs: () => Promise.resolve(folders),
         readPackageMeta: (folder) => {
@@ -1147,16 +1130,7 @@ describe('InventoryService package metadata', () => {
   });
 
   it('lets a later-precedence folder supply a name when an earlier folder is unresolved', async () => {
-    const paths: ResolvedPaths = {
-      ...({} as ResolvedPaths),
-      platform: 'linux',
-      storageJson: '/data/User/globalStorage/storage.json',
-      globalExtensionsJson: '/ext/extensions.json',
-      obsoleteFile: '/ext/.obsolete',
-      extensionsDir: '/ext',
-      profilesDir: '/data/User/profiles',
-    };
-    const inventory = await new InventoryService(paths, {
+    const inventory = await new InventoryService(metadataPaths, {
       readFile: () => Promise.resolve(undefined),
       listDirs: () => Promise.resolve(['pub.alpha-1.0.0', 'pub.alpha-2.0.0']),
       readPackageMeta: (folder) =>

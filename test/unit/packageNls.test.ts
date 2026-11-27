@@ -110,6 +110,22 @@ describe('readLocalizedPackageMeta', () => {
   });
 
   it.each([
+    ['empty string', ''],
+    ['empty object message', { message: '' }],
+  ])('does not replace a present locale %s with the default message', async (_name, localized) => {
+    const localePath = join(folder, 'package.nls.fr.json');
+    const io = reader({
+      [packagePath]: packageJson,
+      [basePath]: JSON.stringify({ displayName: 'English' }),
+      [localePath]: JSON.stringify({ displayName: localized }),
+    });
+
+    const meta = requireMeta(await readLocalizedPackageMeta(folder, 'fr', io.readFile));
+
+    expect(meta.displayName).toBeUndefined();
+  });
+
+  it.each([
     ['unreadable', new Error('denied')],
     ['malformed', '{'],
     ['non-object', '[]'],
