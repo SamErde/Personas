@@ -30,7 +30,7 @@ export function registryExportPersonal(bytes: Buffer, key: string, env: NodeJS.P
 }
 
 export async function readRegistryDocuments(
-  registry: string, run: (exe: string, args: string[]) => Promise<string>, env: NodeJS.ProcessEnv,
+  registry: string, run: (exe: string, args: string[]) => Promise<unknown>, env: NodeJS.ProcessEnv,
 ): Promise<string | undefined> {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'personas-registry-'));
   try {

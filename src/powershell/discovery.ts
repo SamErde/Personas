@@ -14,9 +14,9 @@ export function userProfileDirectory(
   return base && path.posix.isAbsolute(base) ? path.posix.join(base, 'powershell') : undefined;
 }
 
-export function runFile(executable: string, args: string[]): Promise<string> {
+export function runFile(executable: string, args: string[]): Promise<Buffer> {
   return new Promise((resolve, reject) => execFile(executable, args, {
-    timeout: 5000, maxBuffer: 128 * 1024, windowsHide: true, encoding: 'utf8',
+    timeout: 5000, maxBuffer: 128 * 1024, windowsHide: true, encoding: 'buffer',
   }, (error, stdout) => error ? reject(error) : resolve(stdout)));
 }
 
@@ -128,36 +128,65 @@ export async function isPowerShellHome(directory: string): Promise<boolean> {
 }
 
 /** Starts one detected installation without loading profiles. No profile scripts or policy changes. */
+function fullyQualifiedWindowsPath(value: string): boolean {
+  const root = path.win32.parse(value).root.replaceAll('/','\\');
+  const first = root.charCodeAt(0) | 32;
+  const drive = [root.length === 3, first >= 97, first <= 122, root[1] === ':', root[2] === '\\'].every(Boolean);
+  const unc = [root.startsWith('\\\\'), root.indexOf('\\',2) > 2].every(Boolean);
+  return [path.win32.isAbsolute(value), [drive,unc].some(Boolean)].every(Boolean);
+}
+const probePathDialects = [
+  {isAbsolute:path.posix.isAbsolute, dirname:path.posix.dirname, questionMarkAllowed:true},
+  {isAbsolute:fullyQualifiedWindowsPath, dirname:path.win32.dirname, questionMarkAllowed:false},
+] as const;
 export async function probeInstallation(installation: Installation, edition: Edition, run = runFile): Promise<{ home: string; userDirectory: string }> {
   const command = '[string]$PSHOME; [string]$PROFILE.CurrentUserAllHosts; [string]$PSVersionTable.PSVersion.Major; [string]$PSVersionTable.PSVersion.PreReleaseLabel';
-  const output = await run(installation.executable, [
+  const bytes = await run(installation.executable, [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-OutputFormat', 'XML', '-Command', command,
   ]);
+  const output = new TextDecoder('utf-8', {fatal:true}).decode(bytes);
   const [home, user, major, preview] = powerShellOutputStrings(output);
-  if (!path.isAbsolute(home) || !path.isAbsolute(user) ||
-      major !== (edition === 'PowerShell 7' ? '7' : '5') || preview) {
+  const expectedMajor: Record<Edition, string> = {'PowerShell 7':'7', 'Windows PowerShell':'5'};
+  const dialect = probePathDialects[Number(fullyQualifiedWindowsPath(installation.executable))]!;
+  if (![
+    dialect.isAbsolute(home), dialect.isAbsolute(user),
+    !home.includes('\0'), !user.includes('\0'),
+    [dialect.questionMarkAllowed,!home.includes('?')].some(Boolean),
+    [dialect.questionMarkAllowed,!user.includes('?')].some(Boolean),
+    major === expectedMajor[edition], !preview,
+  ].every(Boolean)) {
     throw new Error('PowerShell returned unsupported or unresolved profile paths');
   }
-  return { home, userDirectory: path.dirname(user) };
+  return { home, userDirectory: dialect.dirname(user) };
 }
 
 const maxProbeOutput = 64 * 1024;
 const xmlEntity = /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g;
+const xml10Characters = /^[\u0009\u000a\u000d\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]*$/u;
+const namedXmlEntities: Record<string, string> = {
+  '&amp;':'&', '&lt;':'<', '&gt;':'>', '&quot;':'"', '&apos;':"'",
+};
+function decodeXmlEntity(entity: string): string {
+  const named = namedXmlEntities[entity];
+  if (named !== undefined) return named;
+  const hexadecimal = entity[2]?.toLowerCase() === 'x';
+  const codepoint = Number.parseInt(entity.slice(hexadecimal ? 3 : 2, -1), hexadecimal ? 16 : 10);
+  const invalid = [
+    !Number.isSafeInteger(codepoint), codepoint < 0, codepoint > 0x10ffff,
+    codepoint >= 0xd800 && codepoint <= 0xdfff,
+  ].some(Boolean);
+  if (invalid) throw new Error('Invalid PowerShell discovery response');
+  const character = String.fromCodePoint(codepoint);
+  if (!xml10Characters.test(character)) throw new Error('Invalid PowerShell discovery response');
+  return character;
+}
 function decodeXmlText(value: string): string {
-  if (value.includes('<') || value.replace(xmlEntity, '').includes('&')) throw new Error('Invalid PowerShell discovery response');
-  const decoded = value.replace(xmlEntity, entity => {
-    if (entity === '&amp;') return '&';
-    if (entity === '&lt;') return '<';
-    if (entity === '&gt;') return '>';
-    if (entity === '&quot;') return '"';
-    if (entity === '&apos;') return "'";
-    const hexadecimal = entity[2]?.toLowerCase() === 'x';
-    const codepoint = Number.parseInt(entity.slice(hexadecimal ? 3 : 2, -1), hexadecimal ? 16 : 10);
-    if (!Number.isSafeInteger(codepoint) || codepoint < 0 || codepoint > 0x10ffff || codepoint >= 0xd800 && codepoint <= 0xdfff) {
-      throw new Error('Invalid PowerShell discovery response');
-    }
-    return String.fromCodePoint(codepoint);
-  });
+  const invalid = [
+    value.includes('<'), value.includes(']]>'), value.replace(xmlEntity, '').includes('&'),
+    !xml10Characters.test(value),
+  ].some(Boolean);
+  if (invalid) throw new Error('Invalid PowerShell discovery response');
+  const decoded = value.replace(xmlEntity, decodeXmlEntity);
   // PowerShell escapes UTF-16 code units as _xHHHH_. A single pass deliberately turns
   // _x005F_x0041_ back into the literal text _x0041_, rather than decoding it twice to A.
   return decoded.replace(/_x([0-9a-f]{4})_/gi, (_match, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
@@ -165,7 +194,7 @@ function decodeXmlText(value: string): string {
 
 function powerShellOutputStrings(output: string): [string, string, string, string] {
   if (Buffer.byteLength(output, 'utf8') > maxProbeOutput) throw new Error('Invalid PowerShell discovery response');
-  const document = /^#< CLIXML\r?\n<Objs Version="1\.1\.0\.1" xmlns="http:\/\/schemas\.microsoft\.com\/powershell\/2004\/04">([\s\S]*)<\/Objs>\s*$/.exec(output);
+  const document = /^#< CLIXML\r?\n<Objs Version="1\.1\.0\.1" xmlns="http:\/\/schemas\.microsoft\.com\/powershell\/2004\/04">([\s\S]*)<\/Objs>[ \t\r\n]*$/.exec(output);
   if (!document) throw new Error('Invalid PowerShell discovery response');
   const body = document[1]!;
   const values: string[] = [];
