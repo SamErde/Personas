@@ -2,6 +2,15 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.6.0](https://github.com/SamErde/Personas/compare/v1.5.0...v1.6.0) (2026-11-27)
+
+
+### Features
+
+* **extension-matrix:** localize workspace-local extension display names ([fc43d26](https://github.com/SamErde/Personas/commit/fc43d26512ed403c557c8649b9a0a8f533e80338))
+* **extension-matrix:** resolve localized installed extension display names ([a6926e7](https://github.com/SamErde/Personas/commit/a6926e7df9596e976ca8136129f147d9295d5bdd))
+* **powershell:** resolve profile paths asynchronously ([b659167](https://github.com/SamErde/Personas/commit/b659167d0f3a6bfddc95bb8acacaace0e79b2e8b))
+
 ## [1.5.0](https://github.com/SamErde/Personas/compare/v1.4.0...v1.5.0) (2026-11-26)
 
 
