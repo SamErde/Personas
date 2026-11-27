@@ -61,6 +61,29 @@ async function setup(reconcileMs=0) {
   return {root,discover,service,controller};
 }
 const uri=(fsPath:string)=>({scheme:'file',fsPath});
+it('publishes passive inventory before background profile resolution settles',async()=>{
+  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'personas-background-')); roots.push(temporary);
+  const root=await fs.realpath(temporary);
+  let finish!:()=>void;
+  const probe=vi.fn(()=>new Promise<{home:string;userDirectory:string}>(resolve=>{
+    finish=()=>resolve({home:root,userDirectory:path.join(root,'user')});
+  }));
+  const service=new PowerShellService(async()=>[{
+    edition:'PowerShell 7',installations:[{id:'pwsh',executable:path.join(root,'pwsh'),home:root}],
+  }],probe,'win32');
+  const states:any[]=[];
+  const controller=new PowerShellController(message=>states.push(message),service,undefined,{reconcileMs:0});
+  controllers.push(controller); controller.setActive(true);
+
+  await controller.refresh(true);
+  expect(states).toHaveLength(1);
+  expect(states[0].inventory.rows.find((row:any)=>row.scope==='Current User')?.state).toBe('unresolved');
+  finish();
+  await vi.waitFor(()=>expect(states).toHaveLength(2));
+  expect(states[1].inventory.rows.find((row:any)=>row.scope==='Current User' && row.host==='All Hosts')?.path)
+    .toBe(path.win32.join(root,'user','profile.ps1'));
+});
+
 it('ignores inactive and unrelated events, but refreshes for profile and ancestor changes',async()=>{
   const {root,discover,controller}=await setup();
   vi.useFakeTimers();

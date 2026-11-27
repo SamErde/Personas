@@ -224,10 +224,13 @@ The scenarios below cover the sidebar views.
 22. **PowerShell Profiles, files.** Select a missing profile and confirm Create and Open. Then check
     Copy Path, Reveal in File Manager, and Delete PowerShell Profile… (Move to Trash), which must refuse while the file has
     unsaved edits. A linked profile can be opened, but not trashed through the link.
-23. **PowerShell Profiles, discovery.** With an unresolved location, verify **Runtime discovery is
-    off**, turn on `personas.powerShellProfiles.allowRuntimeDiscovery`, and run **Run … to resolve**.
-    On Windows, turn off `personas.powerShellProfiles.includeWindowsPowerShell`, with and without a
-    workspace override.
+23. **PowerShell Profiles, discovery.** With runtime discovery on, verify the view first renders
+    passive results, shows **Resolving profile locations…**, and then updates without blocking the
+    other views. Force one probe to fail, verify watcher refreshes do not retry it, then verify
+    **Run … to resolve** retries only that installation and **Refresh PowerShell Profiles** retries
+    all failures. Turn runtime discovery off and verify no PowerShell process starts; on Windows,
+    verify the registry fallback. Also turn off `personas.powerShellProfiles.includeWindowsPowerShell`,
+    with and without a workspace override.
 24. **PowerShell help.** Open help from the **?** and from the Command Palette, also with the view
     collapsed, in both `window.dialogStyle` values. Check that Open PowerShell Settings, Profiles on
     Microsoft Learn, Cancel, Esc, and the X (where shown) each behave as expected, and that help

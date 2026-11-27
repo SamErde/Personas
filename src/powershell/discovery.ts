@@ -23,7 +23,7 @@ export function runFile(executable: string, args: string[]): Promise<string> {
 /** Read both configured and shell-resolved Documents; disagreement requires explicit resolution.
  * reg.exe exports BOM-marked Unicode metadata to a private temporary directory; it never launches PowerShell.
  */
-async function documentsDirectory(): Promise<string | undefined> {
+export async function documentsDirectory(): Promise<string | undefined> {
   const root = process.env.SystemRoot;
   if (!root || !path.win32.isAbsolute(root)) return undefined;
   const registry = path.win32.join(root, 'System32', 'reg.exe');
@@ -64,7 +64,6 @@ export async function discoverPowerShell(io: DiscoveryIo = fs, includeWindowsPow
   };
   const platform = process.platform;
   const home = platform === 'win32' ? os.homedir() : process.env.HOME || '';
-  const documents = platform === 'win32' ? await documentsDirectory() : undefined;
   const candidates: { edition: Edition; executable: string }[] = [];
   const add = (executable: string, edition: Edition = 'PowerShell 7') => candidates.push({ edition, executable });
   if (platform === 'win32') {
@@ -116,9 +115,9 @@ export async function discoverPowerShell(io: DiscoveryIo = fs, includeWindowsPow
     const installations = found.get(edition) ?? [];
     return {
       edition, installations,
-      userDirectory: installations.length ? userProfileDirectory(platform, edition, process.env, home, documents) : undefined,
-      reason: errors.length ? errors.join('; ') : !installations.length ? 'Installation not found'
-        : platform === 'win32' && !documents ? 'Documents location unresolved.' : undefined,
+      userDirectory: installations.length && platform !== 'win32'
+        ? userProfileDirectory(platform, edition, process.env, home) : undefined,
+      reason: errors.length ? errors.join('; ') : !installations.length ? 'Installation not found' : undefined,
     };
   });
 }
@@ -128,19 +127,57 @@ export async function isPowerShellHome(directory: string): Promise<boolean> {
   return fs.stat(path.join(directory, 'System.Management.Automation.dll')).then(stat => stat.isFile(), () => false);
 }
 
-/** Only the explicit UI action calls this function. No profile scripts or policy changes. */
+/** Starts one detected installation without loading profiles. No profile scripts or policy changes. */
 export async function probeInstallation(installation: Installation, edition: Edition, run = runFile): Promise<{ home: string; userDirectory: string }> {
-  const command = '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [pscustomobject]@{home=$PSHOME;user=$PROFILE.CurrentUserAllHosts;major=$PSVersionTable.PSVersion.Major;preview=$PSVersionTable.PSVersion.PreReleaseLabel}|ConvertTo-Json -Compress';
-  const output = await run(installation.executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command]);
-  const data: unknown = JSON.parse(output.replace(/^\uFEFF/, '').trim());
-  if (!data || typeof data !== 'object') throw new Error('Invalid PowerShell discovery response');
-  const value = data as Record<string, unknown>;
-  if (typeof value.home !== 'string' || !path.isAbsolute(value.home) ||
-      typeof value.user !== 'string' || !path.isAbsolute(value.user) ||
-      value.major !== (edition === 'PowerShell 7' ? 7 : 5) || value.preview) {
+  const command = '[string]$PSHOME; [string]$PROFILE.CurrentUserAllHosts; [string]$PSVersionTable.PSVersion.Major; [string]$PSVersionTable.PSVersion.PreReleaseLabel';
+  const output = await run(installation.executable, [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-OutputFormat', 'XML', '-Command', command,
+  ]);
+  const [home, user, major, preview] = powerShellOutputStrings(output);
+  if (!path.isAbsolute(home) || !path.isAbsolute(user) ||
+      major !== (edition === 'PowerShell 7' ? '7' : '5') || preview) {
     throw new Error('PowerShell returned unsupported or unresolved profile paths');
   }
-  return { home: value.home, userDirectory: path.dirname(value.user) };
+  return { home, userDirectory: path.dirname(user) };
+}
+
+const maxProbeOutput = 64 * 1024;
+const xmlEntity = /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g;
+function decodeXmlText(value: string): string {
+  if (value.includes('<') || value.replace(xmlEntity, '').includes('&')) throw new Error('Invalid PowerShell discovery response');
+  const decoded = value.replace(xmlEntity, entity => {
+    if (entity === '&amp;') return '&';
+    if (entity === '&lt;') return '<';
+    if (entity === '&gt;') return '>';
+    if (entity === '&quot;') return '"';
+    if (entity === '&apos;') return "'";
+    const hexadecimal = entity[2]?.toLowerCase() === 'x';
+    const codepoint = Number.parseInt(entity.slice(hexadecimal ? 3 : 2, -1), hexadecimal ? 16 : 10);
+    if (!Number.isSafeInteger(codepoint) || codepoint < 0 || codepoint > 0x10ffff || codepoint >= 0xd800 && codepoint <= 0xdfff) {
+      throw new Error('Invalid PowerShell discovery response');
+    }
+    return String.fromCodePoint(codepoint);
+  });
+  // PowerShell escapes UTF-16 code units as _xHHHH_. A single pass deliberately turns
+  // _x005F_x0041_ back into the literal text _x0041_, rather than decoding it twice to A.
+  return decoded.replace(/_x([0-9a-f]{4})_/gi, (_match, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+}
+
+function powerShellOutputStrings(output: string): [string, string, string, string] {
+  if (Buffer.byteLength(output, 'utf8') > maxProbeOutput) throw new Error('Invalid PowerShell discovery response');
+  const document = /^#< CLIXML\r?\n<Objs Version="1\.1\.0\.1" xmlns="http:\/\/schemas\.microsoft\.com\/powershell\/2004\/04">([\s\S]*)<\/Objs>\s*$/.exec(output);
+  if (!document) throw new Error('Invalid PowerShell discovery response');
+  const body = document[1]!;
+  const values: string[] = [];
+  const element = /<S S="Output">([\s\S]*?)<\/S>/g;
+  let position = 0;
+  for (let match = element.exec(body); match; match = element.exec(body)) {
+    if (match.index !== position) throw new Error('Invalid PowerShell discovery response');
+    values.push(decodeXmlText(match[1]!));
+    position = element.lastIndex;
+  }
+  if (position !== body.length || values.length !== 4) throw new Error('Invalid PowerShell discovery response');
+  return values as [string, string, string, string];
 }
 
 export function isPreviewInstallation(executable: string): boolean {

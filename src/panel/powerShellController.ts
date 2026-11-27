@@ -10,7 +10,7 @@ import type { HostToPowerShellProfiles, PowerShellAction } from '../protocol';
 function readPreferences(): PowerShellPreferences {
   const config = vscode.workspace.getConfiguration('personas.powerShellProfiles');
   return {
-    allowRuntimeDiscovery: config.get<unknown>('allowRuntimeDiscovery') === true,
+    allowRuntimeDiscovery: config.get('allowRuntimeDiscovery', true),
     includeWindowsPowerShell: config.get('includeWindowsPowerShell', true),
   };
 }
@@ -65,7 +65,7 @@ export class PowerShellController implements vscode.Disposable {
       rows: inventory.rows.filter(item => item.edition !== 'Windows PowerShell'),
     };
   }
-  refresh(background = false): Promise<void> {
+  refresh(background = false, retryFailures = false): Promise<void> {
     this.queue = this.queue.then(async () => {
       if (this.disposed || background && !this.active) return;
       if (vscode.env.remoteName) {
@@ -74,16 +74,29 @@ export class PowerShellController implements vscode.Disposable {
         return;
       }
       try {
-        const inventory = await this.service.refresh(readPreferences().includeWindowsPowerShell);
+        const refresh = await this.service.refresh(readPreferences(), retryFailures);
         if (this.disposed) return;
+        this.lastInventory = refresh.initial;
         await this.watch();
-        this.lastInventory = inventory;
+        void this.finishSettlement(refresh.settled);
       } catch (error) {
         this.lastInventory = {editions:[],rows:[],error:String(error)};
       }
       this.paintLastKnown();
     });
     return this.queue;
+  }
+  private async finishSettlement(settled: Promise<PowerShellInventory | undefined>): Promise<void> {
+    try {
+      const inventory = await settled;
+      if (!inventory || this.disposed) return;
+      this.lastInventory = inventory;
+      if (!this.active || this.service.snapshot !== inventory) return;
+      await this.watch();
+      if (this.active && !this.disposed && this.service.snapshot === inventory) this.paintLastKnown();
+    } catch (error) {
+      if (!this.disposed) void vscode.window.showErrorMessage('Personas: ' + String(error));
+    }
   }
   setActive(active: boolean): void {
     const activated = active && !this.active;
@@ -197,7 +210,7 @@ export class PowerShellController implements vscode.Disposable {
     if (vscode.env.remoteName) return;
     try {
       if (message.action === 'openSettings') { await vscode.commands.executeCommand('personas.openSettings'); return; }
-      if (message.action === 'refresh') { await this.refresh(); return; }
+      if (message.action === 'refresh') { await this.refresh(false, true); return; }
       if (message.action === 'resolve') {
         await this.service.resolve(message.id ?? '', readPreferences());
         await this.refresh(); return;

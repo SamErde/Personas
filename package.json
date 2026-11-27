@@ -172,8 +172,8 @@
         "personas.powerShellProfiles.allowRuntimeDiscovery": {
           "type": "boolean",
           "scope": "machine",
-          "default": false,
-          "description": "Allow an explicit action to start a detected PowerShell executable to resolve an unknown profile location. Refresh always uses passive discovery."
+          "default": true,
+          "description": "Allow detected PowerShell executables to report their canonical profile paths in the background. Profiles are disabled during each probe. Turn this off to use only passive discovery and the Windows registry fallback."
         },
         "personas.powerShellProfiles.includeWindowsPowerShell": {
           "type": "boolean",

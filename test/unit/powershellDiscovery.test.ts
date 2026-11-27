@@ -31,14 +31,41 @@ it.each([
 ])('identifies Preview only from recognized installation segments: %s',(file,preview)=>{
   expect(isPreviewInstallation(file)).toBe(preview);
 });
-it('requests UTF-8 output for a non-ASCII explicit probe',async()=>{
-  let command='';
+it('reads a fixed CLM-safe CLIXML response without changing the output encoding',async()=>{
+  let seenArgs:string[]=[];
   const result=await probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async (_exe,args)=>{
-    command=args.at(-1)!;
-    return JSON.stringify({home:'/应用/PowerShell',user:'/用户/李/profile.ps1',major:7,preview:null});
+    seenArgs=[...args];
+    return '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+      + '<S S="Output">/应用/_x005F_x0041_</S>'
+      + '<S S="Output">/用户/李 &amp; José/PowerShell/profile.ps1</S>'
+      + '<S S="Output">7</S><S S="Output"></S></Objs>';
   });
-  expect(command).toContain('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)');
-  expect(result.userDirectory).toBe('/用户/李');
+  expect(seenArgs.slice(0,-1)).toEqual(['-NoLogo','-NoProfile','-NonInteractive','-OutputFormat','XML','-Command']);
+  expect(seenArgs.at(-1)).toBe('[string]$PSHOME; [string]$PROFILE.CurrentUserAllHosts; [string]$PSVersionTable.PSVersion.Major; [string]$PSVersionTable.PSVersion.PreReleaseLabel');
+  expect(seenArgs.at(-1)).not.toMatch(/ConvertTo-Json|pscustomobject|OutputEncoding|UTF8Encoding/);
+  expect(result).toEqual({home:'/应用/_x0041_',userDirectory:'/用户/李 & José/PowerShell'});
+});
+
+const probeXml=(values:string[])=>'#< CLIXML\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+  + values.map(value=>`<S S="Output">${value}</S>`).join('')+'</Objs>';
+it.each([
+  ['missing value',probeXml(['/home','/user/profile.ps1','7'])],
+  ['extra value',probeXml(['/home','/user/profile.ps1','7','','extra'])],
+  ['unexpected element','#< CLIXML\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><I32 S="Output">7</I32></Objs>'],
+  ['truncated XML',probeXml(['/home','/user/profile.ps1','7','']).slice(0,-7)],
+  ['unescaped entity',probeXml(['/home','/user/a&b/profile.ps1','7',''])],
+  ['oversize output','x'.repeat(64*1024+1)],
+])('rejects %s in the fixed CLIXML probe contract',async(_case,output)=>{
+  await expect(probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async()=>output))
+    .rejects.toThrow('Invalid PowerShell discovery response');
+});
+it.each([
+  ['wrong edition',probeXml(['/home','/user/profile.ps1','5',''])],
+  ['Preview',probeXml(['/home','/user/profile.ps1','7','preview.1'])],
+  ['relative home',probeXml(['home','/user/profile.ps1','7',''])],
+])('rejects an unsupported probe result: %s',async(_case,output)=>{
+  await expect(probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async()=>output))
+    .rejects.toThrow('unsupported or unresolved');
 });
 
 it('uses the Windows user profile for .NET tools even when HOME points elsewhere',async()=>{
@@ -137,7 +164,7 @@ it('follows the Microsoft Store alias to its read-only PowerShell 7 home and kee
   const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe';
   const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
   expect(result.installations).toEqual([[result.alias,packaged,true]]);
-  expect(result.reason).not.toContain('access denied');
+  expect(result.reason ?? '').not.toContain('access denied');
 });
 
 it('keeps a Microsoft Store alias to PowerShell Preview out of scope',async()=>{

@@ -10,11 +10,11 @@ const learnMore = 'Profiles on Microsoft Learn';
 /** The help text. Modal dialogs show plain text, so each question sits on its own line above its answer. */
 export const powerShellHelpDetail = [
   'How are paths found?',
-  'Personas checks known locations without starting PowerShell, including when you refresh.',
+  'Personas finds installations without starting PowerShell, then asks each detected edition for its canonical profile paths in the background. Profiles stay disabled during the probe.',
   '',
   'What does runtime discovery allow?',
-  'If a path is unresolved, enable Allow Runtime Discovery in Personas Settings to use “Run … to resolve”. ' +
-    'Each click starts the named executable once with profiles disabled. Successful results are kept for this session.',
+  'Allow Runtime Discovery is on by default. Turn it off to use only passive discovery and the Windows registry fallback. ' +
+    'If an automatic attempt fails, “Run … to resolve” retries the named executable once. Results are kept for this session.',
   '',
   'Can I create a missing profile?',
   'Yes, once its location is known and writable.',

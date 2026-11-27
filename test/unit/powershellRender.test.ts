@@ -67,6 +67,19 @@ it('explains disabled runtime discovery only for an installed edition with unres
   }
 });
 
+it('shows background resolution without offering a duplicate manual probe', () => {
+  const resolving: EditionInfo = {
+    ...edition,
+    userDirectory: undefined,
+    reason: 'A nonfatal passive discovery warning',
+    resolving: true,
+  };
+  render(inventory({}, [resolving]));
+  expect(one('.ps-note').textContent).toBe('Resolving profile locations…');
+  expect(one('.ps-note').classList.contains('ps-warning')).toBe(false);
+  expect(all('.ps-resolve')).toHaveLength(0);
+});
+
 describe('automatic refresh', () => {
   it('keeps an open row menu and its focused action', () => {
     render(inventory(console7));

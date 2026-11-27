@@ -140,6 +140,10 @@ function renderNotices(edition: EditionInfo, names: Map<string, string>, allowRu
   if (!pending.length) {
     return edition.reason ? [note(edition.reason, edition.reason, edition.installations.length > 0)] : [];
   }
+  if (edition.resolving) {
+    return [note('Resolving profile locations…',
+      'Personas is resolving the detected edition’s canonical profile paths in the background.', false)];
+  }
   const allUsers = pending.some(installation => !installation.home);
   const summary = !edition.userDirectory
     ? allUsers ? 'Paths unresolved' : 'Current User path unresolved'

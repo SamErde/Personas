@@ -70,10 +70,10 @@ A startup script stored at a standard, user- and host-scoped location that Power
 _Avoid_: unqualified "profile", VS Code profile, persona
 
 **Passive discovery**:
-Finding PowerShell installations and profile locations without starting PowerShell.
+Finding PowerShell installations and any profile locations available from local metadata without starting PowerShell.
 
 **Runtime discovery**:
-Starting a detected PowerShell executable at the user's request to resolve a profile location that passive discovery could not determine.
+Starting a detected PowerShell executable with profiles disabled to ask PowerShell for its canonical profile paths. Personas normally does this in the background; a named retry remains available after a failure.
 
 ### Git configuration
 

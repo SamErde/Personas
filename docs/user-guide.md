@@ -138,9 +138,9 @@ The PowerShell Profiles view lists the PowerShell profile scripts that exist, gr
 
 **Finding profiles**
 
-- Personas finds profile locations without starting PowerShell, including when you refresh. It respects a redirected Documents folder.
-- If an installed edition has a location that can't be found that way, the view says **Runtime discovery is off** beside it. Choose **Open Personas Settings** and turn on `personas.powerShellProfiles.allowRuntimeDiscovery`. It is a machine setting, so set it in User settings.
-- Then choose the named executable, for example **Run pwsh.exe to resolve**. Each click starts that PowerShell once, with profiles disabled and a five-second time limit. A successful result is kept for the rest of the session, even if you turn the setting off again.
+- Personas finds installations without starting PowerShell. It then asks the detected executables for `$PSHOME` and `$PROFILE.CurrentUserAllHosts` in the background, with profiles disabled and a five-second time limit. The view renders the passive results first, so this probe does not delay other views or known profile locations.
+- Successful and failed results are kept for the session. Automatic and file-watcher refreshes reuse them. An explicit **Refresh PowerShell Profiles** retries failures; after a failure, **Run … to resolve** retries only the named installation.
+- `personas.powerShellProfiles.allowRuntimeDiscovery` is on by default and machine-scoped. Turn it off in User settings to prevent both automatic and manual PowerShell probes. On Windows, Personas then uses the redirected Documents values in the registry only when they agree; otherwise it leaves the location unresolved rather than guessing.
 - On Windows, turn off `personas.powerShellProfiles.includeWindowsPowerShell` to leave Windows PowerShell 5.1 and ISE out of discovery, listing, and editing. PowerShell 7 stays available. This setting can differ between workspaces.
 
 **Help.** The **?** in the view's title bar opens a help dialog. Its **Open PowerShell Settings** button shows the PowerShell Profiles settings, and **Profiles on Microsoft Learn** explains profiles and their load order.
@@ -175,7 +175,7 @@ Open them with the gear in any Personas view's title bar, or with **Personas: Op
 | `personas.extensionMatrix.openWithSidebar` | `true` | Window | Opens the Extension Matrix whenever the VS Code Profiles view is shown, including when a window is restored. See [The Personas sidebar](#the-personas-sidebar). |
 | `personas.showAgentsWindowProfile` | `true` | Window | Shows VS Code's Agents window profile in the matrix and the VS Code Profiles view. |
 | `personas.powerShellProfiles.includeWindowsPowerShell` | `true` | Window | On Windows, includes Windows PowerShell 5.1 and ISE in discovery, listing, and editing. It can differ between workspaces. |
-| `personas.powerShellProfiles.allowRuntimeDiscovery` | `false` | Machine | Lets you start a detected PowerShell to find a profile location that can't be found otherwise. Refresh never starts PowerShell. |
+| `personas.powerShellProfiles.allowRuntimeDiscovery` | `true` | Machine | Lets detected PowerShell executables report their canonical profile paths in the background with profiles disabled. Turn it off to use only passive discovery and the Windows registry fallback. |
 | `personas.openMatrixOnActivityBarClick` | `true` | Window | Deprecated. This is the old name of `personas.extensionMatrix.openWithSidebar`, still honored when the new setting isn't set. |
 
 ## Commands
@@ -184,7 +184,7 @@ Open them with the gear in any Personas view's title bar, or with **Personas: Op
 | --- | --- | --- |
 | Personas: Open Extension Matrix | Command Palette, VS Code Profiles view | Opens the matrix. |
 | Personas: Open Personas Settings | Command Palette, gear in each view | Opens User Settings filtered to Personas. |
-| Personas: Refresh PowerShell Profiles | Command Palette, PowerShell Profiles title bar | Looks for profiles again, without starting PowerShell. |
+| Personas: Refresh PowerShell Profiles | Command Palette, PowerShell Profiles title bar | Looks for profiles again and retries failed background path probes. |
 | Personas: PowerShell Profiles Help | Command Palette, **?** in the PowerShell Profiles title bar | Opens the help dialog. |
 | Personas: Refresh Git Configuration | Command Palette, Git Configuration title bar | Reads the Git configuration again. |
 | Personas: Show Effective Git Configuration | Command Palette, Git Configuration title bar | Opens every value in effect. |
@@ -206,4 +206,4 @@ The design decisions behind this are recorded as [architecture decision records]
 - **"Running in a development host — Personas manages the install it runs in; run from an installed build."** You're running Personas from source with F5. Install the packaged VSIX instead (see the [build guide](local-build-test-and-release.md)).
 - **An extension shows its ID instead of its name.** Some extensions use a translated display name, which Personas doesn't look up yet.
 - **The Git Configuration view says Git wasn't found.** Install Git, add it to your `PATH`, or set VS Code's `git.path` setting.
-- **A PowerShell location is unresolved.** See runtime discovery under [PowerShell Profiles](#powershell-profiles).
+- **A PowerShell location is unresolved.** Select **Refresh PowerShell Profiles** to retry all failed probes, or **Run … to resolve** to retry one. If runtime discovery is off, either enable it or review the Windows registry disagreement described under [PowerShell Profiles](#powershell-profiles).
