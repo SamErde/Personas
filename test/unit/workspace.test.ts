@@ -9,7 +9,7 @@ import type {
 import type { ParsedWorkspaceProfileAssociations } from '../../src/core/parsers';
 import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
-  MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
+  MAX_WORKSPACE_EXTENSION_METADATA_BYTES,
   WorkspaceInventoryService,
   composeWorkspaceInventory,
   createWorkspaceDescriptor,
@@ -295,7 +295,7 @@ describe('workspace-local candidate discovery', () => {
           { name: 'not-a-directory', isDirectory: false },
         ];
       },
-      readCandidateManifest: async (requested) => {
+      readCandidateFile: async (requested) => {
         expect(requested).toBe(`${root}\\Local-One\\package.json`);
         return JSON.stringify({
           publisher: 'Acme',
@@ -320,6 +320,99 @@ describe('workspace-local candidate discovery', () => {
     expect(result.warnings.join(' ')).toContain('non-directory');
   });
 
+  it('uses the active language and a parent locale to localize a workspace-local candidate', async () => {
+    const extensionsRoot = 'C:\\Code\\Example\\.vscode\\extensions';
+    const folder = `${extensionsRoot}\\localized`;
+    const files = new Map<string, string>([
+      [
+        `${folder}\\package.json`,
+        JSON.stringify({
+          publisher: 'Acme',
+          name: 'Localized',
+          displayName: '%displayName%',
+          description: '%description%',
+        }),
+      ],
+      [`${folder}\\package.nls.json`, JSON.stringify({ displayName: 'English' })],
+      [`${folder}\\package.nls.zh.json`, JSON.stringify({ displayName: '中文' })],
+    ]);
+    const reads: string[] = [];
+
+    const result = await discoverWorkspaceLocalExtensions(
+      descriptor,
+      {
+        listEntries: async () => [{ name: 'localized', isDirectory: true }],
+        readCandidateFile: async (requested, requestedRoot, maxBytes) => {
+          expect(requestedRoot).toBe(extensionsRoot);
+          expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_METADATA_BYTES);
+          reads.push(requested);
+          return files.get(requested);
+        },
+      },
+      'zh-Hans',
+    );
+
+    expect(result.candidates[0]).toMatchObject({
+      id: 'acme.localized',
+      displayName: '中文',
+    });
+    expect(result.candidates[0]).not.toHaveProperty('description');
+    expect(reads).toEqual([
+      `${folder}\\package.json`,
+      `${folder}\\package.nls.json`,
+      `${folder}\\package.nls.zh-hans.json`,
+      `${folder}\\package.nls.zh.json`,
+    ]);
+  });
+
+  it('falls directly to the default when the first present locale is rejected', async () => {
+    const extensionsRoot = 'C:\\Code\\Example\\.vscode\\extensions';
+    const folder = `${extensionsRoot}\\localized`;
+    const reads: string[] = [];
+    const result = await discoverWorkspaceLocalExtensions(
+      descriptor,
+      {
+        listEntries: async () => [{ name: 'localized', isDirectory: true }],
+        readCandidateFile: async (requested) => {
+          reads.push(requested);
+          if (requested.endsWith('package.json')) {
+            return JSON.stringify({ publisher: 'Acme', name: 'Localized', displayName: '%displayName%' });
+          }
+          if (requested.endsWith('package.nls.json')) return JSON.stringify({ displayName: 'English' });
+          if (requested.endsWith('package.nls.zh-hans.json')) return new Error('rejected by safe reader');
+          return JSON.stringify({ displayName: 'Must not be read' });
+        },
+      },
+      'zh-Hans',
+    );
+
+    expect(result.candidates[0]?.displayName).toBe('English');
+    expect(reads).not.toContain(`${folder}\\package.nls.zh.json`);
+  });
+
+  it('keeps the candidate and falls back to its id when the default bundle is rejected', async () => {
+    const reads: string[] = [];
+    const result = await discoverWorkspaceLocalExtensions(
+      descriptor,
+      {
+        listEntries: async () => [{ name: 'localized', isDirectory: true }],
+        readCandidateFile: async (requested) => {
+          reads.push(requested);
+          if (requested.endsWith('package.json')) {
+            return JSON.stringify({ publisher: 'Acme', name: 'Localized', displayName: '%displayName%' });
+          }
+          if (requested.endsWith('package.nls.json')) return new Error('rejected by safe reader');
+          return JSON.stringify({ displayName: 'Must not be read' });
+        },
+      },
+      'de',
+    );
+
+    expect(result.candidates[0]?.displayName).toBe('acme.localized');
+    expect(reads).toHaveLength(2);
+    expect(result.warnings).toEqual([]);
+  });
+
   it('reports unreadable roots, missing/invalid manifests, and invalid extension ids without throwing', async () => {
     const rootsDescriptor = { ...descriptor, rootFsPaths: ['C:\\A', 'C:\\B'] };
     const result = await discoverWorkspaceLocalExtensions(rootsDescriptor, {
@@ -327,7 +420,7 @@ describe('workspace-local candidate discovery', () => {
         requested.startsWith('C:\\A')
           ? new Error('access denied')
           : ['missing', 'json', 'bad-id'].map((name) => ({ name, isDirectory: true })),
-      readCandidateManifest: async (requested) => {
+      readCandidateFile: async (requested) => {
         if (requested.includes('missing')) return undefined;
         if (requested.includes('json')) return '{nope';
         return JSON.stringify({ publisher: '../bad', name: 'name' });
@@ -341,7 +434,7 @@ describe('workspace-local candidate discovery', () => {
     const rootsDescriptor = { ...descriptor, rootFsPaths: ['C:\\Z', 'C:\\A'] };
     const result = await discoverWorkspaceLocalExtensions(rootsDescriptor, {
       listEntries: async () => [{ name: 'fixture', isDirectory: true }],
-      readCandidateManifest: async () => JSON.stringify({ publisher: 'Pub', name: 'Duplicate' }),
+      readCandidateFile: async () => JSON.stringify({ publisher: 'Pub', name: 'Duplicate' }),
     });
     expect(result.candidates.map((candidate) => candidate.fsPath)).toEqual([
       'C:\\A\\.vscode\\extensions\\fixture',
@@ -360,10 +453,10 @@ describe('workspace-local candidate discovery', () => {
     let reads = 0;
     const result = await discoverWorkspaceLocalExtensions(descriptor, {
       listEntries: async () => entries,
-      readCandidateManifest: async (_manifestPath, extensionsRoot, maxBytes) => {
+      readCandidateFile: async (_manifestPath, extensionsRoot, maxBytes) => {
         reads += 1;
         expect(extensionsRoot).toBe('C:\\Code\\Example\\.vscode\\extensions');
-        expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES);
+        expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_METADATA_BYTES);
         return JSON.stringify({ publisher: 'pub', name: `candidate-${reads}` });
       },
     });
@@ -375,11 +468,11 @@ describe('workspace-local candidate discovery', () => {
   it('rejects an over-limit manifest even if an injected adapter returns it', async () => {
     const result = await discoverWorkspaceLocalExtensions(descriptor, {
       listEntries: async () => [{ name: 'oversized', isDirectory: true }],
-      readCandidateManifest: async () =>
+      readCandidateFile: async () =>
         JSON.stringify({
           publisher: 'pub',
           name: 'oversized',
-          description: 'x'.repeat(MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES),
+          description: 'x'.repeat(MAX_WORKSPACE_EXTENSION_METADATA_BYTES),
         }),
     });
     expect(result.candidates).toEqual([]);
@@ -705,7 +798,7 @@ describe('workspace activity counts and service failures', () => {
         touched = true;
         return [];
       },
-      readCandidateManifest: async () => {
+      readCandidateFile: async () => {
         touched = true;
         return undefined;
       },
@@ -726,7 +819,7 @@ describe('workspace activity counts and service failures', () => {
         throw new Error('host unavailable');
       },
       listEntries: async () => [],
-      readCandidateManifest: async () => undefined,
+      readCandidateFile: async () => undefined,
       readFile: async () => undefined,
     });
     const result = await service.getWorkspaceInventory(inventory());

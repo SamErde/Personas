@@ -17,9 +17,9 @@ type OpenWorkspaceDirectory = (p: string) => Promise<WorkspaceDirectoryReader>;
 
 // Identity fields are bigint: NTFS file IDs can exceed 2^53, so numeric stats can round two
 // different files to the same ino.
-type StatManifestPath = (p: string) => Promise<{ dev: bigint; ino: bigint; isFile(): boolean; isSymbolicLink(): boolean }>;
+type StatWorkspaceFilePath = (p: string) => Promise<{ dev: bigint; ino: bigint; isFile(): boolean; isSymbolicLink(): boolean }>;
 
-const lstatExact: StatManifestPath = (p) => lstat(p, { bigint: true });
+const lstatExact: StatWorkspaceFilePath = (p) => lstat(p, { bigint: true });
 
 /** Enumerate only enough workspace-controlled entries to fill the cap and detect truncation. */
 export async function listBoundedWorkspaceEntries(
@@ -51,7 +51,7 @@ export async function listBoundedWorkspaceEntries(
   }
 }
 
-async function openManifest(p: string): Promise<FileHandle | undefined | Error> {
+async function openWorkspaceFile(p: string): Promise<FileHandle | undefined | Error> {
   const flags =
     constants.O_RDONLY |
     (constants.O_NOFOLLOW ?? 0) |
@@ -65,25 +65,25 @@ async function openManifest(p: string): Promise<FileHandle | undefined | Error> 
 }
 
 /**
- * Read an untrusted workspace manifest without a check-then-open race. The file is opened once,
+ * Read an untrusted workspace metadata file without a check-then-open race. The file is opened once,
  * validated and bounded through that handle, and read only from that same handle. Path checks run
  * afterwards to decide whether the already-bounded bytes may be accepted; no path-based read
  * follows them. `O_NOFOLLOW`/`O_NONBLOCK` also prevent POSIX symlinks to devices and FIFOs from
  * turning the open into an unbounded operation.
  */
-export async function readBoundedWorkspaceManifest(
+export async function readBoundedWorkspaceFile(
   p: string,
   extensionsRoot: string,
   maxBytes: number,
-  statPath: StatManifestPath = lstatExact,
+  statPath: StatWorkspaceFilePath = lstatExact,
 ): Promise<string | undefined | Error> {
-  const opened = await openManifest(p);
+  const opened = await openWorkspaceFile(p);
   if (opened === undefined || opened instanceof Error) return opened;
 
   try {
     const openedStat = await opened.stat({ bigint: true });
-    if (!openedStat.isFile()) return new Error('manifest is not a regular file.');
-    if (openedStat.size > BigInt(maxBytes)) return new Error(`manifest exceeds ${maxBytes} bytes.`);
+    if (!openedStat.isFile()) return new Error('workspace file is not a regular file.');
+    if (openedStat.size > BigInt(maxBytes)) return new Error(`workspace file exceeds ${maxBytes} bytes.`);
 
     const buffer = Buffer.alloc(maxBytes + 1);
     let total = 0;
@@ -92,25 +92,25 @@ export async function readBoundedWorkspaceManifest(
       if (next.bytesRead === 0) break;
       total += next.bytesRead;
     }
-    if (total > maxBytes) return new Error(`manifest exceeds ${maxBytes} bytes.`);
+    if (total > maxBytes) return new Error(`workspace file exceeds ${maxBytes} bytes.`);
 
-    const [pathStat, realRoot, realManifest] = await Promise.all([
+    const [pathStat, realRoot, realFile] = await Promise.all([
       statPath(p),
       realpath(extensionsRoot),
       realpath(p),
     ]);
     if (pathStat.isSymbolicLink() || !pathStat.isFile()) {
-      return new Error('manifest is not a regular file.');
+      return new Error('workspace file is not a regular file.');
     }
     // A path lstat can report dev 0 (Node 22.15.1 on Windows, as in VS Code 1.101) while the
     // handle reports the real device, so dev is compared only when the path stat supplies one.
     // On every platform, a dev-0 path stat leaves ino as the identity check.
     const deviceChanged = pathStat.dev !== 0n && openedStat.dev !== pathStat.dev;
     if (deviceChanged || openedStat.ino !== pathStat.ino) {
-      return new Error('manifest changed while it was being read.');
+      return new Error('workspace file changed while it was being read.');
     }
-    if (!isFsPathContained(realRoot, realManifest)) {
-      return new Error(`manifest resolves outside ${extensionsRoot}.`);
+    if (!isFsPathContained(realRoot, realFile)) {
+      return new Error(`workspace file resolves outside ${extensionsRoot}.`);
     }
     return buffer.subarray(0, total).toString('utf8');
   } catch (error) {

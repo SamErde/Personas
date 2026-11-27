@@ -1,6 +1,6 @@
 {
   "name": "workspace-candidate",
-  "displayName": "Workspace Candidate Fixture",
+  "displayName": "%displayName%",
   "publisher": "personas-tests",
   "version": "1.0.0",
   "engines": {

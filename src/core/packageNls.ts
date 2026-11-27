@@ -62,6 +62,27 @@ async function readLocaleBundle(folder: string, language: string, readFile: Read
   return undefined;
 }
 
+/** Resolves a parsed package display name through extension-owned NLS bundles. */
+export async function resolveLocalizedPackageDisplayName(
+  meta: Pick<PackageMeta, 'displayName' | 'displayNameKey'>,
+  folder: string,
+  language: string,
+  readFile: ReadFile,
+): Promise<string | undefined> {
+  if (meta.displayNameKey === undefined) return meta.displayName;
+
+  // VS Code only attempts a locale bundle when the extension has a usable default bundle.
+  const defaultBundle = await readDefaultBundle(folder, readFile);
+  if (!defaultBundle) return undefined;
+
+  const localeBundle = await readLocaleBundle(folder, language, readFile);
+  const localized = localeBundle?.[meta.displayNameKey];
+  // Match VS Code's `translated === undefined` fallback: a present but empty locale value is
+  // selected, then rejected, rather than being replaced with the nonempty default message.
+  const selected = localized === undefined ? defaultBundle[meta.displayNameKey] : localized;
+  return message(selected);
+}
+
 /** Reads package metadata and resolves an exact displayName placeholder like VS Code's scanner. */
 export async function readLocalizedPackageMeta(
   folder: string,
@@ -72,15 +93,6 @@ export async function readLocalizedPackageMeta(
   if (meta === undefined || meta instanceof Error) return meta;
   if (meta.displayNameKey === undefined) return meta;
 
-  // VS Code only attempts a locale bundle when the extension has a usable default bundle.
-  const defaultBundle = await readDefaultBundle(folder, readFile);
-  if (!defaultBundle) return meta;
-
-  const localeBundle = await readLocaleBundle(folder, language, readFile);
-  const localized = localeBundle?.[meta.displayNameKey];
-  // Match VS Code's `translated === undefined` fallback: a present but empty locale value is
-  // selected, then rejected, rather than being replaced with the nonempty default message.
-  const selected = localized === undefined ? defaultBundle[meta.displayNameKey] : localized;
-  const displayName = message(selected);
+  const displayName = await resolveLocalizedPackageDisplayName(meta, folder, language, readFile);
   return displayName === undefined ? meta : { ...meta, displayName };
 }

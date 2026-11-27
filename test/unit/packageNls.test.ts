@@ -1,6 +1,10 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { packageNlsLocaleFileNames, readLocalizedPackageMeta } from '../../src/core/packageNls';
+import {
+  packageNlsLocaleFileNames,
+  readLocalizedPackageMeta,
+  resolveLocalizedPackageDisplayName,
+} from '../../src/core/packageNls';
 import type { PackageMeta } from '../../src/core/parsers';
 
 const folder = join('extensions', 'pub.ext-1.0.0');
@@ -39,6 +43,40 @@ describe('packageNlsLocaleFileNames', () => {
 
   it.each(['', '../en', 'en/', 'en-', 'a'.repeat(33)])('rejects an unsafe or invalid language (%s)', (language) => {
     expect(packageNlsLocaleFileNames(language)).toEqual([]);
+  });
+});
+
+describe('resolveLocalizedPackageDisplayName', () => {
+  it('returns a literal name without reading a bundle', async () => {
+    const io = reader({ [basePath]: JSON.stringify({ displayName: 'Ignored' }) });
+
+    const displayName = await resolveLocalizedPackageDisplayName(
+      { displayName: 'Literal' },
+      folder,
+      'de',
+      io.readFile,
+    );
+
+    expect(displayName).toBe('Literal');
+    expect(io.calls).toEqual([]);
+  });
+
+  it('localizes already-parsed placeholder metadata without rereading package.json', async () => {
+    const localePath = join(folder, 'package.nls.de.json');
+    const io = reader({
+      [basePath]: JSON.stringify({ displayName: 'English' }),
+      [localePath]: JSON.stringify({ displayName: 'Deutsch' }),
+    });
+
+    const displayName = await resolveLocalizedPackageDisplayName(
+      { displayNameKey: 'displayName' },
+      folder,
+      'de',
+      io.readFile,
+    );
+
+    expect(displayName).toBe('Deutsch');
+    expect(io.calls).toEqual([basePath, localePath]);
   });
 });
 

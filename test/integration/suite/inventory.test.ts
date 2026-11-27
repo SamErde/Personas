@@ -11,14 +11,14 @@ import { InventoryService, type InventoryIo } from '../../../src/core/inventory'
 import { createCliRunner } from '../../../src/core/cliRunner';
 import { withoutRepositoryOverrides } from '../../../src/git/configService';
 import { MutationService } from '../../../src/core/mutations';
-import { readLocalizedPackageMeta } from '../../../src/core/packageNls';
+import { packageNlsLocaleFileNames, readLocalizedPackageMeta } from '../../../src/core/packageNls';
 import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/paths';
 import {
   WorkspaceInventoryService,
   createWorkspaceDescriptor,
   type WorkspaceInventoryIo,
 } from '../../../src/core/workspace';
-import { readBoundedWorkspaceManifest } from '../../../src/workspaceFileIo';
+import { readBoundedWorkspaceFile } from '../../../src/workspaceFileIo';
 
 const SUITE_TIMEOUT_MS = 120000;
 
@@ -90,7 +90,7 @@ const workspaceIo: WorkspaceInventoryIo = {
       return error instanceof Error ? error : new Error(String(error));
     }
   },
-  readCandidateManifest: readBoundedWorkspaceManifest,
+  readCandidateFile: readBoundedWorkspaceFile,
   listEntries: async (p) => {
     try {
       return fs.readdirSync(p, { withFileTypes: true }).map((entry) => ({
@@ -215,15 +215,32 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
         comparableFsPath(workspaceDir),
       );
 
-      const workspace = await new WorkspaceInventoryService(testPaths().storageJson, workspaceIo).getWorkspaceInventory(
-        inventory,
+      const workspaceCandidateFolder = path.join(
+        workspaceDir,
+        '.vscode',
+        'extensions',
+        'workspace-candidate',
       );
+      const localeFileName = packageNlsLocaleFileNames(vscode.env.language)[0];
+      assert.ok(localeFileName, `VS Code reported an unsupported UI language: ${vscode.env.language}`);
+      const localeDisplayName = `Localized Workspace Candidate Fixture (${vscode.env.language})`;
+      fs.writeFileSync(
+        path.join(workspaceCandidateFolder, localeFileName),
+        JSON.stringify({ displayName: localeDisplayName }),
+      );
+
+      const workspace = await new WorkspaceInventoryService(
+        testPaths().storageJson,
+        workspaceIo,
+        vscode.env.language,
+      ).getWorkspaceInventory(inventory);
       assert.ok(workspace, 'workspace inventory missing for disposable folder fixture');
       const candidate = workspace.extensions.find((extension) => extension.id === 'personas-tests.workspace-candidate');
       assert.ok(candidate, 'workspace-local candidate fixture was not discovered');
       assert.strictEqual(candidate.state, 'unknown');
       assert.strictEqual(candidate.workspaceLocal, 'candidate');
       assert.strictEqual(candidate.profileBacked, false);
+      assert.strictEqual(candidate.displayName, localeDisplayName);
     }));
 
     it('CLI changes fire the stable event and the installed fixture becomes positively enabled', {skip:!!process.env.PERSONAS_IT_POWERSHELL_ONLY}, guard(async () => {
@@ -248,9 +265,11 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.deepStrictEqual(installed.installedIn, ['default']);
       assert.strictEqual(installed.displayName, 'Localized Personas Hello Fixture');
 
-      const workspace = await new WorkspaceInventoryService(testPaths().storageJson, workspaceIo).getWorkspaceInventory(
-        inventory,
-      );
+      const workspace = await new WorkspaceInventoryService(
+        testPaths().storageJson,
+        workspaceIo,
+        vscode.env.language,
+      ).getWorkspaceInventory(inventory);
       const effective = workspace?.extensions.find(
         (extension) => extension.id === 'personas-tests.personas-hello-fixture',
       );
