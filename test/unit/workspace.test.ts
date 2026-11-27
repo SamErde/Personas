@@ -21,7 +21,7 @@ import {
   type WorkspaceDiscoveryResult,
   type WorkspaceRuntimeExtension,
 } from '../../src/core/workspace';
-import { areFsPathsEqual, isFsPathContained } from '../../src/core/paths';
+import { areFsPathsEqual, isFsPathContained, joinFsPath } from '../../src/core/paths';
 
 const profiles: Profile[] = [
   { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
@@ -284,6 +284,46 @@ describe('workspace URI and profile identity', () => {
 });
 
 describe('workspace-local candidate discovery', () => {
+  type CandidateFileValue = string | Error | undefined;
+
+  // Deliberately use a Windows path on every host so POSIX CI proves workspace discovery
+  // supplies joinFsPath instead of falling back to host-native joins for NLS bundle paths.
+  const localizedExtensionsRoot = 'C:\\Code\\Example\\.vscode\\extensions';
+  const localizedFolder = joinFsPath(localizedExtensionsRoot, 'localized');
+  const localizedManifest = JSON.stringify({
+    publisher: 'Acme',
+    name: 'Localized',
+    displayName: '%displayName%',
+    description: '%description%',
+  });
+
+  async function discoverLocalizedCandidate(
+    language: string,
+    nlsFiles: Readonly<Record<string, CandidateFileValue>>,
+  ): Promise<{ result: WorkspaceDiscoveryResult; reads: string[]; folder: string }> {
+    const files = new Map<string, CandidateFileValue>([
+      [joinFsPath(localizedFolder, 'package.json'), localizedManifest],
+      ...Object.entries(nlsFiles).map(
+        ([fileName, value]) => [joinFsPath(localizedFolder, fileName), value] as const,
+      ),
+    ]);
+    const reads: string[] = [];
+    const result = await discoverWorkspaceLocalExtensions(
+      descriptor,
+      {
+        listEntries: async () => [{ name: 'localized', isDirectory: true }],
+        readCandidateFile: async (requested, extensionsRoot, maxBytes) => {
+          expect(extensionsRoot).toBe(localizedExtensionsRoot);
+          expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_METADATA_BYTES);
+          reads.push(requested);
+          return files.get(requested);
+        },
+      },
+      language,
+    );
+    return { result, reads, folder: localizedFolder };
+  }
+
   it('scans only immediate child directories and normalizes valid manifest metadata', async () => {
     const root = 'C:\\Code\\Example\\.vscode\\extensions';
     const result = await discoverWorkspaceLocalExtensions(descriptor, {
@@ -321,36 +361,10 @@ describe('workspace-local candidate discovery', () => {
   });
 
   it('uses the active language and a parent locale to localize a workspace-local candidate', async () => {
-    const extensionsRoot = 'C:\\Code\\Example\\.vscode\\extensions';
-    const folder = `${extensionsRoot}\\localized`;
-    const files = new Map<string, string>([
-      [
-        `${folder}\\package.json`,
-        JSON.stringify({
-          publisher: 'Acme',
-          name: 'Localized',
-          displayName: '%displayName%',
-          description: '%description%',
-        }),
-      ],
-      [`${folder}\\package.nls.json`, JSON.stringify({ displayName: 'English' })],
-      [`${folder}\\package.nls.zh.json`, JSON.stringify({ displayName: '中文' })],
-    ]);
-    const reads: string[] = [];
-
-    const result = await discoverWorkspaceLocalExtensions(
-      descriptor,
-      {
-        listEntries: async () => [{ name: 'localized', isDirectory: true }],
-        readCandidateFile: async (requested, requestedRoot, maxBytes) => {
-          expect(requestedRoot).toBe(extensionsRoot);
-          expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_METADATA_BYTES);
-          reads.push(requested);
-          return files.get(requested);
-        },
-      },
-      'zh-Hans',
-    );
+    const { result, reads, folder } = await discoverLocalizedCandidate('zh-Hans', {
+      'package.nls.json': JSON.stringify({ displayName: 'English' }),
+      'package.nls.zh.json': JSON.stringify({ displayName: '中文' }),
+    });
 
     expect(result.candidates[0]).toMatchObject({
       id: 'acme.localized',
@@ -358,55 +372,29 @@ describe('workspace-local candidate discovery', () => {
     });
     expect(result.candidates[0]).not.toHaveProperty('description');
     expect(reads).toEqual([
-      `${folder}\\package.json`,
-      `${folder}\\package.nls.json`,
-      `${folder}\\package.nls.zh-hans.json`,
-      `${folder}\\package.nls.zh.json`,
+      joinFsPath(folder, 'package.json'),
+      joinFsPath(folder, 'package.nls.json'),
+      joinFsPath(folder, 'package.nls.zh-hans.json'),
+      joinFsPath(folder, 'package.nls.zh.json'),
     ]);
   });
 
   it('falls directly to the default when the first present locale is rejected', async () => {
-    const extensionsRoot = 'C:\\Code\\Example\\.vscode\\extensions';
-    const folder = `${extensionsRoot}\\localized`;
-    const reads: string[] = [];
-    const result = await discoverWorkspaceLocalExtensions(
-      descriptor,
-      {
-        listEntries: async () => [{ name: 'localized', isDirectory: true }],
-        readCandidateFile: async (requested) => {
-          reads.push(requested);
-          if (requested.endsWith('package.json')) {
-            return JSON.stringify({ publisher: 'Acme', name: 'Localized', displayName: '%displayName%' });
-          }
-          if (requested.endsWith('package.nls.json')) return JSON.stringify({ displayName: 'English' });
-          if (requested.endsWith('package.nls.zh-hans.json')) return new Error('rejected by safe reader');
-          return JSON.stringify({ displayName: 'Must not be read' });
-        },
-      },
-      'zh-Hans',
-    );
+    const { result, reads, folder } = await discoverLocalizedCandidate('zh-Hans', {
+      'package.nls.json': JSON.stringify({ displayName: 'English' }),
+      'package.nls.zh-hans.json': new Error('rejected by safe reader'),
+      'package.nls.zh.json': JSON.stringify({ displayName: 'Must not be read' }),
+    });
 
     expect(result.candidates[0]?.displayName).toBe('English');
-    expect(reads).not.toContain(`${folder}\\package.nls.zh.json`);
+    expect(reads).not.toContain(joinFsPath(folder, 'package.nls.zh.json'));
   });
 
   it('keeps the candidate and falls back to its id when the default bundle is rejected', async () => {
-    const reads: string[] = [];
-    const result = await discoverWorkspaceLocalExtensions(
-      descriptor,
-      {
-        listEntries: async () => [{ name: 'localized', isDirectory: true }],
-        readCandidateFile: async (requested) => {
-          reads.push(requested);
-          if (requested.endsWith('package.json')) {
-            return JSON.stringify({ publisher: 'Acme', name: 'Localized', displayName: '%displayName%' });
-          }
-          if (requested.endsWith('package.nls.json')) return new Error('rejected by safe reader');
-          return JSON.stringify({ displayName: 'Must not be read' });
-        },
-      },
-      'de',
-    );
+    const { result, reads } = await discoverLocalizedCandidate('de', {
+      'package.nls.json': new Error('rejected by safe reader'),
+      'package.nls.de.json': JSON.stringify({ displayName: 'Must not be read' }),
+    });
 
     expect(result.candidates[0]?.displayName).toBe('acme.localized');
     expect(reads).toHaveLength(2);
