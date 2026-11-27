@@ -12,7 +12,7 @@ import {
   WorkspaceInventoryService,
   type WorkspaceInventoryIo,
 } from './core/workspace';
-import { listBoundedWorkspaceEntries, readBoundedWorkspaceManifest } from './workspaceFileIo';
+import { listBoundedWorkspaceEntries, readBoundedWorkspaceFile } from './workspaceFileIo';
 
 // Generous: a Marketplace install downloads the VSIX. Long enough for a slow network, short
 // enough that one hung `code` process cannot block the mutation queue for the whole session.
@@ -85,7 +85,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const inventory = new InventoryService(paths, io);
   const workspaceIo: WorkspaceInventoryIo = {
     readFile,
-    readCandidateManifest: readBoundedWorkspaceManifest,
+    readCandidateFile: readBoundedWorkspaceFile,
     listEntries: (p) => listBoundedWorkspaceEntries(p, MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT),
     getDescriptor: () =>
       createWorkspaceDescriptor({
@@ -111,7 +111,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
           : {}),
       })),
   };
-  const workspace = new WorkspaceInventoryService(paths.storageJson, workspaceIo);
+  const workspace = new WorkspaceInventoryService(paths.storageJson, workspaceIo, vscode.env.language);
   const mutations = new MutationService({
     cliPath,
     extraArgs: ['--user-data-dir', paths.userDataDir, '--extensions-dir', paths.extensionsDir],

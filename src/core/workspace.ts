@@ -2,10 +2,12 @@ import { dirnameFsPath, fsPathKey, isFsPathContained, joinFsPath, type WatchTarg
 import { asError } from './errors';
 import {
   normalizeExtensionId,
+  parsePackageMeta,
   parseWorkspaceProfileAssociations,
   unlocalizedString,
   type ParsedWorkspaceProfileAssociations,
 } from './parsers';
+import { resolveLocalizedPackageDisplayName } from './packageNls';
 import type {
   Inventory,
   Profile,
@@ -19,7 +21,7 @@ import type {
 const DEFAULT_PROFILE_SENTINEL = '__default__profile__';
 const EXTENSION_PART_RE = /^[a-z0-9][a-z0-9-]*$/i;
 export const MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT = 200;
-export const MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES = 256 * 1024;
+export const MAX_WORKSPACE_EXTENSION_METADATA_BYTES = 256 * 1024;
 
 export interface WorkspaceFolderInput {
   name: string;
@@ -43,9 +45,9 @@ export interface WorkspaceRuntimeExtension {
 }
 
 export interface WorkspaceCandidateIo {
-  /** Reads one untrusted workspace manifest only when it is a bounded regular file whose real
+  /** Reads one untrusted workspace metadata file only when it is a bounded regular file whose real
    *  path remains inside `extensionsRoot`. */
-  readCandidateManifest(
+  readCandidateFile(
     p: string,
     extensionsRoot: string,
     maxBytes: number,
@@ -198,6 +200,7 @@ export function resolveActiveProfile(
 export async function discoverWorkspaceLocalExtensions(
   descriptor: WorkspaceDescriptor,
   io: WorkspaceCandidateIo,
+  language = '',
 ): Promise<WorkspaceDiscoveryResult> {
   const candidates: WorkspaceLocalExtension[] = [];
   const warnings: string[] = [];
@@ -232,10 +235,10 @@ export async function discoverWorkspaceLocalExtensions(
         continue;
       }
       const manifestPath = joinFsPath(folderPath, 'package.json');
-      const text = await io.readCandidateManifest(
+      const text = await io.readCandidateFile(
         manifestPath,
         extensionsRoot,
-        MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
+        MAX_WORKSPACE_EXTENSION_METADATA_BYTES,
       );
       if (text === undefined) {
         warnings.push(`Ignored ${folderPath}: package.json is missing.`);
@@ -245,9 +248,9 @@ export async function discoverWorkspaceLocalExtensions(
         warnings.push(`Could not read ${manifestPath}: ${text.message}`);
         continue;
       }
-      if (Buffer.byteLength(text, 'utf8') > MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES) {
+      if (Buffer.byteLength(text, 'utf8') > MAX_WORKSPACE_EXTENSION_METADATA_BYTES) {
         warnings.push(
-          `Could not read ${manifestPath}: manifest exceeds ${MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES} bytes.`,
+          `Could not read ${manifestPath}: manifest exceeds ${MAX_WORKSPACE_EXTENSION_METADATA_BYTES} bytes.`,
         );
         continue;
       }
@@ -272,8 +275,21 @@ export async function discoverWorkspaceLocalExtensions(
         continue;
       }
       const id = normalizeExtensionId(`${publisher}.${name}`);
-      const rawDisplayName = unlocalizedString(manifest['displayName']);
-      const displayName = rawDisplayName?.trim() ? rawDisplayName : id;
+      const packageMeta = parsePackageMeta(text);
+      let resolvedDisplayName: string | undefined;
+      try {
+        resolvedDisplayName = await resolveLocalizedPackageDisplayName(
+          packageMeta,
+          folderPath,
+          language,
+          (p) => io.readCandidateFile(p, extensionsRoot, MAX_WORKSPACE_EXTENSION_METADATA_BYTES),
+          joinFsPath,
+        );
+      } catch {
+        // Localization is optional metadata. A broken adapter or rejected NLS read keeps the
+        // safely parsed candidate and uses its stable extension id.
+      }
+      const displayName = resolvedDisplayName?.trim() ? resolvedDisplayName : id;
       const version = typeof manifest['version'] === 'string' ? manifest['version'] : undefined;
       const description = unlocalizedString(manifest['description']);
       candidates.push({
@@ -495,6 +511,7 @@ export class WorkspaceInventoryService {
   constructor(
     private readonly storageJson: string,
     private readonly io: WorkspaceInventoryIo,
+    private readonly language = '',
   ) {}
 
   watchedTargets(): WatchTarget[] {
@@ -522,7 +539,7 @@ export class WorkspaceInventoryService {
 
     let discovery: WorkspaceDiscoveryResult;
     try {
-      discovery = await discoverWorkspaceLocalExtensions(descriptor, this.io);
+      discovery = await discoverWorkspaceLocalExtensions(descriptor, this.io, this.language);
     } catch (error) {
       discovery = {
         candidates: [],

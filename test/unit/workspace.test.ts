@@ -9,7 +9,7 @@ import type {
 import type { ParsedWorkspaceProfileAssociations } from '../../src/core/parsers';
 import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
-  MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES,
+  MAX_WORKSPACE_EXTENSION_METADATA_BYTES,
   WorkspaceInventoryService,
   composeWorkspaceInventory,
   createWorkspaceDescriptor,
@@ -21,7 +21,7 @@ import {
   type WorkspaceDiscoveryResult,
   type WorkspaceRuntimeExtension,
 } from '../../src/core/workspace';
-import { areFsPathsEqual, isFsPathContained } from '../../src/core/paths';
+import { areFsPathsEqual, isFsPathContained, joinFsPath } from '../../src/core/paths';
 
 const profiles: Profile[] = [
   { id: 'default', name: 'Default', isDefault: true, inheritsDefaultExtensions: false },
@@ -284,6 +284,46 @@ describe('workspace URI and profile identity', () => {
 });
 
 describe('workspace-local candidate discovery', () => {
+  type CandidateFileValue = string | Error | undefined;
+
+  // Deliberately use a Windows path on every host so POSIX CI proves workspace discovery
+  // supplies joinFsPath instead of falling back to host-native joins for NLS bundle paths.
+  const localizedExtensionsRoot = 'C:\\Code\\Example\\.vscode\\extensions';
+  const localizedFolder = joinFsPath(localizedExtensionsRoot, 'localized');
+  const localizedManifest = JSON.stringify({
+    publisher: 'Acme',
+    name: 'Localized',
+    displayName: '%displayName%',
+    description: '%description%',
+  });
+
+  async function discoverLocalizedCandidate(
+    language: string,
+    nlsFiles: Readonly<Record<string, CandidateFileValue>>,
+  ): Promise<{ result: WorkspaceDiscoveryResult; reads: string[]; folder: string }> {
+    const files = new Map<string, CandidateFileValue>([
+      [joinFsPath(localizedFolder, 'package.json'), localizedManifest],
+      ...Object.entries(nlsFiles).map(
+        ([fileName, value]) => [joinFsPath(localizedFolder, fileName), value] as const,
+      ),
+    ]);
+    const reads: string[] = [];
+    const result = await discoverWorkspaceLocalExtensions(
+      descriptor,
+      {
+        listEntries: async () => [{ name: 'localized', isDirectory: true }],
+        readCandidateFile: async (requested, extensionsRoot, maxBytes) => {
+          expect(extensionsRoot).toBe(localizedExtensionsRoot);
+          expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_METADATA_BYTES);
+          reads.push(requested);
+          return files.get(requested);
+        },
+      },
+      language,
+    );
+    return { result, reads, folder: localizedFolder };
+  }
+
   it('scans only immediate child directories and normalizes valid manifest metadata', async () => {
     const root = 'C:\\Code\\Example\\.vscode\\extensions';
     const result = await discoverWorkspaceLocalExtensions(descriptor, {
@@ -295,7 +335,7 @@ describe('workspace-local candidate discovery', () => {
           { name: 'not-a-directory', isDirectory: false },
         ];
       },
-      readCandidateManifest: async (requested) => {
+      readCandidateFile: async (requested) => {
         expect(requested).toBe(`${root}\\Local-One\\package.json`);
         return JSON.stringify({
           publisher: 'Acme',
@@ -320,6 +360,47 @@ describe('workspace-local candidate discovery', () => {
     expect(result.warnings.join(' ')).toContain('non-directory');
   });
 
+  it('uses the active language and a parent locale to localize a workspace-local candidate', async () => {
+    const { result, reads, folder } = await discoverLocalizedCandidate('zh-Hans', {
+      'package.nls.json': JSON.stringify({ displayName: 'English' }),
+      'package.nls.zh.json': JSON.stringify({ displayName: '中文' }),
+    });
+
+    expect(result.candidates[0]).toMatchObject({
+      id: 'acme.localized',
+      displayName: '中文',
+    });
+    expect(result.candidates[0]).not.toHaveProperty('description');
+    expect(reads).toEqual([
+      joinFsPath(folder, 'package.json'),
+      joinFsPath(folder, 'package.nls.json'),
+      joinFsPath(folder, 'package.nls.zh-hans.json'),
+      joinFsPath(folder, 'package.nls.zh.json'),
+    ]);
+  });
+
+  it('falls directly to the default when the first present locale is rejected', async () => {
+    const { result, reads, folder } = await discoverLocalizedCandidate('zh-Hans', {
+      'package.nls.json': JSON.stringify({ displayName: 'English' }),
+      'package.nls.zh-hans.json': new Error('rejected by safe reader'),
+      'package.nls.zh.json': JSON.stringify({ displayName: 'Must not be read' }),
+    });
+
+    expect(result.candidates[0]?.displayName).toBe('English');
+    expect(reads).not.toContain(joinFsPath(folder, 'package.nls.zh.json'));
+  });
+
+  it('keeps the candidate and falls back to its id when the default bundle is rejected', async () => {
+    const { result, reads } = await discoverLocalizedCandidate('de', {
+      'package.nls.json': new Error('rejected by safe reader'),
+      'package.nls.de.json': JSON.stringify({ displayName: 'Must not be read' }),
+    });
+
+    expect(result.candidates[0]?.displayName).toBe('acme.localized');
+    expect(reads).toHaveLength(2);
+    expect(result.warnings).toEqual([]);
+  });
+
   it('reports unreadable roots, missing/invalid manifests, and invalid extension ids without throwing', async () => {
     const rootsDescriptor = { ...descriptor, rootFsPaths: ['C:\\A', 'C:\\B'] };
     const result = await discoverWorkspaceLocalExtensions(rootsDescriptor, {
@@ -327,7 +408,7 @@ describe('workspace-local candidate discovery', () => {
         requested.startsWith('C:\\A')
           ? new Error('access denied')
           : ['missing', 'json', 'bad-id'].map((name) => ({ name, isDirectory: true })),
-      readCandidateManifest: async (requested) => {
+      readCandidateFile: async (requested) => {
         if (requested.includes('missing')) return undefined;
         if (requested.includes('json')) return '{nope';
         return JSON.stringify({ publisher: '../bad', name: 'name' });
@@ -341,7 +422,7 @@ describe('workspace-local candidate discovery', () => {
     const rootsDescriptor = { ...descriptor, rootFsPaths: ['C:\\Z', 'C:\\A'] };
     const result = await discoverWorkspaceLocalExtensions(rootsDescriptor, {
       listEntries: async () => [{ name: 'fixture', isDirectory: true }],
-      readCandidateManifest: async () => JSON.stringify({ publisher: 'Pub', name: 'Duplicate' }),
+      readCandidateFile: async () => JSON.stringify({ publisher: 'Pub', name: 'Duplicate' }),
     });
     expect(result.candidates.map((candidate) => candidate.fsPath)).toEqual([
       'C:\\A\\.vscode\\extensions\\fixture',
@@ -360,10 +441,10 @@ describe('workspace-local candidate discovery', () => {
     let reads = 0;
     const result = await discoverWorkspaceLocalExtensions(descriptor, {
       listEntries: async () => entries,
-      readCandidateManifest: async (_manifestPath, extensionsRoot, maxBytes) => {
+      readCandidateFile: async (_manifestPath, extensionsRoot, maxBytes) => {
         reads += 1;
         expect(extensionsRoot).toBe('C:\\Code\\Example\\.vscode\\extensions');
-        expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES);
+        expect(maxBytes).toBe(MAX_WORKSPACE_EXTENSION_METADATA_BYTES);
         return JSON.stringify({ publisher: 'pub', name: `candidate-${reads}` });
       },
     });
@@ -375,11 +456,11 @@ describe('workspace-local candidate discovery', () => {
   it('rejects an over-limit manifest even if an injected adapter returns it', async () => {
     const result = await discoverWorkspaceLocalExtensions(descriptor, {
       listEntries: async () => [{ name: 'oversized', isDirectory: true }],
-      readCandidateManifest: async () =>
+      readCandidateFile: async () =>
         JSON.stringify({
           publisher: 'pub',
           name: 'oversized',
-          description: 'x'.repeat(MAX_WORKSPACE_EXTENSION_MANIFEST_BYTES),
+          description: 'x'.repeat(MAX_WORKSPACE_EXTENSION_METADATA_BYTES),
         }),
     });
     expect(result.candidates).toEqual([]);
@@ -705,7 +786,7 @@ describe('workspace activity counts and service failures', () => {
         touched = true;
         return [];
       },
-      readCandidateManifest: async () => {
+      readCandidateFile: async () => {
         touched = true;
         return undefined;
       },
@@ -726,7 +807,7 @@ describe('workspace activity counts and service failures', () => {
         throw new Error('host unavailable');
       },
       listEntries: async () => [],
-      readCandidateManifest: async () => undefined,
+      readCandidateFile: async () => undefined,
       readFile: async () => undefined,
     });
     const result = await service.getWorkspaceInventory(inventory());
