@@ -91,9 +91,8 @@ workspace, profile registry, and extension directory were not used.
 
 **Status: passed.** The manual UI checks listed below were run in a disposable sandbox on
 2026-10-20 and passed, as scenarios 1–11 of the "Manual test scenarios" checklist in
-`docs/local-build-test-and-release.md` ([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)). Scenarios 12–14 (duplicate
-candidate IDs, malformed or unreadable data, and existing profile features unchanged) are not yet
-run; they are tracked in [#167](https://github.com/SamErde/Personas/issues/167). The scenario
+`docs/local-build-test-and-release.md` ([results on #68](https://github.com/SamErde/Personas/issues/68#issuecomment-6305363767)).
+Scenarios 12–14 are tracked in [#167](https://github.com/SamErde/Personas/issues/167). The scenario
 numbers are those in the release guide.
 
 - Disable (Workspace), re-enable, and observe the refresh/restart flow;
@@ -104,8 +103,47 @@ Enablement can't be changed through the CLI. `code --help` on VS Code 1.143.0 (c
 2026-10-22) says of `--disable-extension`: "Disable the provided extension. This option is not
 persisted and is effective only when the command opens a new window." ADR-0003 builds on this.
 
-These checks were manual because the app-control helper was unavailable. The implementation still
-fails closed as described above, exposing `Unknown` wherever evidence is insufficient.
+### Scenarios 12–14 evidence and remaining work
+
+On 2026-11-26, a Personas 1.5.0 VSIX built from
+`fc43d26512ed403c557c8649b9a0a8f533e80338` was installed in a disposable Windows x64 VS Code
+1.148.0 instance. The saved multi-root workspace opened with separate user-data and extensions
+directories. The desktop helper could see the window but rejected the window handle on repeated
+capture attempts, so the real-window observations below remain pending.
+
+| Scenario | Evidence collected outside the window | Real-window check still needed |
+| --- | --- | --- |
+| 12. Duplicate workspace candidate IDs | The bounded reader and Matrix model, using two on-disk candidates with the same ID and different display names, produced one row, one duplicate warning and the same display name for both root orders. The probe supplied an empty runtime snapshot. | Confirm the row, warning and winning display name in the Matrix with both folder orders. |
+| 13. Malformed candidate and profile association | The bounded reader reported invalid JSON for the malformed manifest and skipped it. Using the sandbox's recorded Default association, an extension installed only in the second profile showed `Not installed in profile` with an empty runtime snapshot. Supplying a string instead of a `profileAssociations` object through the read adapter produced a warning and changed that cell to `Unknown`. The rendered table had no workspace action for that cell. Reading the original association again restored Default. | Confirm the warning, the `Unknown` cell and the absent workspace action after setting an unknown profile ID in the sandbox. Check that the healthy state returns after restoration. |
+| 14. Existing Matrix actions | The sandbox CLI confirmed profile-specific fixture memberships. The inventory exposed a disk-only fixture seeded after startup as an orphan. Existing unit tests covered profile-cell and bulk-action handling, filters, hover cards and cleanup selection. The VS Code integration suite exited successfully. | Exercise the profile toggle, bulk action, filter, hover card and orphan cleanup in the installed UI and verify the resulting state. |
+
+Start a fresh [isolated sandbox](../local-build-test-and-release.md#install-in-an-isolated-sandbox)
+for scenarios 12–14. If reusing the sandbox from scenarios 1–11, uninstall the workspace-local copy
+from scenario 10 first. Work only with copied workspace files, test profiles and test extensions.
+For the profile checks, package the [inert profile fixture](../../test/fixtures/hello-ext) and a
+copy with a distinct manifest `name` and `displayName`.
+
+1. For scenario 12, copy `local-fixture` into the second root's `.vscode/extensions` directory and
+   change only the duplicate's `displayName`. Leave both copies uninstalled. Verify one row and the
+   duplicate warning, reverse the saved workspace's `folders` list, and verify the same row and name.
+2. For scenario 13, add a separate candidate with invalid `package.json` in the copied workspace.
+   Refresh and look for the invalid-manifest warning and the skipped candidate. Open the workspace
+   in Default with an inert fixture installed only in a second ordinary profile. Confirm the fixture
+   shows `Not installed in profile`. Back up the sandbox's `User/globalStorage/storage.json`, then
+   set the exact saved workspace association in `profileAssociations.workspaces` to a nonexistent
+   profile ID. Preserve the profile registry and other associations. Refresh the Matrix and verify
+   the bad value is still on disk before checking the warning and the `Unknown` cell. The workspace
+   cell should offer no action. Restore the original association, refresh and confirm recovery.
+3. For scenario 14, use an inert local VSIX installed in one profile to test uninstall through a
+   profile cell. Preinstall a second local fixture into two ordinary profiles and test **Remove
+   from every profile** from its hover card. Use the text filter to find each fixture and clear it
+   to restore the other rows. Verify membership before and after both mutations using the sandbox
+   CLI with `--list-extensions`. Seed a separate valid extension folder on disk after the sandbox
+   starts, without adding it to a profile manifest. VS Code marked the pre-start seed obsolete in
+   this run. Verify the cleanup list starts unchecked, the confirmation names only the selected
+   test folder, and the folder is gone from the extensions directory after confirmation.
+
+Record the observed UI results against each scenario in this section and issue #167.
 
 ## References
 
