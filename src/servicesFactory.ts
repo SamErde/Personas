@@ -4,7 +4,7 @@ import { InventoryService, type InventoryIo } from './core/inventory';
 import { createCliRunner } from './core/cliRunner';
 import { asError } from './core/errors';
 import { MutationService } from './core/mutations';
-import { parsePackageMeta } from './core/parsers';
+import { readLocalizedPackageMeta } from './core/packageNls';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths, type WatchTarget } from './core/paths';
 import {
   MAX_WORKSPACE_EXTENSION_ENTRIES_PER_ROOT,
@@ -43,8 +43,6 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
 
   const fs = await import('node:fs');
   const fsp = await import('node:fs/promises');
-  const path = await import('node:path');
-
   const platform = process.platform as Platform;
   const paths = resolvePaths({
     globalStorageFsPath: context.globalStorageUri.fsPath,
@@ -81,15 +79,7 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
         return asError(e);
       }
     },
-    readPackageMeta: async (folder) => {
-      const text = await readFile(path.join(folder, 'package.json'));
-      if (text === undefined || text instanceof Error) return text;
-      try {
-        return parsePackageMeta(text);
-      } catch (e) {
-        return asError(e);
-      }
-    },
+    readPackageMeta: (folder) => readLocalizedPackageMeta(folder, vscode.env.language, readFile),
   };
 
   const inventory = new InventoryService(paths, io);

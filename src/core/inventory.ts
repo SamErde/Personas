@@ -301,6 +301,14 @@ function addToSetMap<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
 }
 
 const profileNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const displayNameFolderCollator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+/** Stable precedence for the package folder that supplies an extension's display name. */
+function compareDisplayNameFolders(a: string, b: string): number {
+  const natural = displayNameFolderCollator.compare(a, b);
+  if (natural !== 0) return natural;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 
 /**
  * Orders named profiles for display. The Agents window profile comes first, and the rest follow
@@ -501,6 +509,7 @@ export class InventoryService {
     }
 
     const displayNames = new Map<string, string>();
+    const displayNameFolders = new Map<string, string>();
     const iconFsPaths = new Map<string, string>();
     const descriptions = new Map<string, string>();
     const publishers = new Map<string, string>();
@@ -519,7 +528,6 @@ export class InventoryService {
     for (const [index, folderName] of diskFolders.entries()) {
       const parsed = parseExtensionFolderName(folderName);
       if (!parsed) continue;
-      const needDisplayName = !displayNames.has(parsed.id);
       const needIcon = !iconFsPaths.has(parsed.id);
       const needDescription = !descriptions.has(parsed.id);
       const needPublisher = !publishers.has(parsed.id);
@@ -536,7 +544,13 @@ export class InventoryService {
         continue;
       }
       if (!meta) continue;
-      if (needDisplayName && meta.displayName) displayNames.set(parsed.id, meta.displayName);
+      if (meta.displayName) {
+        const selectedFolder = displayNameFolders.get(parsed.id);
+        if (selectedFolder === undefined || compareDisplayNameFolders(folderName, selectedFolder) < 0) {
+          displayNames.set(parsed.id, meta.displayName);
+          displayNameFolders.set(parsed.id, folderName);
+        }
+      }
       if (needIcon && meta.icon && isSafeIconRelPath(meta.icon)) {
         iconFsPaths.set(parsed.id, join(this.paths.extensionsDir, folderName, meta.icon));
       }

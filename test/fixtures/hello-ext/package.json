@@ -1,12 +1,12 @@
 {
   "name": "personas-hello-fixture",
-  "displayName": "Personas Hello Fixture",
+  "displayName": "%displayName%",
   "description": "Inert fixture extension used by Personas integration tests.",
   "version": "0.0.1",
   "publisher": "personas-tests",
   "license": "MIT",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other"],
-  "files": ["LICENSE", "README.md"],
+  "files": ["LICENSE", "README.md", "package.nls.json"],
   "contributes": {}
 }
