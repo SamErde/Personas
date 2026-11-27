@@ -2,7 +2,7 @@
   "name": "personas",
   "displayName": "Personas",
   "description": "See and manage your developer personas in one sidebar: VS Code profiles and their extensions, PowerShell profiles, and the Git identity in effect.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "publisher": "SamErde",
   "license": "MIT",
   "engines": {
