@@ -1044,7 +1044,127 @@ describe('InventoryService package metadata', () => {
     const inv = await new InventoryService(paths, io).getInventory();
     expect(mostAtOnce).toBe(3);
     expect(order[2]).toBe('/ext/pub.alpha-1.0.0');
-    // The first folder in directory order still names the extension.
+    // Natural package-folder precedence still selects the older numbered folder here.
     expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.displayName).toBe('/ext/pub.alpha-1.0.0');
+  });
+
+  it('stabilizes only display-name precedence across folder and completion order', async () => {
+    const paths: ResolvedPaths = {
+      ...({} as ResolvedPaths),
+      platform: 'linux',
+      storageJson: '/data/User/globalStorage/storage.json',
+      globalExtensionsJson: '/ext/extensions.json',
+      obsoleteFile: '/ext/.obsolete',
+      extensionsDir: '/ext',
+      profilesDir: '/data/User/profiles',
+    };
+    const metadata = (folder: string) => {
+      const version = folder.includes('-2.0.0') ? 'Two' : 'Ten';
+      return {
+        displayName: version,
+        icon: `${version}.png`,
+        description: `${version} description`,
+        publisher: `${version} publisher`,
+      };
+    };
+    const inventoryFor = async (folders: string[]) => {
+      const io: InventoryIo = {
+        readFile: () => Promise.resolve(undefined),
+        listDirs: () => Promise.resolve(folders),
+        readPackageMeta: async (folder) => {
+          await new Promise((resolve) => setTimeout(resolve, folder.includes('-2.0.0') ? 20 : 1));
+          return metadata(folder);
+        },
+      };
+      return new InventoryService(paths, io).getInventory();
+    };
+
+    const tenFirst = (await inventoryFor(['pub.alpha-10.0.0', 'pub.alpha-2.0.0'])).extensions[0];
+    const twoFirst = (await inventoryFor(['pub.alpha-2.0.0', 'pub.alpha-10.0.0'])).extensions[0];
+
+    expect(tenFirst?.displayName).toBe('Two');
+    expect(twoFirst?.displayName).toBe('Two');
+    expect(tenFirst?.versions.map((version) => version.folderName)).toEqual([
+      'pub.alpha-10.0.0',
+      'pub.alpha-2.0.0',
+    ]);
+    expect(twoFirst?.versions.map((version) => version.folderName)).toEqual([
+      'pub.alpha-2.0.0',
+      'pub.alpha-10.0.0',
+    ]);
+    expect(tenFirst?.iconFsPath).toBe('/ext/pub.alpha-10.0.0/Ten.png');
+    expect(twoFirst?.iconFsPath).toBe('/ext/pub.alpha-2.0.0/Two.png');
+    expect(tenFirst?.description).toBe('Ten description');
+    expect(twoFirst?.description).toBe('Two description');
+    expect(tenFirst?.publisher).toBe('Ten publisher');
+    expect(twoFirst?.publisher).toBe('Two publisher');
+  });
+
+  it('uses raw folder names to break case-insensitive and numeric ties', async () => {
+    const paths: ResolvedPaths = {
+      ...({} as ResolvedPaths),
+      platform: 'linux',
+      storageJson: '/data/User/globalStorage/storage.json',
+      globalExtensionsJson: '/ext/extensions.json',
+      obsoleteFile: '/ext/.obsolete',
+      extensionsDir: '/ext',
+      profilesDir: '/data/User/profiles',
+    };
+    const names: Record<string, string> = {
+      'Pub.Alpha-1.0.0': 'Uppercase folder',
+      'pub.alpha-1.0.0': 'Lowercase folder',
+      'pub.beta-02.0.0': 'Leading-zero folder',
+      'pub.beta-2.0.0': 'Plain-number folder',
+    };
+    const inventoryFor = (folders: string[]) =>
+      new InventoryService(paths, {
+        readFile: () => Promise.resolve(undefined),
+        listDirs: () => Promise.resolve(folders),
+        readPackageMeta: (folder) => {
+          const folderName = folder.slice(folder.lastIndexOf('/') + 1);
+          return Promise.resolve({ displayName: names[folderName] });
+        },
+      }).getInventory();
+
+    for (const folders of [
+      ['pub.alpha-1.0.0', 'Pub.Alpha-1.0.0'],
+      ['Pub.Alpha-1.0.0', 'pub.alpha-1.0.0'],
+    ]) {
+      const inventory = await inventoryFor(folders);
+      expect(inventory.extensions.find((extension) => extension.id === 'pub.alpha')?.displayName).toBe(
+        'Uppercase folder',
+      );
+    }
+    for (const folders of [
+      ['pub.beta-2.0.0', 'pub.beta-02.0.0'],
+      ['pub.beta-02.0.0', 'pub.beta-2.0.0'],
+    ]) {
+      const inventory = await inventoryFor(folders);
+      expect(inventory.extensions.find((extension) => extension.id === 'pub.beta')?.displayName).toBe(
+        'Leading-zero folder',
+      );
+    }
+  });
+
+  it('lets a later-precedence folder supply a name when an earlier folder is unresolved', async () => {
+    const paths: ResolvedPaths = {
+      ...({} as ResolvedPaths),
+      platform: 'linux',
+      storageJson: '/data/User/globalStorage/storage.json',
+      globalExtensionsJson: '/ext/extensions.json',
+      obsoleteFile: '/ext/.obsolete',
+      extensionsDir: '/ext',
+      profilesDir: '/data/User/profiles',
+    };
+    const inventory = await new InventoryService(paths, {
+      readFile: () => Promise.resolve(undefined),
+      listDirs: () => Promise.resolve(['pub.alpha-1.0.0', 'pub.alpha-2.0.0']),
+      readPackageMeta: (folder) =>
+        Promise.resolve(folder.endsWith('-1.0.0') ? {} : { displayName: 'Resolved by version two' }),
+    }).getInventory();
+
+    expect(inventory.extensions.find((extension) => extension.id === 'pub.alpha')?.displayName).toBe(
+      'Resolved by version two',
+    );
   });
 });

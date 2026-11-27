@@ -9,6 +9,8 @@ const extensionCtx = await esbuild.context({
   platform: 'node',
   format: 'cjs',
   target: 'node20',
+  // Prefer ESM dependency entry points so esbuild can follow and bundle their static imports.
+  mainFields: ['module', 'main'],
   external: ['vscode'],
   outfile: 'dist/extension.js',
   sourcemap: true,

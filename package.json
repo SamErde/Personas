@@ -232,5 +232,8 @@
     "koffi@3.3.8": false,
     "esbuild@0.28.2": true,
     "@vscode/vsce-sign@2.1.1": true
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

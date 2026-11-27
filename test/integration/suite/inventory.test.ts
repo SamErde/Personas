@@ -11,6 +11,7 @@ import { InventoryService, type InventoryIo } from '../../../src/core/inventory'
 import { createCliRunner } from '../../../src/core/cliRunner';
 import { withoutRepositoryOverrides } from '../../../src/git/configService';
 import { MutationService } from '../../../src/core/mutations';
+import { readLocalizedPackageMeta } from '../../../src/core/packageNls';
 import { findCli, type Platform, type ResolvedPaths } from '../../../src/core/paths';
 import {
   WorkspaceInventoryService,
@@ -27,6 +28,32 @@ const extensionsDir = process.env['PERSONAS_IT_EXT_DIR'] as string;
 // spawning vsce's cmd.exe shim from inside the Extension Development Host fails with ENOENT).
 const vsixPath = process.env['PERSONAS_IT_VSIX_PATH'] as string;
 const workspaceDir = process.env['PERSONAS_IT_WORKSPACE'] as string;
+const inventoryReadCounts = new Map<string, number>();
+
+async function readInventoryFile(filePath: string): Promise<string | undefined> {
+  inventoryReadCounts.set(filePath, (inventoryReadCounts.get(filePath) ?? 0) + 1);
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function writeInstalledFixture(folderName: string, displayName: string, nls?: string): string {
+  const folder = path.join(extensionsDir, folderName);
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(
+    path.join(folder, 'package.json'),
+    JSON.stringify({
+      name: folderName.slice(folderName.indexOf('.') + 1, folderName.lastIndexOf('-')),
+      publisher: folderName.slice(0, folderName.indexOf('.')),
+      version: folderName.slice(folderName.lastIndexOf('-') + 1),
+      displayName,
+    }),
+  );
+  if (nls !== undefined) fs.writeFileSync(path.join(folder, 'package.nls.json'), nls);
+  return folder;
+}
 
 function testPaths(): ResolvedPaths {
   const userDir = path.join(userDataDir, 'User');
@@ -43,13 +70,7 @@ function testPaths(): ResolvedPaths {
 }
 
 const io: InventoryIo = {
-  readFile: async (p) => {
-    try {
-      return fs.readFileSync(p, 'utf8');
-    } catch {
-      return undefined;
-    }
-  },
+  readFile: readInventoryFile,
   listDirs: async (p) => {
     try {
       return fs.readdirSync(p, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
@@ -57,7 +78,7 @@ const io: InventoryIo = {
       return [];
     }
   },
-  readPackageMeta: async () => undefined,
+  readPackageMeta: (folder) => readLocalizedPackageMeta(folder, vscode.env.language, readInventoryFile),
 };
 
 const workspaceIo: WorkspaceInventoryIo = {
@@ -154,9 +175,40 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
     }));
 
     it('reads an inventory with the default profile from a fresh sandbox', {skip:!!process.env.PERSONAS_IT_POWERSHELL_ONLY}, guard(async () => {
+      inventoryReadCounts.clear();
+      writeInstalledFixture(
+        'personas-tests.sort-alpha-1.0.0',
+        '%displayName%',
+        '{ // localized sort fixture\n "displayName": "Alpha Localized",\n}',
+      );
+      writeInstalledFixture(
+        'personas-tests.sort-zulu-1.0.0',
+        '%displayName%',
+        '{ "displayName": "Zulu Localized" }',
+      );
+      writeInstalledFixture('personas-tests.folder-fallback-1.0.0', '%displayName%');
+      writeInstalledFixture(
+        'personas-tests.folder-fallback-2.0.0',
+        '%displayName%',
+        '{ "displayName": "Later Folder Name" }',
+      );
+      const literalFolder = writeInstalledFixture(
+        'personas-tests.literal-1.0.0',
+        'Literal One Read',
+        '{ "displayName": "Must not be read" }',
+      );
       const inventory = await new InventoryService(testPaths(), io).getInventory();
       assert.ok(inventory.profiles.some((p) => p.isDefault));
       assert.deepStrictEqual(inventory.warnings, []);
+      const alphaIndex = inventory.extensions.findIndex((extension) => extension.displayName === 'Alpha Localized');
+      const zuluIndex = inventory.extensions.findIndex((extension) => extension.displayName === 'Zulu Localized');
+      assert.ok(alphaIndex >= 0 && zuluIndex >= 0 && alphaIndex < zuluIndex, 'localized names did not sort');
+      assert.strictEqual(
+        inventory.extensions.find((extension) => extension.id === 'personas-tests.folder-fallback')?.displayName,
+        'Later Folder Name',
+      );
+      assert.strictEqual(inventoryReadCounts.get(path.join(literalFolder, 'package.json')), 1);
+      assert.strictEqual(inventoryReadCounts.get(path.join(literalFolder, 'package.nls.json')), undefined);
       assert.strictEqual(vscode.workspace.workspaceFolders?.length, 1);
       assert.strictEqual(
         comparableFsPath(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''),
@@ -194,6 +246,7 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       const installed = inventory.extensions.find((e) => e.id === 'personas-tests.personas-hello-fixture');
       assert.ok(installed, 'fixture not found in inventory after install');
       assert.deepStrictEqual(installed.installedIn, ['default']);
+      assert.strictEqual(installed.displayName, 'Localized Personas Hello Fixture');
 
       const workspace = await new WorkspaceInventoryService(testPaths().storageJson, workspaceIo).getWorkspaceInventory(
         inventory,

@@ -31,6 +31,8 @@ export interface ManifestEntry {
 
 export interface PackageMeta {
   displayName?: string;
+  /** The key inside package.nls*.json when displayName is an exact `%key%` placeholder. */
+  displayNameKey?: string;
   icon?: string;
   description?: string;
   publisher?: string;
@@ -150,13 +152,22 @@ export function parsePackageMeta(text: string): PackageMeta {
   if (typeof root !== 'object' || root === null || Array.isArray(root)) throw new ParseError('package.json: not an object');
   const pkg = root as Record<string, unknown>;
   const categories = parseCategories(pkg['categories']);
+  const displayName = parseLocalizedDisplayName(pkg['displayName']);
   return {
-    displayName: unlocalizedString(pkg['displayName']),
+    ...displayName,
     icon: typeof pkg['icon'] === 'string' ? pkg['icon'] : undefined,
     description: unlocalizedString(pkg['description']),
     publisher: typeof pkg['publisher'] === 'string' ? pkg['publisher'] : undefined,
     ...(categories !== undefined ? { categories } : {}),
   };
+}
+
+function parseLocalizedDisplayName(value: unknown): Pick<PackageMeta, 'displayName' | 'displayNameKey'> {
+  if (typeof value !== 'string') return {};
+  if (value.length > 1 && value.startsWith('%') && value.endsWith('%')) {
+    return { displayNameKey: value.slice(1, -1) };
+  }
+  return { displayName: value };
 }
 
 /** The distinct trimmed, non-blank strings in a `categories` value; undefined when there are none. */

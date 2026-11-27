@@ -203,6 +203,34 @@ describe('parseExtensionsManifest install source', () => {
   });
 });
 
+describe('parsePackageMeta display-name localization', () => {
+  const pkg = (displayName: unknown) => JSON.stringify({ name: 'ext', displayName });
+
+  it.each([
+    ['%', '%', undefined],
+    ['%%', undefined, ''],
+    ['%key', '%key', undefined],
+    ['key%', 'key%', undefined],
+    ['%key%', undefined, 'key'],
+    ['%key%tail%', undefined, 'key%tail'],
+  ])('classifies %s with the same delimiter rule as VS Code', (value, displayName, displayNameKey) => {
+    const meta = parsePackageMeta(pkg(value));
+    expect(meta.displayName).toBe(displayName);
+    expect(meta.displayNameKey).toBe(displayNameKey);
+  });
+
+  it.each([undefined, null, 42])('leaves a missing or non-string display name unresolved (%s)', (value) => {
+    const meta = parsePackageMeta(value === undefined ? JSON.stringify({ name: 'ext' }) : pkg(value));
+    expect(meta.displayName).toBeUndefined();
+    expect(meta.displayNameKey).toBeUndefined();
+  });
+
+  it('keeps localized descriptions unresolved when display-name parsing changes', () => {
+    const meta = parsePackageMeta(JSON.stringify({ name: 'ext', description: '%description%' }));
+    expect(meta.description).toBeUndefined();
+  });
+});
+
 describe('parsePackageMeta categories', () => {
   const pkg = (fields: Record<string, unknown>) => JSON.stringify({ name: 'ext', ...fields });
 
