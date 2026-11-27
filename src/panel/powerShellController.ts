@@ -10,7 +10,7 @@ import type { HostToPowerShellProfiles, PowerShellAction } from '../protocol';
 function readPreferences(): PowerShellPreferences {
   const config = vscode.workspace.getConfiguration('personas.powerShellProfiles');
   return {
-    allowRuntimeDiscovery: config.get<unknown>('allowRuntimeDiscovery') === true,
+    allowRuntimeDiscovery: config.get('allowRuntimeDiscovery', true),
     includeWindowsPowerShell: config.get('includeWindowsPowerShell', true),
   };
 }
@@ -31,15 +31,17 @@ export class PowerShellController implements vscode.Disposable {
   private identities?: Map<string, string>;
   private readonly armedIdentities = new Map<string, string>();
   private readonly reconcileMs: number;
+  private readonly beforeWatchCommit?: () => Promise<void>;
   private lastInventory?: PowerShellInventory;
   constructor(
     private readonly post: (message: HostToPowerShellProfiles) => void,
     private readonly service = new PowerShellService(),
     private readonly confirmCreate: (file: string) => Promise<boolean> = async file =>
       await vscode.window.showInformationMessage('Create PowerShell profile?', {modal:true, detail:file}, 'Create and Open') === 'Create and Open',
-    options: {reconcileMs?: number} = {},
+    options: {reconcileMs?: number; beforeWatchCommit?: () => Promise<void>} = {},
   ) {
     this.reconcileMs = options.reconcileMs ?? defaultReconcileMs;
+    this.beforeWatchCommit = options.beforeWatchCommit;
     this.events = [
       vscode.workspace.onDidSaveTextDocument(document => this.changed([document.uri])),
       vscode.workspace.onDidCreateFiles(event => this.changed(event.files, true)),
@@ -57,6 +59,12 @@ export class PowerShellController implements vscode.Disposable {
       allowRuntimeDiscovery: preferences.allowRuntimeDiscovery,
     });
   }
+  preferencesChanged(paint = true): void {
+    const preferences = readPreferences();
+    this.service.setRuntimeDiscoveryAllowed(preferences.allowRuntimeDiscovery);
+    this.service.setWindowsPowerShellIncluded(preferences.includeWindowsPowerShell);
+    if (paint) this.paintLastKnown();
+  }
   private included(inventory: PowerShellInventory, preferences = readPreferences()): PowerShellInventory {
     if (preferences.includeWindowsPowerShell) return inventory;
     return {
@@ -65,7 +73,7 @@ export class PowerShellController implements vscode.Disposable {
       rows: inventory.rows.filter(item => item.edition !== 'Windows PowerShell'),
     };
   }
-  refresh(background = false): Promise<void> {
+  refresh(background = false, retryFailures = false): Promise<void> {
     this.queue = this.queue.then(async () => {
       if (this.disposed || background && !this.active) return;
       if (vscode.env.remoteName) {
@@ -74,16 +82,39 @@ export class PowerShellController implements vscode.Disposable {
         return;
       }
       try {
-        const inventory = await this.service.refresh(readPreferences().includeWindowsPowerShell);
+        const refresh = await this.service.refresh(readPreferences(), retryFailures);
         if (this.disposed) return;
-        await this.watch();
-        this.lastInventory = inventory;
+        if (refresh.generation !== this.service.generation) return;
+        this.lastInventory = refresh.initial;
+        void this.finishSettlement(refresh.settled, refresh.generation);
+        this.paintLastKnown();
+        await this.watch(refresh.generation, refresh.initial);
       } catch (error) {
         this.lastInventory = {editions:[],rows:[],error:String(error)};
+        this.paintLastKnown();
       }
-      this.paintLastKnown();
     });
     return this.queue;
+  }
+  private async finishSettlement(
+    settled: Promise<PowerShellInventory | undefined>, generation: number,
+  ): Promise<void> {
+    try {
+      const inventory = await settled;
+      if (!inventory || !this.isCurrentGeneration(inventory,generation)) return;
+      if (this.active) await this.watch(generation,inventory);
+      if (!this.isCurrentGeneration(inventory,generation)) return;
+      this.lastInventory = inventory;
+      if (this.active) this.paintLastKnown();
+    } catch (error) {
+      if (!this.disposed) void vscode.window.showErrorMessage('Personas: ' + String(error));
+    }
+  }
+  private isCurrentGeneration(inventory: PowerShellInventory, generation: number): boolean {
+    return [!this.disposed,this.service.generation === generation,this.service.snapshot === inventory].every(Boolean);
+  }
+  private isCurrentSnapshot(inventory: PowerShellInventory, generation = this.service.generation): boolean {
+    return this.active && this.isCurrentGeneration(inventory,generation);
   }
   setActive(active: boolean): void {
     const activated = active && !this.active;
@@ -166,24 +197,33 @@ export class PowerShellController implements vscode.Disposable {
     const current = await Promise.all(rows.map(row => inspectProfile(row)));
     return current.some((row, index) => row.state !== rows[index]?.state || row.target !== rows[index]?.target);
   }
-  private async watch(): Promise<void> {
+  private async watch(
+    generation = this.service.generation, snapshot = this.service.snapshot,
+  ): Promise<void> {
     if (!this.active || this.disposed) return;
-    const files = this.included(this.service.snapshot).rows.flatMap(row => row.path ? [row.path] : []);
+    const files = this.included(snapshot).rows.flatMap(row => row.path ? [row.path] : []);
     const plan = await profileWatchPlan(files);
     // Taken before attaching, so a replacement racing the attach reads as changed rather than adopted.
     const armed = await pathIdentities(plan.directories);
-    if (!this.active || this.disposed) return;
+    await this.beforeWatchCommit?.();
+    if (!this.isCurrentSnapshot(snapshot,generation)) return;
     this.dependencies = plan.paths;
     const bases = new Set(plan.directories);
+    this.removeStaleWatchers(bases);
+    this.addWatchers(plan.directories,armed);
+  }
+  private removeStaleWatchers(bases: ReadonlySet<string>): void {
     for (const [base, watcher] of this.watchers) {
-      if (!bases.has(base) || this.staleWatchRoots.has(base)) {
+      if ([!bases.has(base),this.staleWatchRoots.has(base)].some(Boolean)) {
         watcher.dispose();
         this.watchers.delete(base);
         this.armedIdentities.delete(base);
       }
     }
     this.staleWatchRoots.clear();
-    for (const base of plan.directories) {
+  }
+  private addWatchers(directories: readonly string[], armed: ReadonlyMap<string,string>): void {
+    for (const base of directories) {
       if (this.watchers.has(base)) continue;
       this.armedIdentities.set(base, armed.get(base) ?? 'missing');
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), '*'));
@@ -197,7 +237,7 @@ export class PowerShellController implements vscode.Disposable {
     if (vscode.env.remoteName) return;
     try {
       if (message.action === 'openSettings') { await vscode.commands.executeCommand('personas.openSettings'); return; }
-      if (message.action === 'refresh') { await this.refresh(); return; }
+      if (message.action === 'refresh') { await this.refresh(false, true); return; }
       if (message.action === 'resolve') {
         await this.service.resolve(message.id ?? '', readPreferences());
         await this.refresh(); return;

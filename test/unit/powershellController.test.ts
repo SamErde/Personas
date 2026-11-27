@@ -13,6 +13,8 @@ const mock = vi.hoisted(() => ({
   errors: [] as string[],
   trashed: [] as string[],
   commands: [] as any[][],
+  allowRuntimeDiscovery: true,
+  includeWindowsPowerShell: true,
 }));
 vi.mock('vscode', () => {
   const register = (name:string) => (callback:(event:any)=>void) => {
@@ -29,7 +31,9 @@ vi.mock('vscode', () => {
       showWarningMessage: async () => 'Move to Trash',
     },
     workspace: {
-      getConfiguration: () => ({get: (_key:string, fallback:boolean) => fallback}),
+      getConfiguration: () => ({get: (key:string, fallback:boolean) =>
+        key === 'allowRuntimeDiscovery' ? mock.allowRuntimeDiscovery
+          : key === 'includeWindowsPowerShell' ? mock.includeWindowsPowerShell : fallback}),
       textDocuments: mock.documents,
       fs: {delete: async (file:any) => {mock.trashed.push(file.fsPath);}},
       onDidSaveTextDocument: register('save'), onDidCreateFiles: register('create'),
@@ -48,19 +52,78 @@ const controllers:PowerShellController[]=[];
 afterEach(async()=>{
   controllers.splice(0).forEach(controller=>controller.dispose());
   mock.events.clear();mock.watchers.length=0;vi.useRealTimers();
+  mock.allowRuntimeDiscovery=true;
+  mock.includeWindowsPowerShell=true;
   mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;mock.commands.length=0;
   for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});
 });
-async function setup(reconcileMs=0) {
+async function setup(reconcileMs=0,beforeWatchCommit?:()=>Promise<void>) {
   const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'personas-events-')); roots.push(temporary);
   const root=await fs.realpath(temporary);
   const discover=vi.fn(async()=>[{edition:'PowerShell 7' as const,userDirectory:root,installations:[]}]);
   const service=new PowerShellService(discover,undefined,'linux');
-  const controller=new PowerShellController(()=>{},service,undefined,{reconcileMs});
+  const states:any[]=[];
+  const controller=new PowerShellController(
+    states.push.bind(states),service,undefined,{reconcileMs,beforeWatchCommit},
+  );
   controllers.push(controller);
-  return {root,discover,service,controller};
+  return {root,discover,service,controller,states};
+}
+
+async function pendingSetup() {
+  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'personas-background-')); roots.push(temporary);
+  const root=await fs.realpath(temporary), user=path.join(root,'user');
+  await fs.mkdir(user);
+  let finish!:(value:{home:string;userDirectory:string})=>void;
+  const pending=new Promise<{home:string;userDirectory:string}>(resolve=>{finish=resolve;});
+  const probe=vi.fn().mockReturnValue(pending);
+  const discover=vi.fn().mockResolvedValue([{
+    edition:'PowerShell 7',installations:[{id:'pwsh',executable:path.join(root,'pwsh'),home:root}],
+  }]);
+  const service=new PowerShellService(discover,probe,'win32');
+  const states:any[]=[];
+  const post=vi.fn(states.push.bind(states));
+  const controller=new PowerShellController(post,service,undefined,{reconcileMs:0});
+  controllers.push(controller); controller.setActive(true);
+  return {root,user,finish,probe,discover,service,states,post,controller};
 }
 const uri=(fsPath:string)=>({scheme:'file',fsPath});
+it('publishes passive inventory before background profile resolution settles',async()=>{
+  const {root,user,finish,probe,states,post,controller}=await pendingSetup();
+
+  await controller.refresh(true);
+  expect(states).toHaveLength(1);
+  expect(post.mock.invocationCallOrder[0]).toBeLessThan(probe.mock.invocationCallOrder[0]!);
+  expect(states[0].inventory.rows[0]?.state).toBe('unresolved');
+  finish({home:root,userDirectory:user});
+  await vi.waitFor(()=>expect(states).toHaveLength(2));
+  expect(states[1].inventory.rows[0]?.path).toBe(path.win32.join(user,'profile.ps1'));
+});
+
+it('suppresses deferred settlement while hidden, disposed, or superseded',async()=>{
+  const hidden=await pendingSetup();
+  await hidden.controller.refresh(true); hidden.controller.setActive(false);
+  hidden.finish({home:hidden.root,userDirectory:hidden.user});
+  await vi.waitFor(()=>expect(hidden.service.snapshot.editions[0]?.resolving).toBe(false));
+  expect(hidden.states).toHaveLength(1);
+  expect(mock.watchers).not.toContainEqual(expect.objectContaining({disposed:false}));
+  hidden.controller.setActive(true); hidden.controller.paintLastKnown();
+  expect(hidden.states[1].inventory.rows[0]?.path).toBeDefined();
+
+  const disposed=await pendingSetup();
+  await disposed.controller.refresh(true); disposed.controller.dispose();
+  disposed.finish({home:disposed.root,userDirectory:disposed.user});
+  await vi.waitFor(()=>expect(disposed.service.snapshot.editions[0]?.resolving).toBe(false));
+  expect(disposed.states).toHaveLength(1);
+
+  const current=await pendingSetup();
+  await current.controller.refresh(true); await current.controller.refresh(true);
+  expect(current.states).toHaveLength(2);
+  current.finish({home:current.root,userDirectory:current.user});
+  await vi.waitFor(()=>expect(current.states).toHaveLength(3));
+  expect(current.states[2].inventory.rows[0]?.path).toBeDefined();
+});
+
 it('ignores inactive and unrelated events, but refreshes for profile and ancestor changes',async()=>{
   const {root,discover,controller}=await setup();
   vi.useFakeTimers();
@@ -89,7 +152,7 @@ it('ignores inactive and unrelated events, but refreshes for profile and ancesto
   mock.events.get('save')!({uri:uri(path.join(root,'profile.ps1'))});
   await vi.advanceTimersByTimeAsync(350);
   expect(discover).not.toHaveBeenCalled();
-  expect(mock.watchers.every(watcher=>watcher.disposed)).toBe(true);
+  expect(mock.watchers).not.toContainEqual(expect.objectContaining({disposed:false}));
 });
 it.skipIf(!symlinksAvailable)('watches intermediate and final link destinations, including a missing destination parent',async()=>{
   const {root,controller,service}=await setup();
@@ -122,8 +185,8 @@ it.skipIf(!symlinksAvailable)('watches intermediate and final link destinations,
   await vi.waitFor(()=>expect(state()).toBe('brokenLink'),{timeout:3000});
 });
 
-it('drops queued automatic refreshes after Home is hidden',async()=>{
-  const {root,discover,controller}=await setup();
+it('suppresses a stale initial paint and drops background refresh after Home is hidden',async()=>{
+  const {root,discover,controller,states}=await setup();
   let finish!:()=>void;
   discover.mockImplementationOnce(()=>new Promise(resolve=>{
     finish=()=>resolve([{edition:'PowerShell 7',userDirectory:root,installations:[]}]);
@@ -131,12 +194,44 @@ it('drops queued automatic refreshes after Home is hidden',async()=>{
   controller.setActive(true);
   const first=controller.refresh(true);
   await Promise.resolve();
+  mock.includeWindowsPowerShell=false;
+  controller.preferencesChanged(false);
   const queued=controller.refresh(true);
-  controller.setActive(false);
   finish();
   await Promise.all([first,queued]);
-  expect(discover).toHaveBeenCalledTimes(1);
-  expect(mock.watchers).toHaveLength(0);
+  expect(discover).toHaveBeenCalledTimes(2);
+  expect(states).toHaveLength(1);
+  discover.mockClear(); controller.setActive(false);
+  await controller.refresh(true);
+  expect(discover).not.toHaveBeenCalled();
+  expect(mock.watchers).not.toContainEqual(expect.objectContaining({disposed:false}));
+
+  let resume! :()=>void;
+  const watchCommit=new Promise<void>(resolve=>{resume=resolve;});
+  const hook=vi.fn().mockReturnValue(watchCommit);
+  mock.includeWindowsPowerShell=true;
+  const duringWatch=await setup(0,hook);
+  duringWatch.controller.setActive(true);
+  const refreshing=duringWatch.controller.refresh(true);
+  await vi.waitFor(()=>expect(hook).toHaveBeenCalled());
+  expect(duringWatch.states).toHaveLength(1);
+  duringWatch.service.setWindowsPowerShellIncluded(false);
+  resume(); await refreshing;
+  expect(duringWatch.states).toHaveLength(1);
+  expect(mock.watchers).not.toContainEqual(expect.objectContaining({disposed:false}));
+});
+
+it('revokes discovery permissions while inactive without starting a refresh',async()=>{
+  const {discover,service,controller}=await setup();
+  const runtime=vi.spyOn(service,'setRuntimeDiscoveryAllowed');
+  const windows=vi.spyOn(service,'setWindowsPowerShellIncluded');
+  mock.allowRuntimeDiscovery=false;
+  mock.includeWindowsPowerShell=false;
+  controller.setActive(false);
+  controller.preferencesChanged(false);
+  expect(runtime).toHaveBeenLastCalledWith(false);
+  expect(windows).toHaveBeenLastCalledWith(false);
+  expect(discover).not.toHaveBeenCalled();
 });
 
 it('reattaches watches when a profile directory is externally replaced at the same path',async()=>{

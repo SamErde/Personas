@@ -30,7 +30,7 @@ If you keep separate setups for work, clients, open source, or teaching, each on
 
 - Your PowerShell profile scripts, grouped by edition and listed in the order PowerShell loads them. Windows PowerShell appears on Windows.
 - Open, create, copy the path of, reveal, or move a profile script to the Trash.
-- Finds profile locations without starting PowerShell. If a location can't be found that way, you can choose to let PowerShell report it.
+- Finds installations without starting PowerShell, then asks each detected edition for its canonical profile paths in the background with profiles disabled.
 
 ### Git Configuration
 
@@ -69,7 +69,7 @@ Select the gear in any Personas view's title bar, or run **Personas: Open Person
 | `personas.extensionMatrix.openWithSidebar` | `true` | Open the Extension Matrix whenever the VS Code Profiles view is shown. |
 | `personas.showAgentsWindowProfile` | `true` | Show VS Code's Agents window profile, which uses the Default profile's extensions. |
 | `personas.powerShellProfiles.includeWindowsPowerShell` | `true` | On Windows, include Windows PowerShell 5.1 and ISE profiles. |
-| `personas.powerShellProfiles.allowRuntimeDiscovery` | `false` | Let you start PowerShell to find a profile location that can't be found otherwise. This is a machine setting, so set it in User settings. |
+| `personas.powerShellProfiles.allowRuntimeDiscovery` | `true` | Let detected PowerShell executables report their canonical profile paths in the background. Turn it off to use only passive discovery and the Windows registry fallback. This is a machine setting, so set it in User settings. |
 
 Note: the older setting name `personas.openMatrixOnActivityBarClick` is still honored when `personas.extensionMatrix.openWithSidebar` isn't set.
 
@@ -86,7 +86,7 @@ Note: the older setting name `personas.openMatrixOnActivityBarClick` is still ho
 
 ## Privacy
 
-Personas has no telemetry. It reads and changes local files and runs VS Code's `code` command line and `git`. On Windows it also runs `reg.exe` to find your Documents folder, and `taskkill` to stop a command that takes too long. It starts PowerShell only when you choose to. Network access happens only through those tools, for example when the `code` command line downloads an extension you install, or when you open a link.
+Personas has no telemetry. It reads and changes local files and runs VS Code's `code` command line and `git`. For PowerShell profile discovery, it may start detected PowerShell executables in the background with `-NoProfile`; on Windows, `reg.exe` is the fallback for finding your Documents folder, and `taskkill` stops a command that takes too long. Network access happens only through those tools, for example when the `code` command line downloads an extension you install, or when you open a link.
 
 ## Learn more
 

@@ -125,3 +125,15 @@ explicit-action, timeout, and session-cache policy confirmed in Q6b.
 
 Source links to moving branches describe the inspected implementations; pin
 relevant revisions when implementing.
+
+## 2026-11-26 follow-up: canonical background probe
+
+Issue #179 replaces the explicit-only runtime policy from ADR-0005. Personas now renders passive
+installation evidence first, then starts each detected edition asynchronously with `-NoProfile`
+and asks PowerShell itself for `$PSHOME` and `$PROFILE.CurrentUserAllHosts`. `-OutputFormat XML`
+provides CLIXML that the extension decodes without requiring .NET calls in the probe script.
+
+A forced `ConstrainedLanguage` check showed the four property reads work in both PowerShell 7 and
+Windows PowerShell 5.1. That check proves the probe's language mechanics only; it does not prove
+execution under an actually enforced App Control policy. The registry agreement resolver remains a
+Windows fallback when runtime discovery is disabled or every detected executable fails.

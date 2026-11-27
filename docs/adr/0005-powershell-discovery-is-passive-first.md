@@ -1,6 +1,6 @@
 # ADR-0005: PowerShell profile discovery is passive first; runtime discovery is opt-in
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0006](0006-resolve-powershell-profile-paths-in-the-background.md)
 
 ## Decision
 

@@ -12,6 +12,7 @@ export interface EditionInfo {
   userDirectory?: string;
   installations: Installation[];
   reason?: string;
+  resolving?: boolean;
 }
 export interface ProfileLocation {
   id: string;

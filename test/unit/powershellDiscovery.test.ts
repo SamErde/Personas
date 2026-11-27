@@ -3,16 +3,13 @@ import * as os from 'node:os';
 vi.mock('node:os', {spy:true});
 import { expect, it, vi } from 'vitest';
 import { userProfileDirectory, discoverPowerShell, isPreviewInstallation, probeInstallation } from '../../src/powershell/discovery';
-it('uses redirected Documents and refuses to guess when it cannot be resolved', () => {
+it('uses redirected Documents and rejects unresolved or relative configuration roots', () => {
   expect(userProfileDirectory('win32', 'PowerShell 7', {}, 'C:\\Users\\me', 'D:\\Documents'))
     .toBe('D:\\Documents\\PowerShell');
   expect(userProfileDirectory('win32', 'Windows PowerShell', {}, 'C:\\Users\\me'))
     .toBeUndefined();
   expect(userProfileDirectory('linux', 'PowerShell 7', {XDG_CONFIG_HOME: '/config'}, '/home/me'))
     .toBe('/config/powershell');
-});
-
-it('rejects relative XDG configuration directories', () => {
   expect(userProfileDirectory('linux','PowerShell 7',{XDG_CONFIG_HOME:'relative'},'/home/me')).toBeUndefined();
 });
 
@@ -31,14 +28,70 @@ it.each([
 ])('identifies Preview only from recognized installation segments: %s',(file,preview)=>{
   expect(isPreviewInstallation(file)).toBe(preview);
 });
-it('requests UTF-8 output for a non-ASCII explicit probe',async()=>{
-  let command='';
+it('reads a fixed CLM-safe CLIXML response without changing the output encoding',async()=>{
+  let seenArgs:string[]=[];
   const result=await probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async (_exe,args)=>{
-    command=args.at(-1)!;
-    return JSON.stringify({home:'/应用/PowerShell',user:'/用户/李/profile.ps1',major:7,preview:null});
+    seenArgs=[...args];
+    return Buffer.from('#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+      + '<S S="Output">/应用/_x005F_x0041_</S>'
+      + '<S S="Output">/用户/李 &amp; Jos&#x00E9;/PowerShell/profile.ps1</S>'
+      + '<S S="Output">7</S><S S="Output"></S></Objs>\r\n');
   });
-  expect(command).toContain('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)');
-  expect(result.userDirectory).toBe('/用户/李');
+  expect(seenArgs.slice(0,-1)).toEqual(['-NoLogo','-NoProfile','-NonInteractive','-OutputFormat','XML','-Command']);
+  expect(seenArgs.at(-1)).toBe('[string]$PSHOME; [string]$PROFILE.CurrentUserAllHosts; [string]$PSVersionTable.PSVersion.Major; [string]$PSVersionTable.PSVersion.PreReleaseLabel');
+  expect(seenArgs.at(-1)).not.toMatch(/ConvertTo-Json|pscustomobject|OutputEncoding|UTF8Encoding/);
+  expect(result).toEqual({home:'/应用/_x0041_',userDirectory:'/用户/李 & José/PowerShell'});
+  await expect(probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async()=>
+    probeXml(['/home','/user/José/profile.ps1','7',''],'latin1'))).rejects.toThrow();
+  const windows={id:'test',executable:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'};
+  await expect(probeInstallation(windows,'Windows PowerShell',async()=>
+    probeXml(['\\WindowsPowerShell','\\Users\\Lee\\profile.ps1','5','']))).rejects.toThrow('unsupported or unresolved');
+  await expect(probeInstallation(windows,'Windows PowerShell',async()=>
+    probeXml(['C:\\WindowsPowerShell','C:\\Users\\?\\profile.ps1','5','']))).rejects.toThrow('unsupported or unresolved');
+  await expect(probeInstallation(windows,'Windows PowerShell',async()=>
+    probeXml(['/WindowsPowerShell','/Users/?/profile.ps1','5','']))).rejects.toThrow('unsupported or unresolved');
+  await expect(probeInstallation(windows,'Windows PowerShell',async()=>
+    probeXml(['\\\\server','\\\\server\\profile.ps1','5','']))).rejects.toThrow('unsupported or unresolved');
+  await expect(probeInstallation(windows,'Windows PowerShell',async()=>
+    probeXml(['C:\\WindowsPowerShell','C:\\Users\\Lee\\profile.ps1','5','']))).resolves.toEqual({
+      home:'C:\\WindowsPowerShell',userDirectory:'C:\\Users\\Lee',
+    });
+  await expect(probeInstallation(windows,'Windows PowerShell',async()=>
+    probeXml(['\\\\server\\share\\WindowsPowerShell','\\\\server\\share\\Lee\\profile.ps1','5','']))).resolves.toEqual({
+      home:'\\\\server\\share\\WindowsPowerShell',userDirectory:'\\\\server\\share\\Lee',
+    });
+});
+
+const probeXml=(values:string[],encoding:BufferEncoding='utf8')=>Buffer.from(
+  '#< CLIXML\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+  + values.map(value=>'<S S="Output">'+value+'</S>').join('')+'</Objs>',encoding,
+);
+it.each([
+  ['missing value',probeXml(['/home','/user/profile.ps1','7'])],
+  ['extra value',probeXml(['/home','/user/profile.ps1','7','','extra'])],
+  ['unexpected element',Buffer.from('#< CLIXML\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><I32 S="Output">7</I32></Objs>')],
+  ['truncated XML',probeXml(['/home','/user/profile.ps1','7','']).subarray(0,-7)],
+  ['unescaped entity',probeXml(['/home','/user/a&b/profile.ps1','7',''])],
+  ['literal NUL',probeXml(['/home','/user/a\0b/profile.ps1','7',''])],
+  ['literal control',probeXml(['/home','/user/a\u0001b/profile.ps1','7',''])],
+  ['literal CDATA terminator',probeXml(['/home','/user/a]]>b/profile.ps1','7',''])],
+  ['non-XML trailing whitespace',Buffer.concat([probeXml(['/home','/user/profile.ps1','7','']),Buffer.from([0x0b])])],
+  ['NUL reference',probeXml(['/home','/user/a&#0;b/profile.ps1','7',''])],
+  ['control reference',probeXml(['/home','/user/a&#x1;b/profile.ps1','7',''])],
+  ['noncharacter reference',probeXml(['/home','/user/a&#xFFFE;b/profile.ps1','7',''])],
+  ['oversize output',Buffer.alloc(64*1024+1,0x78)],
+])('rejects %s in the fixed CLIXML probe contract',async(_case,output)=>{
+  await expect(probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async()=>output))
+    .rejects.toThrow('Invalid PowerShell discovery response');
+});
+it.each([
+  ['wrong edition',probeXml(['/home','/user/profile.ps1','5',''])],
+  ['Preview',probeXml(['/home','/user/profile.ps1','7','preview.1'])],
+  ['relative home',probeXml(['home','/user/profile.ps1','7',''])],
+  ['escaped NUL path',probeXml(['/home','/user/a_x0000_b/profile.ps1','7',''])],
+])('rejects an unsupported probe result: %s',async(_case,output)=>{
+  await expect(probeInstallation({id:'test',executable:'/test/pwsh'},'PowerShell 7',async()=>output))
+    .rejects.toThrow('unsupported or unresolved');
 });
 
 it('uses the Windows user profile for .NET tools even when HOME points elsewhere',async()=>{
@@ -133,22 +186,22 @@ async function discoverThroughStoreAlias(target:string,targetFiles:string[]){
   } finally {platform.mockRestore();home.mockRestore();vi.unstubAllEnvs();}
 }
 
-it('follows the Microsoft Store alias to its read-only PowerShell 7 home and keeps the alias as the launcher',async()=>{
-  const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe';
-  const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
-  expect(result.installations).toEqual([[result.alias,packaged,true]]);
-  expect(result.reason).not.toContain('access denied');
-});
-
-it('keeps a Microsoft Store alias to PowerShell Preview out of scope',async()=>{
-  const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShellPreview_7.6.0.0_x64__8wekyb3d8bbwe';
-  const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
-  expect(result.installations).toEqual([]);
-  expect(result.reason).toBe('Installation not found');
-});
-
-it('still reports the access failure when a Microsoft Store alias leads nowhere readable',async()=>{
-  const result=await discoverThroughStoreAlias('X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe/pwsh.exe',[]);
-  expect(result.installations).toEqual([]);
-  expect(result.reason).toContain('access denied');
+it('handles stable, Preview, and unreadable Microsoft Store aliases',async()=>{
+  {
+    const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe';
+    const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
+    expect(result.installations).toEqual([[result.alias,packaged,true]]);
+    expect(result.reason ?? '').not.toContain('access denied');
+  }
+  {
+    const packaged='X:/Program Files/WindowsApps/Microsoft.PowerShellPreview_7.6.0.0_x64__8wekyb3d8bbwe';
+    const result=await discoverThroughStoreAlias(packaged+'/pwsh.exe',[packaged+'/pwsh.exe',packaged+'/System.Management.Automation.dll']);
+    expect(result.installations).toEqual([]);
+    expect(result.reason).toBe('Installation not found');
+  }
+  {
+    const result=await discoverThroughStoreAlias('X:/Program Files/WindowsApps/Microsoft.PowerShell_7.5.0.0_x64__8wekyb3d8bbwe/pwsh.exe',[]);
+    expect(result.installations).toEqual([]);
+    expect(result.reason).toContain('access denied');
+  }
 });

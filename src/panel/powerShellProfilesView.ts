@@ -45,10 +45,11 @@ export class PowerShellProfilesViewProvider implements vscode.WebviewViewProvide
     return this.controller.handle({ type: 'powerShellAction', action: 'refresh' });
   }
 
-  settingsChanged(editionChanged: boolean): void {
-    if (!this.view?.visible) return;
-    this.controller.paintLastKnown();
-    if (editionChanged) void this.controller.refresh(true);
+  settingsChanged(_editionChanged: boolean): void {
+    const visible = !!this.view?.visible;
+    this.controller.preferencesChanged(visible);
+    if (!visible) return;
+    void this.controller.refresh(true);
   }
 
   private post(message: HostToPowerShellProfiles): void {

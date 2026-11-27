@@ -42,8 +42,8 @@ Extension Manager"; earliest working name "Visex". See `docs/history.md`.)
 - Source map: `src/core/` (inventory, parsers, CLI runner, mutations, cleanup), `src/panel/`
   (view providers and the matrix panel), `src/webview/` (webview scripts and styles),
   `src/powershell/` (discovery and file actions), `src/git/` (config reading).
-- Settings live under `personas.*` in `package.json`; PowerShell runtime discovery is off by
-  default (ADR-0005).
+- Settings live under `personas.*` in `package.json`; PowerShell runtime discovery is on by
+  default (ADR-0006). Set `personas.powerShellProfiles.allowRuntimeDiscovery` to `false` to opt out.
 - "Apply to all profiles" is **not** togglable via public VS Code API; a guided fallback
   ships instead (see `docs/spikes/findings.md`).
 
