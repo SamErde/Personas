@@ -32,5 +32,6 @@ without ever creating a profile in the wrong place.
 - Most users never need runtime discovery. When it's needed, the view says
   **Runtime discovery is off** and links to the setting.
 - Refresh never starts PowerShell.
-- Edge cases (Windows PowerShell 5.1 paths, symlinks, XDG layouts, multiple OneDrive folders,
-  inaccessible paths) still need validation: [#163](https://github.com/SamErde/Personas/issues/163).
+- At the time of this decision, Windows PowerShell 5.1 paths, symlinks, XDG layouts, and
+  inaccessible paths still needed validation. The remaining finite matrix is tracked in
+  [#184](https://github.com/SamErde/Personas/issues/184).

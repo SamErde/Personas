@@ -77,7 +77,7 @@ export class PowerShellController implements vscode.Disposable {
     this.queue = this.queue.then(async () => {
       if (this.disposed || background && !this.active) return;
       if (vscode.env.remoteName) {
-        this.lastInventory = {editions:[], rows:[], error:'PowerShell profiles support local desktop windows. WSL support is planned next.'};
+        this.lastInventory = {editions:[], rows:[], error:'PowerShell profiles support local desktop windows only.'};
         this.paintLastKnown();
         return;
       }

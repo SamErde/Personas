@@ -94,7 +94,9 @@ Confirmed product decision (Q12): display current-user profiles once per
 edition/family and distinguish actual installation roots for all-users profiles
 only when multiple supported roots are discovered. Installation channels and
 package types are descriptive metadata; no installation selector is needed.
-Preview/custom discovery deferral is unchanged.
+Standard Preview discovery is tracked in
+[#183](https://github.com/SamErde/Personas/issues/183). Generic custom-installation
+discovery is not planned.
 
 ## VS Code host clarification
 
@@ -116,12 +118,12 @@ The Windows resolver that shipped is a best-effort registry lookup with `reg.exe
 when `User Shell Folders` and `Shell Folders` agree (ADR-0005). It was chosen over native
 known-folder access for packaging simplicity, with that agreement rule as the safeguard.
 
-Validate Windows PowerShell 5.1 paths separately from current PowerShell source.
-Also validate standard installation layouts, executable symlinks, Unix XDG
-behavior, missing destinations, multiple OneDrive folders, and inaccessible paths.
-These development checks are still open and tracked in
-[#163](https://github.com/SamErde/Personas/issues/163). The runtime fallback follows the
-explicit-action, timeout, and session-cache policy confirmed in Q6b.
+The remaining verification is a finite matrix: Windows PowerShell 5.1 paths,
+supported PowerShell 7 layouts, XDG behavior, symlink states, inaccessible paths,
+redirected Windows Documents resolution, and watcher recovery. Existing automated
+coverage and missing hosted or live evidence are tracked separately in
+[#184](https://github.com/SamErde/Personas/issues/184). Personas uses the resolved
+Windows Documents location; it does not scan OneDrive candidate folders.
 
 Source links to moving branches describe the inspected implementations; pin
 relevant revisions when implementing.
