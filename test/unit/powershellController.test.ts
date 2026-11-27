@@ -15,6 +15,7 @@ const mock = vi.hoisted(() => ({
   commands: [] as any[][],
   allowRuntimeDiscovery: true,
   includeWindowsPowerShell: true,
+  remoteName: undefined as string | undefined,
 }));
 vi.mock('vscode', () => {
   const register = (name:string) => (callback:(event:any)=>void) => {
@@ -22,7 +23,7 @@ vi.mock('vscode', () => {
     return {dispose:()=>mock.events.delete(name)};
   };
   return {
-    env: {},
+    env: {get remoteName() {return mock.remoteName;}},
     Uri: {file:(fsPath:string)=>({scheme:'file',fsPath})},
     RelativePattern: class { constructor(public baseUri:any, public pattern:string) {} },
     commands: {executeCommand: async (...args:any[]) => {mock.commands.push(args);}},
@@ -54,6 +55,7 @@ afterEach(async()=>{
   mock.events.clear();mock.watchers.length=0;vi.useRealTimers();
   mock.allowRuntimeDiscovery=true;
   mock.includeWindowsPowerShell=true;
+  mock.remoteName=undefined;
   mock.documents.length=0;mock.errors.length=0;mock.trashed.length=0;mock.commands.length=0;
   for(const root of roots.splice(0)) await fs.rm(root,{recursive:true,force:true});
 });
@@ -88,6 +90,17 @@ async function pendingSetup() {
   return {root,user,finish,probe,discover,service,states,post,controller};
 }
 const uri=(fsPath:string)=>({scheme:'file',fsPath});
+it('publishes the local-only limit without discovering profiles in a remote window',async()=>{
+  const {controller,discover,states}=await setup();
+  mock.remoteName='wsl';
+
+  await controller.refresh();
+
+  expect(discover).not.toHaveBeenCalled();
+  expect(states.at(-1)?.inventory).toEqual({
+    editions:[],rows:[],error:'PowerShell profiles support local desktop windows only.',
+  });
+});
 it('publishes passive inventory before background profile resolution settles',async()=>{
   const {root,user,finish,probe,states,post,controller}=await pendingSetup();
 

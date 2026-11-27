@@ -100,8 +100,10 @@ documented Microsoft Preview layouts: `%ProgramFiles%\PowerShell\7-preview` and 
 `Microsoft.PowerShell.Preview` MSIX package on Windows,
 `/usr/local/microsoft/powershell/7-preview` on macOS, and
 `/opt/microsoft/powershell/7-preview` on Linux. The runtime probe remains authoritative for
-the canonical installation root. PATH scans, arbitrary archive destinations, Homebrew, Snap,
-.NET global-tool Preview, and generic custom-installation discovery are not part of that work.
+the canonical installation root. That work adds no candidates for PATH scans, user-selected
+archive destinations, Homebrew, Snap, .NET global-tool Preview, or generic custom installations.
+Discovery cannot infer installer provenance: an archive placed at an included canonical path is
+indistinguishable from that layout and can be discovered.
 See the Microsoft installation guidance for
 [Windows](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-windows),
 [macOS](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-macos),
