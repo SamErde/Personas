@@ -18,6 +18,7 @@ let inventory: Inventory | undefined;
 let workspace: WorkspaceInventory | undefined;
 let renderedRows: RowVm[] = [];
 let icons: Record<string, string> = {}; // extId -> webview URI, from the host's inventory push
+let experimentalApplyToAllProfilesIds = new Set<string>();
 let filters: MatrixFilters = NO_FILTERS;
 let groupBy: MatrixGroupBy = 'none';
 /** The count announced after a filter change, from the last rebuild of the matrix. */
@@ -356,13 +357,37 @@ function buildCardContent(ext: RowVm): void {
     });
     actions.append(removeAllBtn);
   }
-  const applyAllBtn = el('button', 'row-action', 'Apply to all profiles…') as HTMLButtonElement;
-  applyAllBtn.dataset['action'] = 'apply-all';
-  applyAllBtn.title =
-    "Opens the Extensions view where you can toggle VS Code's native 'Apply Extension to all Profiles' option — VS Code provides no API for extensions to toggle it directly.";
-  applyAllBtn.disabled = rowPending;
-  applyAllBtn.addEventListener('click', () => post({ type: 'showApplyToAllProfilesGuide', extId: ext.id }));
-  actions.append(applyAllBtn);
+  if (!ext.applyToAllProfiles && experimentalApplyToAllProfilesIds.has(ext.id)) {
+    const experimentalBtn = el(
+      'button',
+      'row-action',
+      'Apply to all profiles (Experimental)…',
+    ) as HTMLButtonElement;
+    experimentalBtn.dataset['action'] = 'apply-all-experimental';
+    experimentalBtn.title =
+      'Uses an undocumented VS Code command after confirmation, then verifies the saved state.';
+    experimentalBtn.disabled = rowPending;
+    experimentalBtn.classList.toggle('in-flight', bulkInFlight);
+    experimentalBtn.addEventListener('click', () => {
+      localPending.add(bulkKey);
+      renderContent();
+      post({ type: 'applyToAllProfiles', extId: ext.id });
+    });
+    actions.append(experimentalBtn);
+  }
+
+  const guideLabel = ext.applyToAllProfiles
+    ? 'Change in VS Code…'
+    : experimentalApplyToAllProfilesIds.has(ext.id)
+      ? 'Use VS Code instead…'
+      : 'Apply to all profiles…';
+  const applyAllGuide = el('button', 'row-action', guideLabel) as HTMLButtonElement;
+  applyAllGuide.dataset['action'] = 'apply-all-guide';
+  applyAllGuide.title =
+    "Opens the Extensions view where you can use VS Code's native 'Apply Extension to all Profiles' option.";
+  applyAllGuide.disabled = rowPending;
+  applyAllGuide.addEventListener('click', () => post({ type: 'showApplyToAllProfilesGuide', extId: ext.id }));
+  actions.append(applyAllGuide);
   card.append(actions);
 }
 
@@ -473,6 +498,9 @@ window.addEventListener('message', (event: MessageEvent<HostToMatrix>) => {
       // Here rather than in buildContent, which skips the matrix while the cleanup view is open.
       legend.update(workspace !== undefined);
       icons = m.icons;
+      experimentalApplyToAllProfilesIds = new Set(
+        m.experimentalApplyToAllProfiles?.eligibleExtensionIds ?? [],
+      );
       pending = new Set();
       localPending = new Set();
       if (orphans !== undefined) {

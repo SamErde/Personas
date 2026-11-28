@@ -39,6 +39,8 @@ export interface PackageMeta {
   /** From package.json `categories`: its distinct non-blank strings. Absent when the field is
    *  missing, not an array, or holds no usable value. */
   categories?: string[];
+  extensionPack?: string[];
+  extensionDependencies?: string[];
 }
 
 export interface ParsedWorkspaceProfileAssociations {
@@ -152,6 +154,8 @@ export function parsePackageMeta(text: string): PackageMeta {
   if (typeof root !== 'object' || root === null || Array.isArray(root)) throw new ParseError('package.json: not an object');
   const pkg = root as Record<string, unknown>;
   const categories = parseCategories(pkg['categories']);
+  const extensionPack = parseStringArray(pkg['extensionPack']);
+  const extensionDependencies = parseStringArray(pkg['extensionDependencies']);
   const displayName = parseLocalizedDisplayName(pkg['displayName']);
   return {
     ...displayName,
@@ -159,6 +163,8 @@ export function parsePackageMeta(text: string): PackageMeta {
     description: unlocalizedString(pkg['description']),
     publisher: typeof pkg['publisher'] === 'string' ? pkg['publisher'] : undefined,
     ...(categories !== undefined ? { categories } : {}),
+    ...(extensionPack !== undefined ? { extensionPack } : {}),
+    ...(extensionDependencies !== undefined ? { extensionDependencies } : {}),
   };
 }
 
@@ -178,6 +184,16 @@ function parseCategories(value: unknown): string[] | undefined {
     if (typeof item === 'string' && item.trim() !== '') categories.add(item.trim());
   }
   return categories.size > 0 ? [...categories] : undefined;
+}
+
+/** A package.json string-array field, trimmed and de-duplicated; invalid items are ignored. */
+function parseStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = new Set<string>();
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim() !== '') strings.add(item.trim());
+  }
+  return strings.size > 0 ? [...strings] : undefined;
 }
 
 /**

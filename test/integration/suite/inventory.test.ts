@@ -9,6 +9,11 @@ import { after, describe, it } from 'node:test';
 import * as vscode from 'vscode';
 import { InventoryService, type InventoryIo } from '../../../src/core/inventory';
 import { createCliRunner } from '../../../src/core/cliRunner';
+import {
+  ExperimentalApplyToAllProfilesService,
+  TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+  type RuntimeExtensionCandidate,
+} from '../../../src/core/experimentalApplyToAllProfiles';
 import { withoutRepositoryOverrides } from '../../../src/git/configService';
 import { MutationService } from '../../../src/core/mutations';
 import { packageNlsLocaleFileNames, readLocalizedPackageMeta } from '../../../src/core/packageNls';
@@ -276,6 +281,91 @@ export const done: Promise<boolean> = new Promise((resolveDone) => {
       assert.ok(effective, 'installed fixture missing from workspace snapshot');
       assert.strictEqual(effective.state, 'enabled');
       assert.ok(effective.runtimeUri, 'enabled fixture did not retain public runtime URI evidence');
+
+      const commands = await vscode.commands.getCommands(true);
+      const commandAvailable = commands.includes(TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND);
+      const fixture = vscode.extensions.getExtension('personas-tests.personas-hello-fixture');
+      assert.ok(fixture, 'installed fixture did not resolve through vscode.extensions.getExtension');
+      const asRuntime = (): RuntimeExtensionCandidate[] => vscode.extensions.all.map((extension) => ({
+        id: extension.id,
+        location: extension.extensionUri,
+        scheme: extension.extensionUri.scheme,
+        ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
+        extensionPack: Array.isArray(extension.packageJSON['extensionPack'])
+          ? extension.packageJSON['extensionPack'].filter((item: unknown): item is string => typeof item === 'string')
+          : [],
+        extensionDependencies: Array.isArray(extension.packageJSON['extensionDependencies'])
+          ? extension.packageJSON['extensionDependencies'].filter((item: unknown): item is string => typeof item === 'string')
+          : [],
+      }));
+      const experimental = new ExperimentalApplyToAllProfilesService({
+        isEnabled: () => true,
+        readInventory: () => new InventoryService(testPaths(), io).getInventory(),
+        commandAvailable: async () => commandAvailable,
+        runtimeExtension: (extensionId) => asRuntime().find((extension) => extension.id === extensionId),
+        runtimeExtensions: asRuntime,
+        canonicalize: async (fsPath) => fs.realpathSync(fsPath),
+        extensionsDir,
+        platform: process.platform as Platform,
+        executeToggle: async (extensionId, location) => {
+          await vscode.commands.executeCommand(
+            TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+            extensionId,
+            { location },
+          );
+        },
+      });
+
+      const availability = await experimental.availability(inventory);
+      if (!commandAvailable) {
+        assert.deepStrictEqual(availability.eligibleExtensionIds, []);
+      } else {
+        let oneArgumentError: unknown;
+        try {
+          await vscode.commands.executeCommand(
+            TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+            fixture.id,
+          );
+        } catch (error) {
+          oneArgumentError = error;
+        }
+        assert.match(String(oneArgumentError), /location/);
+        inventory = await new InventoryService(testPaths(), io).getInventory();
+        assert.strictEqual(
+          inventory.extensions.find((extension) => extension.id === fixture.id)?.applyToAllProfiles,
+          false,
+          'one-argument regression call changed application scope',
+        );
+
+        assert.ok(availability.eligibleExtensionIds.includes(fixture.id));
+        const result = await experimental.apply(fixture.id, async () => true);
+        assert.deepStrictEqual(result, { kind: 'applied', displayName: 'Localized Personas Hello Fixture' });
+        inventory = await new InventoryService(testPaths(), io).getInventory();
+        assert.strictEqual(
+          inventory.extensions.find((extension) => extension.id === fixture.id)?.applyToAllProfiles,
+          true,
+        );
+        const alreadyApplied = await experimental.apply(fixture.id, async () => {
+          throw new Error('already-applied action must not confirm or toggle');
+        });
+        assert.deepStrictEqual(alreadyApplied, {
+          kind: 'alreadyApplied',
+          displayName: 'Localized Personas Hello Fixture',
+        });
+
+        // Restore the fixture to profile scope through the same sandbox command so the existing
+        // uninstall assertion below keeps exercising its original state.
+        await vscode.commands.executeCommand(
+          TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+          fixture.id,
+          { location: fixture.extensionUri },
+        );
+        inventory = await new InventoryService(testPaths(), io).getInventory();
+        assert.strictEqual(
+          inventory.extensions.find((extension) => extension.id === fixture.id)?.applyToAllProfiles,
+          false,
+        );
+      }
 
       const uninstalledEvent = nextExtensionsChange();
       await mutations.uninstall('personas-tests.personas-hello-fixture');

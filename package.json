@@ -169,6 +169,12 @@
     "configuration": {
       "title": "Personas",
       "properties": {
+        "personas.experimentalFeatures.enabled": {
+          "type": "boolean",
+          "scope": "application",
+          "default": true,
+          "markdownDescription": "Enable experimental Personas actions. Experimental actions are labeled, require confirmation, and can rely on undocumented VS Code behavior that may change between releases. Disable this to keep only supported and guided actions."
+        },
         "personas.powerShellProfiles.allowRuntimeDiscovery": {
           "type": "boolean",
           "scope": "machine",

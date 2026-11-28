@@ -456,11 +456,13 @@ describe('InventoryService', () => {
         '/data/User/profiles/aaa/extensions.json': profileManifest,
       },
       ['pub.alpha-1.0.0', 'pub.beta-2.0.0'],
-      { '/ext/pub.alpha-1.0.0': 'Alpha!' },
+      { '/ext/pub.alpha-1.0.0': 'Alpha!', '/ext/pub.beta-2.0.0': 'Beta' },
       { '/ext/pub.alpha-1.0.0': 'media/icon.png' },
     );
     const inv = await new InventoryService(PATHS, io).getInventory();
     expect(inv.warnings).toEqual([]);
+    expect(inv.applicationScopeStateKnown).toBe(true);
+    expect(inv.extensionRelationshipStateKnown).toBe(true);
     expect(inv.profiles.map((p) => p.id)).toEqual(['default', 'aaa']);
     const alpha = inv.extensions.find((e) => e.id === 'pub.alpha');
     expect(alpha?.displayName).toBe('Alpha!');
@@ -472,10 +474,31 @@ describe('InventoryService', () => {
     expect(alpha?.iconFsPath).toBe('/ext/pub.alpha-1.0.0/media/icon.png');
     const beta = inv.extensions.find((e) => e.id === 'pub.beta');
     expect(beta?.installedIn).toEqual(['aaa']);
-    expect(beta?.displayName).toBe('pub.beta');
+    expect(beta?.displayName).toBe('Beta');
     // No icon declared for beta — the field is absent, not an empty string.
     expect(beta?.iconFsPath).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+  });
+
+  it('carries extension-pack and dependency relationships from package metadata', async () => {
+    const base = makeIo(
+      {
+        [PATHS.storageJson]: storageJson,
+        [PATHS.globalExtensionsJson]: defaultManifest,
+        '/data/User/profiles/aaa/extensions.json': profileManifest,
+      },
+      ['pub.alpha-1.0.0', 'pub.beta-2.0.0'],
+    );
+    const io: InventoryIo = {
+      ...base,
+      readPackageMeta: async (folder) => folder.endsWith('pub.alpha-1.0.0')
+        ? { extensionPack: ['PUB.PACK'], extensionDependencies: ['Pub.Dependency'] }
+        : undefined,
+    };
+    const alpha = (await new InventoryService(PATHS, io).getInventory()).extensions
+      .find((extension) => extension.id === 'pub.alpha');
+    expect(alpha?.extensionPack).toEqual(['pub.pack']);
+    expect(alpha?.extensionDependencies).toEqual(['pub.dependency']);
   });
 
   it('watches the registry file, the extensions pool and profile manifests — not whole trees', () => {
@@ -665,6 +688,7 @@ describe('InventoryService', () => {
     expect(inv.warnings[0]?.file).toBe('globalStorage/storage.json');
     expect(inv.warnings[0]?.kind).toBe('profileRegistry');
     expect(inv.warnings[0]?.affectedProfileIds).toEqual(['default']);
+    expect(inv.applicationScopeStateKnown).toBe(false);
   });
 
   it('degrades a corrupt .obsolete into a warning and suppresses disk-only orphans', async () => {
@@ -711,6 +735,7 @@ describe('InventoryService', () => {
     const warning = inv.warnings.find((w) => w.file === 'extensions.json (default profile)');
     expect(warning).toBeDefined();
     expect(warning?.affectedProfileIds).toEqual(['default']);
+    expect(inv.applicationScopeStateKnown).toBe(false);
     expect(inv.extensions.find((e) => e.id === 'pub.applied-to-all')).toBeUndefined();
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
   });
@@ -750,6 +775,7 @@ describe('InventoryService', () => {
     expect(warning?.affectedProfileIds).toEqual([]);
     expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.versions).toEqual([]);
     expect(inv.extensions.some((e) => e.orphaned)).toBe(false);
+    expect(inv.extensionRelationshipStateKnown).toBe(false);
   });
 
   it('reports an unreadable package.json as a warning instead of silently dropping its metadata', async () => {
@@ -764,6 +790,7 @@ describe('InventoryService', () => {
     expect(warning?.message).toBe(broken.message);
     expect(warning?.affectedProfileIds).toEqual([]);
     expect(inv.extensions.find((e) => e.id === 'pub.alpha')?.displayName).toBe('pub.alpha');
+    expect(inv.extensionRelationshipStateKnown).toBe(false);
   });
 
   it('warns about a broken package.json even when an earlier version folder supplied every field', async () => {

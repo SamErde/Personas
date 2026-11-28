@@ -36,16 +36,18 @@ Extension Manager"; earliest working name "Visex". See `docs/history.md`.)
 
 - Reads VS Code's own profile registry + per-profile extension lists from disk; performs
   installs/uninstalls through the supported `code` CLI. Never writes VS Code state files
-  directly. ADR-0001 lists the exceptions: deleting orphaned extension folders, and creating
-  and trashing PowerShell profile scripts. Git configuration is only read (`git config
+  directly. ADR-0001 lists the exceptions: deleting orphaned extension folders, creating
+  and trashing PowerShell profile scripts, and the guarded experimental apply-to-all-profiles
+  command in ADR-0007. Git configuration is only read (`git config
   --list`). `extensionKind: ["ui"]` — local desktop only, no remote workspaces.
 - Source map: `src/core/` (inventory, parsers, CLI runner, mutations, cleanup), `src/panel/`
   (view providers and the matrix panel), `src/webview/` (webview scripts and styles),
   `src/powershell/` (discovery and file actions), `src/git/` (config reading).
 - Settings live under `personas.*` in `package.json`; PowerShell runtime discovery is on by
   default (ADR-0006). Set `personas.powerShellProfiles.allowRuntimeDiscovery` to `false` to opt out.
-- "Apply to all profiles" is **not** togglable via public VS Code API; a guided fallback
-  ships instead (see `docs/spikes/findings.md`).
+- "Apply to all profiles" has no public VS Code API. ADR-0007 permits one guarded, default-on
+  experimental action through the private two-argument command; the guided fallback always ships
+  beside it (see `docs/spikes/findings.md`).
 
 ## Build & test
 

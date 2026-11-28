@@ -3,6 +3,11 @@ import { CleanupService } from './core/cleanup';
 import { InventoryService, type InventoryIo } from './core/inventory';
 import { createCliRunner } from './core/cliRunner';
 import { asError } from './core/errors';
+import {
+  ExperimentalApplyToAllProfilesService,
+  TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+  type RuntimeExtensionCandidate,
+} from './core/experimentalApplyToAllProfiles';
 import { MutationService } from './core/mutations';
 import { readLocalizedPackageMeta } from './core/packageNls';
 import { findCli, resolvePaths, type Platform, type ResolvedPaths, type WatchTarget } from './core/paths';
@@ -23,6 +28,7 @@ export type Services = {
   workspace: WorkspaceInventoryService;
   mutations: MutationService;
   cleanup: CleanupService;
+  experimentalApplyToAllProfiles: ExperimentalApplyToAllProfilesService;
   paths: ResolvedPaths;
   watched: WatchTarget[];
 };
@@ -120,7 +126,49 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const cleanup = new CleanupService((fsPath) =>
     Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.file(fsPath), { recursive: true, useTrash: true })),
   );
-  return { inventory, workspace, mutations, cleanup, paths, watched: inventory.watchedTargets() };
+  const relatedIds = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  const runtimeCandidate = (extension: vscode.Extension<unknown>): RuntimeExtensionCandidate => ({
+      id: extension.id,
+      location: extension.extensionUri,
+      scheme: extension.extensionUri.scheme,
+      ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
+      extensionPack: relatedIds(extension.packageJSON['extensionPack']),
+      extensionDependencies: relatedIds(extension.packageJSON['extensionDependencies']),
+    });
+  const runtimeExtensions = (): RuntimeExtensionCandidate[] =>
+    vscode.extensions.all.map(runtimeCandidate);
+  const experimentalApplyToAllProfiles = new ExperimentalApplyToAllProfilesService({
+    isEnabled: () =>
+      vscode.workspace.getConfiguration('personas.experimentalFeatures').get<boolean>('enabled', true),
+    readInventory: () => inventory.getInventory(),
+    commandAvailable: async () =>
+      (await vscode.commands.getCommands(true)).includes(TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND),
+    runtimeExtension: (extensionId) => {
+      const extension = vscode.extensions.getExtension(extensionId);
+      return extension ? runtimeCandidate(extension) : undefined;
+    },
+    runtimeExtensions,
+    canonicalize: (fsPath) => fsp.realpath(fsPath),
+    extensionsDir: paths.extensionsDir,
+    platform,
+    executeToggle: async (extensionId, location) => {
+      await vscode.commands.executeCommand(
+        TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+        extensionId,
+        { location },
+      );
+    },
+  });
+  return {
+    inventory,
+    workspace,
+    mutations,
+    cleanup,
+    experimentalApplyToAllProfiles,
+    paths,
+    watched: inventory.watchedTargets(),
+  };
 }
 
 let servicesPromise: Promise<Services | { error: string }> | undefined;

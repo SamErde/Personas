@@ -9,8 +9,9 @@
 > - Integration tests use `node:test`, not mocha.
 > - The toolchain is pinned by `.nvmrc` (latest Node.js LTS), not "Node 20+". `@types/node`
 >   is on 22, matching the Node.js 22 extension host of the VS Code 1.101 minimum.
-> - Whether an extension is applied to all profiles cannot be toggled through VS Code's
->   built-in command from an extension; Personas ships a guided fallback instead (`docs/spikes/findings.md`, Spike B).
+> - The original Spike B verdict was corrected: the private command takes two arguments. Personas
+>   now offers the guarded experiment in ADR-0007 while retaining the guided fallback
+>   (`docs/spikes/findings.md`, Spike B).
 >
 > The current state lives in the code, `CLAUDE.md`, `docs/user-guide.md`, the ADRs in `docs/adr/`,
 > and `docs/spikes/findings.md`. Remaining deferred v1 cleanup items (stale profile folders and

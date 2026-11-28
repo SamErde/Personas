@@ -27,6 +27,9 @@ Exceptions:
   automatically execute it. See the "PowerShell Profiles" section of
   `docs/user-guide.md` for scope, ADR-0005 for how locations are found, and
   `docs/spikes/powershell-profile-discovery.md` for the discovery research.
+- Applying an extension to all profiles experimentally: ADR-0007 permits the internal VS Code
+  command only behind its setting, eligibility checks, confirmation, and postcondition verification.
+  The supported guided hand-off remains available.
 
 ## Reason
 
@@ -40,5 +43,5 @@ the reads are in `docs/spikes/findings.md`.
 - Personas never writes `storage.json`, any `extensions.json`, or a Git config file directly.
   Opening a Git config file in the VS Code editor for the user to edit and save is not a write
   by Personas.
-- Outside the exceptions above, a change that no official CLI supports (for example, toggling "Apply Extension to all
-  Profiles") ships as a guided hand-off to the tool's own UI instead.
+- Outside the exceptions above, a change that no official CLI supports ships as a guided hand-off
+  to the tool's own UI instead.

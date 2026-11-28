@@ -49,6 +49,10 @@ export interface ExtensionRecord {
    *  manifest entry exists at all (a disk-only record), or when any manifest is unreadable and so
    *  may hold another source. Consumers treat this as unknown. */
   installSourceMissing?: true;
+  /** Extension IDs declared by package.json `extensionPack`, merged across installed versions. */
+  extensionPack?: string[];
+  /** Extension IDs declared by package.json `extensionDependencies`, merged across versions. */
+  extensionDependencies?: string[];
 }
 
 export interface ParseWarning {
@@ -67,6 +71,12 @@ export interface Inventory {
   profiles: Profile[];
   extensions: ExtensionRecord[];
   warnings: ParseWarning[];
+  /** True only when the profile registry and every profile extension manifest were readable, so
+   * a false applyToAllProfiles value is authoritative rather than an artifact of partial data. */
+  applicationScopeStateKnown?: boolean;
+  /** True only when the extension pool was listed and every current package.json was readable, so
+   * extension-pack and dependency participation can be excluded without guessing. */
+  extensionRelationshipStateKnown?: boolean;
 }
 
 export type WorkspaceExtensionState =
