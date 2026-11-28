@@ -184,9 +184,9 @@ and run **Personas: Open Extension Matrix** if the matrix does not open automati
 10. Open the Extensions view, find the local fixture under **Workspace Recommendations**, install
     it, and verify a workspace-only row with `Workspace-local` status.
 11. Verify that a workspace-only row has no profile cell toggles or profile bulk actions.
-Scenarios 12–14 still need a real-window run. See the
-[fixture setup and evidence](spikes/workspace-extension-status.md#scenarios-1214-evidence-and-remaining-work)
-before continuing ([#167](https://github.com/SamErde/Personas/issues/167)).
+Scenarios 12–14 passed a real-window run on 2026-11-27. See the
+[fixture setup and results](spikes/workspace-extension-status.md#scenarios-1214-evidence-and-results)
+before repeating them ([#167](https://github.com/SamErde/Personas/issues/167)).
 
 12. Introduce duplicate candidate IDs in different workspace roots and verify one deterministic row
     plus a warning.

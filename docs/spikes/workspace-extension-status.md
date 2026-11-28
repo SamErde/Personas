@@ -103,19 +103,30 @@ Enablement can't be changed through the CLI. `code --help` on VS Code 1.143.0 (c
 2026-10-22) says of `--disable-extension`: "Disable the provided extension. This option is not
 persisted and is effective only when the command opens a new window." ADR-0003 builds on this.
 
-### Scenarios 12–14 evidence and remaining work
+### Scenarios 12–14 evidence and results
 
 On 2026-11-26, a Personas 1.5.0 VSIX built from
 `fc43d26512ed403c557c8649b9a0a8f533e80338` was installed in a disposable Windows x64 VS Code
 1.148.0 instance. The saved multi-root workspace opened with separate user-data and extensions
 directories. The desktop helper could see the window but rejected the window handle on repeated
-capture attempts, so the real-window observations below remain pending.
+capture attempts, so that run collected only the evidence outside the window below.
 
-| Scenario | Evidence collected outside the window | Real-window check still needed |
+On 2026-11-27, a Personas 1.6.0 VSIX built from
+`947b9ab7a8099d3b2d71dfeae783251538e39fbe` passed lint, 584 unit tests and the VS Code integration
+suite before installation in a fresh disposable Windows x64 VS Code 1.148.0 instance. A human
+completed the real-window checks with copied workspace files and inert test extensions. CLI checks
+before and after each profile mutation used the same isolated user-data and extensions directories.
+
+| Scenario | Evidence collected outside the window | Real-window result on 2026-11-27 |
 | --- | --- | --- |
-| 12. Duplicate workspace candidate IDs | The bounded reader and Matrix model, using two on-disk candidates with the same ID and different display names, produced one row, one duplicate warning and the same display name for both root orders. The probe supplied an empty runtime snapshot. | Confirm the row, warning and winning display name in the Matrix with both folder orders. |
-| 13. Malformed candidate and profile association | Workspace discovery reported invalid JSON for the malformed manifest and skipped it. Using the sandbox's recorded Default association, an extension installed only in the second profile showed `Not installed in profile` with an empty runtime snapshot. Supplying a string instead of a `profileAssociations` object through the read adapter produced a warning and changed that cell to `Unknown`. The rendered table had no workspace action for that cell. Reading the original association again restored Default. | Confirm the warning, the `Unknown` cell and the absent workspace action after setting an unknown profile ID in the sandbox. Check that the healthy state returns after restoration. |
-| 14. Existing Matrix actions | The sandbox CLI confirmed profile-specific fixture memberships. The inventory exposed a disk-only fixture seeded after startup as an orphan. Existing unit tests covered profile-cell and bulk-action handling, filters, hover cards and cleanup selection. The VS Code integration suite exited successfully. | Exercise the profile toggle, bulk action, filter, hover card and orphan cleanup in the installed UI and verify the resulting state. |
+| 12. Duplicate workspace candidate IDs | The bounded reader and Matrix model, using two on-disk candidates with the same ID and different display names, produced one row, one duplicate warning and the same display name for both root orders. The probe supplied an empty runtime snapshot. | Passed. Both folder orders produced one `Personas Local Workspace Fixture` row with read-only `—` and `Unknown` cells. The Matrix warned: `Multiple workspace roots contain local extension personas-tests.personas-local-workspace-fixture; the effective runtime location wins.` Reversing the saved workspace's folder order did not change the winning display name. |
+| 13. Malformed candidate and profile association | Workspace discovery reported invalid JSON for the malformed manifest and skipped it. Using the sandbox's recorded Default association, an extension installed only in the second profile showed `Not installed in profile` with an empty runtime snapshot. Supplying a string instead of a `profileAssociations` object through the read adapter produced a warning and changed that cell to `Unknown`. The rendered table had no workspace action for that cell. Reading the original association again restored Default. | Passed. An invalid manifest produced a path-specific invalid-JSON warning and no row. A profile-only fixture first showed `Not installed in profile`; changing only the saved workspace association to `missing-personas-profile-id` produced `VS Code associated this workspace with unknown profile id "missing-personas-profile-id"`, changed the workspace cell to `Unknown`, and exposed no hover, click or keyboard mutation action. Restoring the backup removed the warning and returned the cell to `Not installed in profile` without changing profile membership. |
+| 14. Existing Matrix actions | The sandbox CLI confirmed profile-specific fixture memberships. The inventory exposed a disk-only fixture seeded after startup as an orphan. Existing unit tests covered profile-cell and bulk-action handling, filters, hover cards and cleanup selection. The VS Code integration suite exited successfully. | Passed with the adjacent observation below. The text filter and clear flow worked, hover cards rendered, a profile-cell uninstall removed an inert fixture from its only profile, and **Remove from every profile** removed a distinct fixture from both profiles. CLI membership checks matched the Matrix before and after both mutations. The removed fixture became a strikethrough orphan. The cleanup list started unchecked, confirmation named only the selected fixture, cleanup removed its folder, and the row and stale action disappeared. |
+
+After the successful bulk removal, the strikethrough orphan's hover card still offered **Remove from
+every profile**. Invoking it again made no mutation and reported `Not directly installed in any
+profile.` This was recorded as adjacent stale-action behavior; it did not invalidate the verified
+membership change or selected-folder cleanup.
 
 Start a fresh [isolated sandbox](../local-build-test-and-release.md#install-in-an-isolated-sandbox)
 for scenarios 12–14. If reusing the sandbox from scenarios 1–11, uninstall the workspace-local copy
