@@ -145,7 +145,9 @@ The PowerShell Profiles view lists the PowerShell profile scripts that exist, gr
 
 **Help.** The **?** in the view's title bar opens a help dialog. Its **Open PowerShell Settings** button shows the PowerShell Profiles settings, and **Profiles on Microsoft Learn** explains profiles and their load order.
 
-**Current limits.** The view works in local desktop windows only. PowerShell Preview and custom installations aren't discovered yet. WSL support is next; see the [roadmap](roadmap.md).
+**Current limits.** The view works in local desktop windows only. Standard PowerShell Preview
+installations aren't discovered yet. Support in a WSL 2 Remote window is a
+[research item](https://github.com/SamErde/Personas/issues/182), not a committed feature.
 
 ## Git Configuration
 

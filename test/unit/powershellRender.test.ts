@@ -285,9 +285,9 @@ describe('section actions', () => {
   });
 
   it('renders the error for remote windows in place of the list', () => {
-    render({ editions: [], rows: [], error: 'PowerShell profiles support local desktop windows. WSL support is planned next.' });
+    render({ editions: [], rows: [], error: 'PowerShell profiles support local desktop windows only.' });
 
-    expect(one('#powershell').textContent).toBe('PowerShell profiles support local desktop windows. WSL support is planned next.');
+    expect(one('#powershell').textContent).toBe('PowerShell profiles support local desktop windows only.');
     expect(all('.ps-row')).toHaveLength(0);
   });
 });

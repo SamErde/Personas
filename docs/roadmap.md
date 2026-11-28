@@ -23,9 +23,12 @@ A Git persona is a saved, named Git identity that you can apply to the right rep
 
 ## PowerShell Profiles ([#163](https://github.com/SamErde/Personas/issues/163))
 
-- WSL windows are next, followed by SSH and dev container windows.
-- Discovering PowerShell Preview and custom installations.
-- Running or reloading a profile, templates for new profiles, and keeping profile content in sync.
+- Research whether PowerShell Profiles can safely support the current WSL 2 Remote window
+  ([#182](https://github.com/SamErde/Personas/issues/182)).
+- Discover standard PowerShell Preview installations as part of the PowerShell 7 family
+  ([#183](https://github.com/SamErde/Personas/issues/183)).
+- Complete the finite discovery-validation matrix, distinguishing automated, hosted-integration,
+  and live evidence ([#184](https://github.com/SamErde/Personas/issues/184)).
 
 ## Extension Matrix and cleanup ([#164](https://github.com/SamErde/Personas/issues/164))
 

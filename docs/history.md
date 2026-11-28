@@ -140,7 +140,8 @@ highlights:
   - each Home section loads once per show (**PR #153**);
   - Home split into separate VS Code Profiles and PowerShell Profiles views (**PR #155**);
   - a read-only Git Configuration view, stage 1 of Git personas (**PR #156**);
-  - Home settings, with PowerShell runtime discovery off by default;
+  - Home settings, with PowerShell runtime discovery off by default at that release
+    (superseded in v1.6.0 by **#179**);
   - default view sizes, a settings gear, and PowerShell help in a dialog (**PR #161**).
 - **Documentation refresh** (2026-11-26):
   - a new README and user guide;

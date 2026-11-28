@@ -94,7 +94,23 @@ Confirmed product decision (Q12): display current-user profiles once per
 edition/family and distinguish actual installation roots for all-users profiles
 only when multiple supported roots are discovered. Installation channels and
 package types are descriptive metadata; no installation selector is needed.
-Preview/custom discovery deferral is unchanged.
+Standard Preview discovery is tracked in
+[#183](https://github.com/SamErde/Personas/issues/183). Its initial contract is limited to the
+documented Microsoft Preview layouts: `%ProgramFiles%\PowerShell\7-preview` and the
+`Microsoft.PowerShell.Preview` MSIX package through
+`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh-preview.exe` on Windows,
+`/usr/local/bin/pwsh-preview` with `$PSHOME` at
+`/usr/local/microsoft/powershell/7-preview` on macOS, and `/usr/bin/pwsh-preview` with
+`$PSHOME` at `/opt/microsoft/powershell/7-preview` on Linux. The runtime probe remains
+authoritative for the canonical installation root. That work adds no candidates for PATH scans,
+user-selected archive destinations, Homebrew, Snap, .NET global-tool Preview, or generic custom
+installations.
+Discovery cannot infer installer provenance: an archive placed at an included canonical path is
+indistinguishable from that layout and can be discovered.
+See the Microsoft installation guidance for
+[Windows](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-windows),
+[macOS](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-macos),
+and [Linux](https://learn.microsoft.com/powershell/scripting/install/install-ubuntu).
 
 ## VS Code host clarification
 
@@ -116,12 +132,12 @@ The Windows resolver that shipped is a best-effort registry lookup with `reg.exe
 when `User Shell Folders` and `Shell Folders` agree (ADR-0005). It was chosen over native
 known-folder access for packaging simplicity, with that agreement rule as the safeguard.
 
-Validate Windows PowerShell 5.1 paths separately from current PowerShell source.
-Also validate standard installation layouts, executable symlinks, Unix XDG
-behavior, missing destinations, multiple OneDrive folders, and inaccessible paths.
-These development checks are still open and tracked in
-[#163](https://github.com/SamErde/Personas/issues/163). The runtime fallback follows the
-explicit-action, timeout, and session-cache policy confirmed in Q6b.
+The remaining verification is a finite matrix: Windows PowerShell 5.1 paths,
+supported PowerShell 7 layouts, XDG behavior, symlink states, inaccessible paths,
+redirected Windows Documents resolution, and watcher recovery. Existing automated
+coverage and missing hosted or live evidence are tracked separately in
+[#184](https://github.com/SamErde/Personas/issues/184). Personas uses the resolved
+Windows Documents location; it does not scan OneDrive candidate folders.
 
 Source links to moving branches describe the inspected implementations; pin
 relevant revisions when implementing.

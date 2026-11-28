@@ -75,6 +75,14 @@ Finding PowerShell installations and any profile locations available from local 
 **Runtime discovery**:
 Starting a detected PowerShell executable with profiles disabled to ask PowerShell for its canonical profile paths. Personas normally does this in the background; a named retry remains available after a failure.
 
+**PowerShell 7 family**:
+Stable and Preview PowerShell 7 installations, which normally share current-user profile locations but can have different installation roots and all-users profiles.
+_Avoid_: treating PowerShell Preview as a separate edition
+
+**WSL Remote window**:
+A VS Code window connected to one WSL distribution as one Linux user.
+_Avoid_: WSL window, installed WSL distribution
+
 ### Git configuration
 
 **Current repository**:
