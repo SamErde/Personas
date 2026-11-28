@@ -45,9 +45,11 @@ Extension Manager"; earliest working name "Visex". See `docs/history.md`.)
   `src/powershell/` (discovery and file actions), `src/git/` (config reading).
 - Settings live under `personas.*` in `package.json`; PowerShell runtime discovery is on by
   default (ADR-0006). Set `personas.powerShellProfiles.allowRuntimeDiscovery` to `false` to opt out.
-- "Apply to all profiles" has no public VS Code API. ADR-0007 permits one guarded, default-on
-  experimental action through the private two-argument command; the guided fallback always ships
-  beside it (see `docs/spikes/findings.md`).
+- "Apply to all profiles" has no public VS Code API. ADR-0007 defines a guarded, default-on
+  experiment through the private two-argument command on the verified VS Code 1.101-1.148 range.
+  Users can disable it with
+  `personas.experimentalFeatures.enabled`; the guided fallback remains available
+  (see `docs/spikes/findings.md`).
 
 ## Build & test
 

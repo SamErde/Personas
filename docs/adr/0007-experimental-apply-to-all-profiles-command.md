@@ -28,7 +28,8 @@ The operation is fail-closed and one-way in this first slice:
 1. Re-read the inventory. Treat application scope as unknown, and stop, when the profile registry
    or any extension manifest is unreadable; a Boolean `false` from partial data is not actionable.
 2. Return without invoking the toggle when the extension is already applied to all profiles.
-3. Confirm that the internal command is registered.
+3. Confirm that the internal command is registered and the running VS Code version is within the
+   source-inspected/tested 1.101-1.148 range.
 4. Resolve the extension with `vscode.extensions.getExtension`, require a `file:` URI, and compare
    canonical real paths to accept only an extension inside `services.paths.extensionsDir` (the
    running VS Code instance's user extension pool, not its built-in extension directory). Reject
@@ -51,7 +52,8 @@ claim to close that remaining deliverable.
 ## Consequences
 
 - A private VS Code command can regress between releases, but a missing command, unresolved or
-  non-local extension, unknown state, and verification mismatch all stop without a second toggle.
+  non-local extension, unknown state, out-of-range VS Code version, and verification mismatch all
+  stop without a second toggle.
 - The inventory exposes whether application-scope state is complete. The Extension Matrix
   advertises the experimental action only after checking the setting, command registration, and
   each row's runtime/path eligibility. It updates when the setting changes. The extension host
@@ -61,9 +63,9 @@ claim to close that remaining deliverable.
 - Remote, web, built-in, workspace-local, dependency/extension-pack, and concurrent-management
   behavior remain outside the supported scope. A target that participates in an installed
   dependency or extension-pack relationship is ineligible rather than experimentally attempted.
-- Unit tests pin known/unknown state, idempotence, confirmation cancellation, host-side setting
-  enforcement, command arguments, missing command/runtime extension, URI and canonical-path
-  boundaries, fallback routing, and post-command verification. A sandboxed VS Code integration
+- Automated tests pin known/unknown relationship evidence, idempotence, command arguments,
+  non-local rejection, fallback routing, the application-scoped setting, and post-command
+  verification. A sandboxed VS Code integration
   test reproduces the one-argument failure, proves the two-argument transition, verifies the
   already-applied no-op, and records behavior on both current and minimum supported VS Code.
 - Repository guidance and the dated Spike B record are corrected to preserve both the original

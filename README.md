@@ -58,7 +58,7 @@ The [user guide](docs/user-guide.md) covers every feature in detail.
 
 - VS Code Stable or Insiders 1.101 or newer, on Windows, macOS, or Linux.
 - Personas manages the local desktop VS Code install it runs in, including true VS Code Portable Mode and custom `--user-data-dir` and `--extensions-dir` locations. Remote windows (SSH, WSL, dev containers) and VS Code for the Web are not supported.
-- **Apply to all profiles (Experimental)…** uses an undocumented VS Code command for ordinary local extensions. Personas checks and verifies the state without writing VS Code's files, but VS Code may change or remove that command. Extension packs and dependency relationships continue through the native VS Code flow.
+- **Apply to all profiles (Experimental)…** uses an undocumented VS Code command for ordinary local extensions on the source-inspected/tested VS Code 1.101-1.148 range. Personas checks and verifies the state without writing VS Code's files, but VS Code may change or remove that command. Other VS Code versions, extension packs, and dependency relationships continue through the native VS Code flow.
 - The Git Configuration view needs Git, found through VS Code's `git.path` setting or your `PATH`.
 
 ## Settings

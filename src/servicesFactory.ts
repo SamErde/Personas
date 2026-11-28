@@ -6,6 +6,8 @@ import { asError } from './core/errors';
 import {
   ExperimentalApplyToAllProfilesService,
   TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND,
+  isVerifiedApplyToAllProfilesVersion,
+  toRuntimeExtensionCandidate,
   type RuntimeExtensionCandidate,
 } from './core/experimentalApplyToAllProfiles';
 import { MutationService } from './core/mutations';
@@ -126,27 +128,19 @@ async function buildServices(context: vscode.ExtensionContext): Promise<Services
   const cleanup = new CleanupService((fsPath) =>
     Promise.resolve(vscode.workspace.fs.delete(vscode.Uri.file(fsPath), { recursive: true, useTrash: true })),
   );
-  const relatedIds = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-  const runtimeCandidate = (extension: vscode.Extension<unknown>): RuntimeExtensionCandidate => ({
-      id: extension.id,
-      location: extension.extensionUri,
-      scheme: extension.extensionUri.scheme,
-      ...(extension.extensionUri.scheme === 'file' ? { fsPath: extension.extensionUri.fsPath } : {}),
-      extensionPack: relatedIds(extension.packageJSON['extensionPack']),
-      extensionDependencies: relatedIds(extension.packageJSON['extensionDependencies']),
-    });
   const runtimeExtensions = (): RuntimeExtensionCandidate[] =>
-    vscode.extensions.all.map(runtimeCandidate);
+    vscode.extensions.all.map(toRuntimeExtensionCandidate);
   const experimentalApplyToAllProfiles = new ExperimentalApplyToAllProfilesService({
     isEnabled: () =>
       vscode.workspace.getConfiguration('personas.experimentalFeatures').get<boolean>('enabled', true),
     readInventory: () => inventory.getInventory(),
-    commandAvailable: async () =>
+    commandAvailable: async () => [
+      isVerifiedApplyToAllProfilesVersion(vscode.version),
       (await vscode.commands.getCommands(true)).includes(TOGGLE_APPLY_TO_ALL_PROFILES_COMMAND),
+    ].every(Boolean),
     runtimeExtension: (extensionId) => {
       const extension = vscode.extensions.getExtension(extensionId);
-      return extension ? runtimeCandidate(extension) : undefined;
+      return extension ? toRuntimeExtensionCandidate(extension) : undefined;
     },
     runtimeExtensions,
     canonicalize: (fsPath) => fsp.realpath(fsPath),
