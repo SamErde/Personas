@@ -2,6 +2,13 @@
 
 All notable changes to the Personas extension are documented in this file.
 
+## [1.7.0](https://github.com/SamErde/Personas/compare/v1.6.0...v1.7.0) (2026-11-28)
+
+
+### Features
+
+* add experimental apply-to-all-profiles action ([#188](https://github.com/SamErde/Personas/issues/188)) ([a914f88](https://github.com/SamErde/Personas/commit/a914f88bd17c1c0b49daeefe9833245cabf7f391))
+
 ## [1.6.0](https://github.com/SamErde/Personas/compare/v1.5.0...v1.6.0) (2026-11-27)
 
 
