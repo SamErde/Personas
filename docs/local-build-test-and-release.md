@@ -241,6 +241,17 @@ The scenarios below cover the sidebar views.
     Check that **Show Effective Git Configuration** opens a read-only document. Check the no-repository
     view, Git missing from `PATH`, and `git.path`.
 
+Additional experimental scenario:
+
+- **Apply to all profiles (Experimental).** With experimental features enabled (the default),
+  install the inert fixture in the active profile and confirm its hover card offers both the
+  experimental action and **Use VS Code instead…**. Cancel once and verify no state change. Then
+  confirm, verify the row gains the **ALL** badge, and verify its hover card no longer offers the
+  experimental action while **Change in VS Code…** remains available. Turn
+  `personas.experimentalFeatures.enabled` off and verify the experimental action remains absent
+  while **Change in VS Code…** still opens the native Extensions view. Repeat with
+  a deliberately unavailable/ineligible target and verify Personas uses the native hand-off.
+
 The inert profile fixture can be installed in the same sandbox when an ordinary VSIX is useful. It
 isn't committed: `npm run test:integration` packages it, or package it yourself first:
 

@@ -13,7 +13,7 @@ If you keep separate setups for work, clients, open source, or teaching, each on
 ### Extension Matrix: every profile side by side
 
 - Each profile is a column and each extension is a row. Check or clear a cell to install or uninstall that extension in that profile, through VS Code's own `code` command line.
-- Hover over an extension's name for its details and quick actions: **Install in every profile**, **Remove from every profile**, and **Apply to all profiles…**.
+- Hover over an extension's name for its details and quick actions: **Install in every profile**, **Remove from every profile**, and a confirmed **Apply to all profiles (Experimental)…** action with the native VS Code flow always available beside it.
 - Search, filter by category, publisher, or install source, and group by name or publisher. Each filter choice shows how many extensions it matches.
 - A **Current workspace** column shows whether each extension is enabled in the open folder or workspace.
 - Find orphaned extensions, which are still on disk but in no profile, and move their version folders to the Trash.
@@ -58,6 +58,7 @@ The [user guide](docs/user-guide.md) covers every feature in detail.
 
 - VS Code Stable or Insiders 1.101 or newer, on Windows, macOS, or Linux.
 - Personas manages the local desktop VS Code install it runs in, including true VS Code Portable Mode and custom `--user-data-dir` and `--extensions-dir` locations. Remote windows (SSH, WSL, dev containers) and VS Code for the Web are not supported.
+- **Apply to all profiles (Experimental)…** uses an undocumented VS Code command for ordinary local extensions on the source-inspected/tested VS Code 1.101-1.148 range. Personas checks and verifies the state without writing VS Code's files, but VS Code may change or remove that command. Other VS Code versions, extension packs, and dependency relationships continue through the native VS Code flow.
 - The Git Configuration view needs Git, found through VS Code's `git.path` setting or your `PATH`.
 
 ## Settings
@@ -66,6 +67,7 @@ Select the gear in any Personas view's title bar, or run **Personas: Open Person
 
 | Setting | Default | What it does |
 | --- | --- | --- |
+| `personas.experimentalFeatures.enabled` | `true` | Enable labeled, confirmed experimental actions. Turn it off to keep only supported and guided actions. This is an application setting and cannot be enabled by a workspace. |
 | `personas.extensionMatrix.openWithSidebar` | `true` | Open the Extension Matrix whenever the VS Code Profiles view is shown. |
 | `personas.showAgentsWindowProfile` | `true` | Show VS Code's Agents window profile, which uses the Default profile's extensions. |
 | `personas.powerShellProfiles.includeWindowsPowerShell` | `true` | On Windows, include Windows PowerShell 5.1 and ISE profiles. |

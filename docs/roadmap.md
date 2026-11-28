@@ -38,7 +38,7 @@ A Git persona is a saved, named Git identity that you can apply to the right rep
 
 ## Waiting on VS Code
 
-- An API for toggling **Apply Extension to all Profiles**, so the matrix can change it directly ([#166](https://github.com/SamErde/Personas/issues/166)).
+- A supported, idempotent API for reading and changing **Apply Extension to all Profiles**. Personas has a guarded experimental action, but the upstream request is deliberately deferred and the native flow remains the supported fallback ([#166](https://github.com/SamErde/Personas/issues/166)).
 
 ## Verification
 

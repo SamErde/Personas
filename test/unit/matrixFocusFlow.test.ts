@@ -206,3 +206,32 @@ describe('focus on a hidden hover card', () => {
     expect(document.activeElement).toBe(nameOf('Gamma'));
   });
 });
+
+describe('experimental apply-to-all-profiles action', () => {
+  it('appears only for a host-approved row and keeps the native guide beside it', () => {
+    send({
+      type: 'inventory',
+      inventory: inv,
+      icons: {},
+      experimentalApplyToAllProfiles: {
+        enabled: true,
+        commandAvailable: true,
+        eligibleExtensionIds: ['pub.b'],
+      },
+    });
+    nameOf('Beta').focus();
+
+    const labels = [...card().querySelectorAll<HTMLButtonElement>('.row-action')].map((button) => button.textContent);
+    expect(labels).toContain('Apply to all profiles (Experimental)…');
+    expect(labels).toContain('Use VS Code instead…');
+
+    card().querySelector<HTMLButtonElement>('[data-action="apply-all-experimental"]')!.click();
+    expect(posted).toContainEqual({ type: 'applyToAllProfiles', extId: 'pub.b' });
+  });
+
+  it('always retains the native guide when no experimental action is eligible', () => {
+    nameOf('Beta').focus();
+    expect(card().querySelector('[data-action="apply-all-experimental"]')).toBeNull();
+    expect(card().querySelector('[data-action="apply-all-guide"]')?.textContent).toBe('Apply to all profiles…');
+  });
+});

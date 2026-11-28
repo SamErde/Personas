@@ -113,6 +113,8 @@ export class MatrixPanel {
     if (!this.services) return; // unsupported mode — nothing to read; see onMessage's guard.
     const inventory = await this.services.inventory.getInventory();
     const workspace = await this.services.workspace.getWorkspaceInventory(inventory);
+    const experimentalApplyToAllProfiles =
+      await this.services.experimentalApplyToAllProfiles.availability(inventory);
     const icons: Record<string, string> = {};
     for (const ext of inventory.extensions) {
       if (ext.iconFsPath) {
@@ -126,6 +128,7 @@ export class MatrixPanel {
       inventory: shownInventory(inventory),
       ...(workspace ? { workspace } : {}),
       icons,
+      experimentalApplyToAllProfiles,
     });
   }
 
@@ -181,6 +184,9 @@ export class MatrixPanel {
       case 'toggleCell':
         await this.guard(() => actions.toggleCell(this.lastInventory, m.extId, m.profileId, m.install));
         return;
+      case 'applyToAllProfiles':
+        await this.guard(() => this.applyToAllProfiles(m.extId));
+        return;
       case 'showApplyToAllProfilesGuide':
         await this.guard(() => this.showApplyToAllProfilesGuide(m.extId));
         return;
@@ -220,12 +226,31 @@ export class MatrixPanel {
     }
   }
 
-  /**
-   * Guided fallback: focus the extension in the Extensions view; the user applies the native
-   * "Apply Extension to all Profiles" context-menu action there. Spike B
-   * (docs/spikes/findings.md): `workbench.extensions.action.toggleApplyToAllProfiles` needs VS
-   * Code's internal IExtension view-model as its argument, which no public API provides.
-   */
+  private async applyToAllProfiles(extId: string): Promise<void> {
+    const service = this.services?.experimentalApplyToAllProfiles;
+    if (!service) return;
+    const result = await service.apply(extId, async (displayName) => {
+      const action = 'Apply (Experimental)';
+      const message =
+        `Apply "${displayName}" to all profiles using an experimental VS Code command?\n\n` +
+        'The command is undocumented and may change or stop working in a future VS Code release.';
+      const confirmed = (await vscode.window.showWarningMessage(message, { modal: true }, action)) === action;
+      if (confirmed) this.post({ type: 'pending', extId, profileId: '*' });
+      return confirmed;
+    });
+
+    if (result.kind === 'fallback') {
+      await this.showApplyToAllProfilesGuide(extId);
+      void vscode.window.showInformationMessage(`${result.reason} Opened the supported VS Code flow instead.`);
+    } else if (result.kind === 'alreadyApplied') {
+      void vscode.window.showInformationMessage(`"${result.displayName}" is already applied to all profiles.`);
+    } else if (result.kind === 'applied') {
+      void vscode.window.showInformationMessage(`Applied "${result.displayName}" to all profiles.`);
+    }
+    await this.refresh();
+  }
+
+  /** Guided fallback: focus the extension in VS Code's supported Extensions view. */
   private async showApplyToAllProfilesGuide(extId: string): Promise<void> {
     await vscode.commands.executeCommand('workbench.extensions.search', `@id:${extId}`);
     void vscode.window.showInformationMessage(

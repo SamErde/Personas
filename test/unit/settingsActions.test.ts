@@ -43,3 +43,11 @@ it('filters to exactly the PowerShell Profiles settings, including machine-scope
   // Machine scope is why the Workspace tab hides it, and why the User tab matters.
   expect(settings['personas.powerShellProfiles.allowRuntimeDiscovery']!.scope).toBe('machine');
 });
+
+it('keeps experimental features default-on but application-scoped so a workspace cannot enable them', () => {
+  expect(manifest.contributes.configuration.properties['personas.experimentalFeatures.enabled']).toMatchObject({
+    type: 'boolean',
+    scope: 'application',
+    default: true,
+  });
+});

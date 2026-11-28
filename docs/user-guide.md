@@ -48,11 +48,14 @@ An extension applied to all profiles also shows an **ALL** badge beside its name
 
 Hover over an extension's name, or move keyboard focus to it, to see its publisher, description, and install details, with these actions:
 
-For an extension applied to all profiles, only **Apply to all profiles…** appears.
+For an extension already applied to all profiles, **Change in VS Code…** opens the native flow.
 
 - **Install in every profile** installs the extension separately into each profile. Unlike an extension applied to all profiles, profiles you create later won't get it.
 - **Remove from every profile** uninstalls it from every profile where it's installed directly.
-- **Apply to all profiles…** opens VS Code's Extensions view at that extension, where you can use VS Code's own **Apply Extension to all Profiles** option. VS Code doesn't let extensions toggle that option themselves.
+- **Apply to all profiles (Experimental)…** is available by default for an ordinary local extension in the active profile on the source-inspected/tested VS Code 1.101-1.148 range. After a compatibility warning and confirmation, Personas invokes VS Code's undocumented command and reports success only after re-reading the saved state. The action is unavailable when the state is uncertain, the command is missing, the running VS Code version is outside that range, or the extension is built-in, remote, workspace-local, an extension pack, or part of a dependency/pack relationship.
+- **Use VS Code instead…** (or **Apply to all profiles…** when the experiment is unavailable) opens the Extensions view at the extension so you can use VS Code's native **Apply Extension to all Profiles** option. This guided flow is always retained.
+
+Turn off `personas.experimentalFeatures.enabled` to remove experimental actions. It is an application setting, so a workspace cannot enable it.
 
 ### Search, filters, and grouping
 

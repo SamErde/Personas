@@ -14,7 +14,11 @@ interface FakePanel {
   close(): void;
 }
 
-const mock = vi.hoisted(() => ({ panels: [] as FakePanel[] }));
+const mock = vi.hoisted(() => ({
+  panels: [] as FakePanel[],
+  commands: [] as [string, ...unknown[]][],
+  information: [] as string[],
+}));
 
 vi.mock('vscode', () => ({
   ViewColumn: { One: 1 },
@@ -23,7 +27,15 @@ vi.mock('vscode', () => ({
     joinPath: (base: { fsPath: string }, ...parts: string[]) => ({ fsPath: [base.fsPath, ...parts].join('/') }),
   },
   workspace: { getConfiguration: () => ({ get: (_key: string, fallback: unknown) => fallback }) },
+  commands: {
+    executeCommand: async (command: string, ...args: unknown[]) => {
+      mock.commands.push([command, ...args]);
+    },
+  },
   window: {
+    showInformationMessage: async (message: string) => {
+      mock.information.push(message);
+    },
     createWebviewPanel: () => {
       let onMessage: (message: MatrixToHost) => void = () => undefined;
       let onDispose: () => void = () => undefined;
@@ -55,6 +67,9 @@ const services = {
   workspace: { getWorkspaceInventory: async () => undefined },
   mutations: {},
   cleanup: {},
+  experimentalApplyToAllProfiles: {
+    availability: async () => ({ enabled: true, commandAvailable: true, eligibleExtensionIds: [] }),
+  },
 } as unknown as Services;
 
 /** Lets the panel's message queue run what the fake webview sent. */
@@ -63,6 +78,8 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 afterEach(() => {
   mock.panels.at(-1)?.close();
   mock.panels.length = 0;
+  mock.commands.length = 0;
+  mock.information.length = 0;
 });
 
 /**
@@ -111,5 +128,34 @@ describe('view state across closing and reopening the panel', () => {
     finishRead();
 
     expect(posted[0]).toEqual({ type: 'viewState', state });
+  });
+});
+
+describe('experimental apply-to-all-profiles fallback', () => {
+  it('opens the native Extensions search when a fresh host check rejects stale eligibility', async () => {
+    const fallbackServices = {
+      ...services,
+      experimentalApplyToAllProfiles: {
+        availability: async () => ({
+          enabled: true,
+          commandAvailable: false,
+          eligibleExtensionIds: [],
+        }),
+        apply: async () => ({
+          kind: 'fallback' as const,
+          reason: 'This VS Code version does not expose the experimental command.',
+        }),
+      },
+    } as unknown as Services;
+    MatrixPanel.show(context, fallbackServices);
+    const panel = mock.panels[0]!;
+
+    panel.receive({ type: 'applyToAllProfiles', extId: 'pub.b' });
+    await settle();
+
+    expect(mock.commands).toEqual([['workbench.extensions.search', '@id:pub.b']]);
+    expect(mock.information).toContain(
+      'This VS Code version does not expose the experimental command. Opened the supported VS Code flow instead.',
+    );
   });
 });

@@ -10,7 +10,8 @@ with the VS Code version and method.
   extension pool, `.obsolete`, and orphans: Spike A, Facts 1–7.
 - `code --profile` scoping, the Agents window profile, unique profile names, and how `--profile`
   resolves a name: the later sections of Spike A.
-- "Apply Extension to all Profiles" can't be toggled by an extension: Spike B.
+- The private two-argument "Apply Extension to all Profiles" command, including the superseded
+  one-argument conclusion: Spike B.
 - Custom `--user-data-dir`/`--extensions-dir`, headless profile creation, and partial CLI flags:
   Spike C.
 - Install sources in `metadata.source`: [Install sources](#install-sources).
@@ -265,6 +266,14 @@ Verified facts:
 
 # Spike B — apply-to-all-profiles toggle invocability findings
 
+> **Correction verified 2026-11-26:** the original probe supplied only one command argument. The
+> VS Code 1.127.0 handler actually accepts an extension ID and a second `IExtensionArg`; it reads
+> `extensionArg.location`. In a disposable VS Code 1.148.0 instance, the original one-argument
+> call reproduced the `location` error, while
+> `executeCommand(command, extension.id, { location: extension.extensionUri })` persisted
+> `metadata.isApplicationScoped: true`. This remains an undocumented, unsupported private
+> contract. The original probe and inference are preserved below as dated history.
+
 **Machine:** Windows 11, VS Code Stable 1.127.0 (`4fe60c8b1cdac1c4c174f2fb180d0d758272d713`), downloaded fresh into `.vscode-test/` for this spike — not the machine's real install, and never touched it.
 **Method:** Interactive F5 debugging is unavailable in this environment, so the brief's Steps 1-2 were replaced with an automated sandbox probe using `@vscode/test-electron`'s `runTests`. Harness lived entirely under `.superpowers/spike-b/` (gitignored, throwaway, not committed): `run.mjs` (launcher: downloads/resolves VS Code stable, creates fresh temp `--user-data-dir`/`--extensions-dir` via `mkdtempSync`, installs `ms-vscode.hexeditor` into that sandbox via the VS Code CLI, then launches the Task 1 stub extension as `extensionDevelopmentPath` with a probe suite as `extensionTestsPath`) and `suite/index.js` (runs inside the sandboxed Extension Development Host: enumerates commands, tries toggle candidates, reads the sandbox's own `extensions.json` after each attempt).
 **Date:** 2026-07-03. Two full runs (run 2 added a fourth argument shape for extra rigor); raw evidence preserved at `.superpowers/spike-b/results-run1.json` and `.superpowers/spike-b/results.json` (both gitignored).
@@ -315,15 +324,19 @@ TypeError: Cannot read properties of undefined (reading 'location')
     at Zrt.executeCommand (...workbench.desktop.main.js:1893:4376)
 ```
 
-This shape (crash inside the handler body, on every plausible argument including the genuine public `vscode.Extension` object, always on the same `.location` property read) indicates the command's real parameter is VS Code's **internal** `IExtension` workbench view-model (the object the Extensions view UI passes to its own context-menu actions — it carries `.local`/`.server` fields with a nested `.location`), not a string id, a plain object, or the public extension API's `vscode.Extension`. That internal type is not constructible or obtainable through any public `vscode` namespace API. Reverse-engineering its private shape to satisfy the crash was deliberately not attempted: doing so would mean shipping Personas against an unversioned internal VS Code implementation detail with no compatibility guarantee — precisely the situation this spike exists to detect and avoid.
+At the time, this failure shape was incorrectly inferred to require an inaccessible internal
+workbench view-model. Source inspection later showed that the missing value was the second command
+argument, an `IExtensionArg` whose `location` can be supplied from the public extension URI.
 
 Confirmation the flag never moved: `ms-vscode.hexeditor`'s `metadata.isApplicationScoped` was read from the sandbox's on-disk `extensions.json` after every single attempt (21 attempts in run 1, 28 in run 2, one per candidate-command × arg-shape pair, including the 5 unrelated profiler commands, all included for completeness) and after all of them combined, both runs — it never appeared as `true`. It started and ended `undefined` (absent from `metadata`, the normal state for a freshly-installed extension), matching the launcher's own before/after check via the VS Code CLI-installed manifest.
 
-## Verdict
+## Original verdict (superseded 2026-11-26)
 
 **`TOGGLE_SUPPORTED: no — fallback UI required`**
 
-The command exists (`workbench.extensions.action.toggleApplyToAllProfiles`), but it is not invocable by a third-party extension with any argument shape available through the public API — string, `{id}`, array, and the genuine `vscode.Extension` object all crash identically inside the handler before reaching any state mutation. No enumerated command (out of 3046/3042 total, cross-checked with two independent regex filters) ever flipped `isApplicationScoped` for the target extension. Per the task's own gating rule, this is not a borderline case requiring judgment — it's a clean, doubly-corroborated "no." Task 10 should ship the guided fallback: open the Extensions view search pinned to the extension so the user can right-click → "Apply Extension to all Profiles" themselves.
+The original test set established only that each attempted *single argument* was insufficient. Its
+"not invocable" conclusion was superseded by the two-argument result recorded above. The fallback
+remains necessary because the working command is private and unsupported.
 
 ---
 

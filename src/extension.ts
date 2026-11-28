@@ -72,6 +72,7 @@ export function activate(context: vscode.ExtensionContext): void {
         powerShellProfiles.settingsChanged(e.affectsConfiguration('personas.powerShellProfiles.includeWindowsPowerShell'));
       }
       if (e.affectsConfiguration('personas.showAgentsWindowProfile')) scheduleRefresh();
+      if (e.affectsConfiguration('personas.experimentalFeatures')) scheduleRefresh();
     }),
   );
   context.subscriptions.push(

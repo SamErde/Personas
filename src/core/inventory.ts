@@ -30,6 +30,9 @@ export interface ComposeInput {
   publishers?: Map<string, string>;
   /** extension folder name -> package.json categories, for every listed folder that has them */
   folderCategories?: Map<string, string[]>;
+  /** extension id -> relationships declared by any installed package.json version */
+  extensionPacks?: Map<string, Set<string>>;
+  extensionDependencies?: Map<string, Set<string>>;
   extensionsDir: string;
   platform: Platform;
   /**
@@ -37,6 +40,7 @@ export interface ComposeInput {
    * (e.g. a corrupt .obsolete file). Suppresses disk-only records instead of guessing orphans.
    */
   orphanKnowledgeUnreliable?: boolean;
+  extensionRelationshipStateKnown?: boolean;
 }
 
 export function composeInventory(input: ComposeInput): Inventory {
@@ -227,6 +231,8 @@ export function composeInventory(input: ComposeInput): Inventory {
       }
       const categories = categoriesFor(categoryFolders, input.folderCategories);
       const sources = sortedCaseInsensitive(installSources.get(id) ?? []);
+      const extensionPack = sortedCaseInsensitive(input.extensionPacks?.get(id) ?? []);
+      const extensionDependencies = sortedCaseInsensitive(input.extensionDependencies?.get(id) ?? []);
       const selectedVersions = profiles.flatMap((profile) => {
         const version = profileVersions.get(id)?.get(profile.id);
         return version ? [{ profileId: profile.id, version }] : [];
@@ -249,11 +255,19 @@ export function composeInventory(input: ComposeInput): Inventory {
         ...(sources.length === 0 || missingSourceIds.has(id) || anyManifestUnreadable
           ? { installSourceMissing: true as const }
           : {}),
+        ...(extensionPack.length > 0 ? { extensionPack } : {}),
+        ...(extensionDependencies.length > 0 ? { extensionDependencies } : {}),
       };
     });
   extensions.sort((a, b) => a.displayName.toLowerCase().localeCompare(b.displayName.toLowerCase()));
 
-  return { profiles, extensions, warnings };
+  return {
+    profiles,
+    extensions,
+    warnings,
+    applicationScopeStateKnown: !anyManifestUnreadable,
+    extensionRelationshipStateKnown: input.extensionRelationshipStateKnown ?? true,
+  };
 }
 
 /** VS Code's target platforms (its `TargetPlatform` values), which it appends to the folder name of
@@ -515,6 +529,10 @@ export class InventoryService {
     const publishers = new Map<string, string>();
     // Keyed by folder, not id: composeInventory picks the folders that the manifests point to.
     const folderCategories = new Map<string, string[]>();
+    const extensionPacks = new Map<string, Set<string>>();
+    const extensionDependencies = new Map<string, Set<string>>();
+    const obsoleteFolderSet = new Set(obsoleteFolderNames);
+    let extensionRelationshipStateKnown = !(listed instanceof Error) && obsoleteError === undefined;
     const packageMetaWarnings: ParseWarning[] = [];
     // Read together: one read per installed extension folder, and waiting on each in turn made a
     // cold first load take seconds (#150). The results are still applied in directory order below.
@@ -535,6 +553,7 @@ export class InventoryService {
       // reported regardless of directory order.
       const meta = metas[index];
       if (meta instanceof Error) {
+        if (!obsoleteFolderSet.has(folderName)) extensionRelationshipStateKnown = false;
         // Metadata only: the record falls back to its id and letter tile, so nothing is disabled.
         packageMetaWarnings.push({
           file: `extensions/${folderName}/package.json`,
@@ -543,7 +562,10 @@ export class InventoryService {
         });
         continue;
       }
-      if (!meta) continue;
+      if (!meta) {
+        if (!obsoleteFolderSet.has(folderName)) extensionRelationshipStateKnown = false;
+        continue;
+      }
       if (meta.displayName) {
         const selectedFolder = displayNameFolders.get(parsed.id);
         if (selectedFolder === undefined || compareDisplayNameFolders(folderName, selectedFolder) < 0) {
@@ -557,6 +579,14 @@ export class InventoryService {
       if (needDescription && meta.description) descriptions.set(parsed.id, meta.description);
       if (needPublisher && meta.publisher) publishers.set(parsed.id, meta.publisher);
       if (meta.categories) folderCategories.set(folderName, meta.categories);
+      if (!obsoleteFolderSet.has(folderName)) {
+        for (const relatedId of meta.extensionPack ?? []) {
+          addToSetMap(extensionPacks, parsed.id, relatedId.toLowerCase());
+        }
+        for (const relatedId of meta.extensionDependencies ?? []) {
+          addToSetMap(extensionDependencies, parsed.id, relatedId.toLowerCase());
+        }
+      }
     }
 
     const inventory = composeInventory({
@@ -570,6 +600,9 @@ export class InventoryService {
       descriptions,
       publishers,
       folderCategories,
+      extensionPacks,
+      extensionDependencies,
+      extensionRelationshipStateKnown,
       extensionsDir: this.paths.extensionsDir,
       platform: this.paths.platform,
       // Without the registry, named profiles (and their manifests) are invisible; without
@@ -590,6 +623,7 @@ export class InventoryService {
       });
     }
     if (registryError) {
+      inventory.applicationScopeStateKnown = false;
       inventory.warnings.unshift({
         file: 'globalStorage/storage.json',
         message: registryError.message,

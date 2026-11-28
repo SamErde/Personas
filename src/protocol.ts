@@ -56,6 +56,12 @@ export type HostToMatrix =
       inventory: Inventory;
       workspace?: WorkspaceInventory;
       icons: Record<string, string>;
+      /** Experimental action eligibility is host-computed; omitted by older/test senders. */
+      experimentalApplyToAllProfiles?: {
+        enabled: boolean;
+        commandAvailable: boolean;
+        eligibleExtensionIds: string[];
+      };
     }
   | { type: 'pending'; extId: string; profileId: string }
   /** The session's last view state, sent to a newly opened panel before its first inventory. */
@@ -70,6 +76,7 @@ export type MatrixToHost =
   /** The view state after each change, for the host to keep for the session. */
   | { type: 'viewState'; state: MatrixViewState }
   | { type: 'toggleCell'; extId: string; profileId: string; install: boolean }
+  | { type: 'applyToAllProfiles'; extId: string }
   | { type: 'showApplyToAllProfilesGuide'; extId: string }
   | { type: 'showWorkspaceEnablementGuide'; extId: string }
   | { type: 'installInEveryProfile'; extId: string }

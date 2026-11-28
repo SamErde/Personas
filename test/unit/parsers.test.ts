@@ -257,6 +257,25 @@ describe('parsePackageMeta categories', () => {
   });
 });
 
+describe('parsePackageMeta extension relationships', () => {
+  it('reads, trims, and de-duplicates extension packs and dependencies', () => {
+    const meta = parsePackageMeta(JSON.stringify({
+      name: 'ext',
+      extensionPack: ['pub.a', ' pub.b ', 'pub.a', 3],
+      extensionDependencies: ['pub.c', '', null],
+    }));
+    expect(meta.extensionPack).toEqual(['pub.a', 'pub.b']);
+    expect(meta.extensionDependencies).toEqual(['pub.c']);
+  });
+
+  it('omits unusable relationship fields', () => {
+    expect(parsePackageMeta(JSON.stringify({ name: 'ext', extensionPack: 'pub.a' })))
+      .not.toHaveProperty('extensionPack');
+    expect(parsePackageMeta(JSON.stringify({ name: 'ext', extensionDependencies: [1, false] })))
+      .not.toHaveProperty('extensionDependencies');
+  });
+});
+
 describe('parseObsolete', () => {
   it('returns folder names flagged true', () => {
     expect(parseObsolete('{"pub.ext-1.0.0": true, "pub.other-2.0.0": false}')).toEqual(['pub.ext-1.0.0']);
