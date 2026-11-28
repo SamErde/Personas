@@ -38,7 +38,12 @@ A Git persona is a saved, named Git identity that you can apply to the right rep
 
 ## Waiting on VS Code
 
-- A supported, idempotent API for reading and changing **Apply Extension to all Profiles**. Personas has a guarded experimental action, but the upstream request is deliberately deferred and the native flow remains the supported fallback ([#166](https://github.com/SamErde/Personas/issues/166)).
+- A supported, idempotent API for reading and changing **Apply Extension to all Profiles** is
+  tracked in [`microsoft/vscode#350848`](https://github.com/microsoft/vscode/issues/350848).
+  [Personas](https://marketplace.visualstudio.com/items?itemName=SamErde.personas) retains its
+  guarded experimental action while waiting on VS Code, and the native flow remains the supported
+  fallback. The implementation and filing record are in
+  [#166](https://github.com/SamErde/Personas/issues/166).
 
 ## Verification
 

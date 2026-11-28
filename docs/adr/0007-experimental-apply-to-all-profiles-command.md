@@ -45,9 +45,13 @@ The operation is fail-closed and one-way in this first slice:
    `applyToAllProfiles` is `true`. A verification mismatch is an error and is never retried.
 
 Personas never writes VS Code's `extensions.json` files. This ADR does not add an experimental
-remove-from-all-profiles action. The supported upstream API request remains part of issue #166,
-but this task explicitly defers searching for or submitting it; the implementation PR must not
-claim to close that remaining deliverable.
+remove-from-all-profiles action. At implementation time, the supported upstream API request
+remained part of issue #166, but searching for or submitting it was deferred beyond PR #188; that
+implementation PR did not claim to close the remaining deliverable.
+
+Follow-up (2026-11-28): after PR #188 merged, the request was filed as
+[`microsoft/vscode#350848`](https://github.com/microsoft/vscode/issues/350848). This follow-up does
+not change the experiment's scope or safeguards.
 
 ## Consequences
 
